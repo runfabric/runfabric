@@ -53,6 +53,9 @@ test("all providers expose required credential schemas", async () => {
     assert.ok(schema, `${provider.name} should define a credential schema`);
     assert.equal(schema?.provider, provider.name);
     assert.ok((schema?.fields.length || 0) > 0, `${provider.name} should define credential fields`);
+    assert.equal(typeof provider.invoke, "function", `${provider.name} should implement invoke`);
+    assert.equal(typeof provider.logs, "function", `${provider.name} should implement logs`);
+    assert.equal(typeof provider.destroy, "function", `${provider.name} should implement destroy`);
 
     const evaluation = evaluateCredentialSchema(schema!, {});
     assert.ok(evaluation.missingRequired.length > 0, `${provider.name} should require credentials`);

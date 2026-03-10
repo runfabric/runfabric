@@ -2,7 +2,7 @@ import type { CommandRegistrar } from "../types/cli";
 import { createProviderRegistry } from "../providers/registry";
 import { printJson } from "../utils/output";
 import { resolveProjectDir } from "../utils/resolve-project";
-import { error, info } from "../utils/logger";
+import { error } from "../utils/logger";
 
 export const registerInvokeCommand: CommandRegistrar = (program) => {
   program
@@ -21,7 +21,8 @@ export const registerInvokeCommand: CommandRegistrar = (program) => {
       }
 
       if (!provider.invoke) {
-        info(`${provider.name}: invoke is not implemented`);
+        error(`${provider.name}: invoke is not supported by this adapter`);
+        process.exitCode = 1;
         return;
       }
 

@@ -10,7 +10,7 @@ export interface BuildHookContext {
 
 export interface DeployFailure {
   provider: string;
-  phase: "provider" | "validation" | "deploy" | "state";
+  phase: "provider" | "validation" | "deploy" | "state" | "rollback";
   message: string;
 }
 
@@ -32,4 +32,3 @@ export interface LifecycleHook {
   beforeDeploy?(context: DeployHookContext): Promise<void> | void;
   afterDeploy?(context: DeployHookContext): Promise<void> | void;
 }
-

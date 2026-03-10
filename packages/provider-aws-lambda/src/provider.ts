@@ -1,19 +1,25 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
 import type {
   BuildArtifact,
   BuildPlan,
   BuildResult,
   DeployPlan,
   DeployResult,
-  InvokeInput,
-  InvokeResult,
-  LogsInput,
-  LogsResult,
-  ProviderCredentialSchema,
   ProjectConfig,
   ProviderAdapter,
+  ProviderCredentialSchema,
   ValidationResult
+} from "@runfabric/core";
+import {
+  appendProviderLog,
+  buildProviderLogsFromLocalArtifacts,
+  createDeploymentId,
+  destroyProviderArtifacts,
+  invokeProviderViaDeployedEndpoint,
+  isRealDeployModeEnabled,
+  missingRequiredCredentialErrors,
+  runJsonCommand,
+  runShellCommand,
+  writeDeploymentReceipt
 } from "@runfabric/core";
 import { awsLambdaCapabilities } from "./capabilities";
 
@@ -30,24 +36,56 @@ const awsLambdaCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function missingRequiredCredentialErrors(schema: ProviderCredentialSchema): string[] {
-  const errors: string[] = [];
-  for (const field of schema.fields) {
-    if (field.required === false) {
-      continue;
-    }
-    const envValue = process.env[field.env];
-    if (typeof envValue !== "string" || envValue.trim().length === 0) {
-      errors.push(`missing credential env ${field.env} (${field.description})`);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function endpointFromAwsResponse(response: unknown): string | undefined {
+  if (!isRecord(response)) {
+    return undefined;
+  }
+
+  const directCandidates = [
+    response.endpoint,
+    response.url,
+    response.functionUrl,
+    response.FunctionUrl
+  ];
+
+  for (const candidate of directCandidates) {
+    const endpoint = readString(candidate);
+    if (endpoint) {
+      return endpoint;
     }
   }
-  return errors;
+
+  if (isRecord(response.FunctionUrlConfig)) {
+    return readString(response.FunctionUrlConfig.FunctionUrl);
+  }
+
+  return undefined;
+}
+
+function awsResourceMetadata(response: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(response)) {
+    return undefined;
+  }
+
+  const metadata: Record<string, unknown> = {};
+  for (const key of ["FunctionArn", "RevisionId", "Version", "Runtime"]) {
+    const value = readString(response[key]);
+    if (value) {
+      metadata[key] = value;
+    }
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 export function createAwsLambdaProvider(options: AwsProviderOptions): ProviderAdapter {
-  const projectDir = resolve(options.projectDir);
-  const deployDir = resolve(projectDir, ".runfabric", "deploy", "aws-lambda");
-
   return {
     name: "aws-lambda",
     getCapabilities() {
@@ -76,7 +114,7 @@ export function createAwsLambdaProvider(options: AwsProviderOptions): ProviderAd
         errors
       };
     },
-    async planBuild(_project: ProjectConfig): Promise<BuildPlan> {
+    async planBuild(): Promise<BuildPlan> {
       return {
         provider: "aws-lambda",
         steps: ["validate config", "prepare aws-lambda artifact manifest"]
@@ -94,30 +132,72 @@ export function createAwsLambdaProvider(options: AwsProviderOptions): ProviderAd
     async planDeploy(_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> {
       return {
         provider: "aws-lambda",
+        artifactPath: artifact.entry,
+        artifactManifestPath: artifact.outputPath,
         steps: [`deploy artifact from ${artifact.outputPath}`]
       };
     },
     async deploy(project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> {
-      await mkdir(deployDir, { recursive: true });
-      const region = process.env.AWS_REGION || "us-east-1";
-      const awsExtension = project.extensions?.["aws-lambda"];
+      const stageExtension = project.extensions?.["aws-lambda"];
       const stage =
-        typeof awsExtension?.stage === "string"
-          ? awsExtension.stage
-          : "prod";
-      const endpoint = `https://${project.service}.execute-api.${region}.amazonaws.com/${stage}`;
-      await writeFile(
-        join(deployDir, "deployment.json"),
-        JSON.stringify(
-          {
-            provider: "aws-lambda",
-            endpoint,
-            executedSteps: plan.steps
-          },
-          null,
-          2
-        ),
-        "utf8"
+        typeof stageExtension?.stage === "string" && stageExtension.stage.trim().length > 0
+          ? stageExtension.stage
+          : project.stage || "default";
+      const region =
+        (typeof stageExtension?.region === "string" && stageExtension.region.trim().length > 0
+          ? stageExtension.region
+          : process.env.AWS_REGION) || "us-east-1";
+
+      const deploymentId = createDeploymentId("aws-lambda", project.service, stage);
+      let endpoint = `https://${project.service}.execute-api.${region}.amazonaws.com/${stage}`;
+      let mode: "simulated" | "cli" = "simulated";
+      let rawResponse: unknown;
+      let resource: Record<string, unknown> | undefined;
+
+      if (isRealDeployModeEnabled("RUNFABRIC_AWS_REAL_DEPLOY")) {
+        const deployCommand = process.env.RUNFABRIC_AWS_DEPLOY_CMD;
+        if (!deployCommand) {
+          throw new Error(
+            "aws-lambda real deploy mode requires RUNFABRIC_AWS_DEPLOY_CMD returning JSON output"
+          );
+        }
+
+        rawResponse = await runJsonCommand(deployCommand, {
+          cwd: options.projectDir,
+          env: {
+            RUNFABRIC_SERVICE: project.service,
+            RUNFABRIC_STAGE: stage,
+            RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
+            RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
+          }
+        });
+        const parsedEndpoint = endpointFromAwsResponse(rawResponse);
+        if (!parsedEndpoint) {
+          throw new Error("aws-lambda deploy response does not include an endpoint/function URL");
+        }
+        endpoint = parsedEndpoint;
+        resource = awsResourceMetadata(rawResponse);
+        mode = "cli";
+      }
+
+      await writeDeploymentReceipt(options.projectDir, "aws-lambda", {
+        provider: "aws-lambda",
+        service: project.service,
+        stage,
+        deploymentId,
+        endpoint,
+        mode,
+        executedSteps: plan.steps,
+        artifactPath: plan.artifactPath,
+        artifactManifestPath: plan.artifactManifestPath,
+        resource,
+        rawResponse,
+        createdAt: new Date().toISOString()
+      });
+      await appendProviderLog(
+        options.projectDir,
+        "aws-lambda",
+        `deploy deploymentId=${deploymentId} mode=${mode} endpoint=${endpoint}`
       );
 
       return {
@@ -125,27 +205,29 @@ export function createAwsLambdaProvider(options: AwsProviderOptions): ProviderAd
         endpoint
       };
     },
-    async invoke(input: InvokeInput): Promise<InvokeResult> {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          provider: "aws-lambda",
-          message: "invoke stub",
-          input
-        })
-      };
+    async invoke(input) {
+      return invokeProviderViaDeployedEndpoint(options.projectDir, "aws-lambda", input);
     },
-    async logs(_input: LogsInput): Promise<LogsResult> {
-      try {
-        const receipt = await readFile(join(deployDir, "deployment.json"), "utf8");
-        return {
-          lines: [`deployment receipt loaded`, receipt]
-        };
-      } catch {
-        return {
-          lines: ["no deployment receipt found for aws-lambda yet"]
-        };
+    async logs(input) {
+      return buildProviderLogsFromLocalArtifacts(options.projectDir, "aws-lambda", input);
+    },
+    async destroy(project: ProjectConfig) {
+      const stage = project.stage || "default";
+      if (isRealDeployModeEnabled("RUNFABRIC_AWS_REAL_DEPLOY") && process.env.RUNFABRIC_AWS_DESTROY_CMD) {
+        const result = await runShellCommand(process.env.RUNFABRIC_AWS_DESTROY_CMD, {
+          cwd: options.projectDir,
+          env: {
+            RUNFABRIC_SERVICE: project.service,
+            RUNFABRIC_STAGE: stage
+          }
+        });
+        if (result.code !== 0) {
+          throw new Error(result.stderr || result.stdout || "aws-lambda destroy command failed");
+        }
       }
+
+      await appendProviderLog(options.projectDir, "aws-lambda", "destroy local artifacts");
+      await destroyProviderArtifacts(options.projectDir, "aws-lambda");
     }
   };
 }

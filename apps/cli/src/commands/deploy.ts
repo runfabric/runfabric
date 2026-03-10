@@ -1,7 +1,13 @@
 import type { CommandRegistrar } from "../types/cli";
+import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { buildProject } from "@runfabric/builder";
-import { LocalFileStateBackend, type DeployFailure, type ProjectConfig } from "@runfabric/core";
+import {
+  LocalFileStateBackend,
+  type DeployFailure,
+  type ProjectConfig,
+  type ProviderAdapter
+} from "@runfabric/core";
 import { createPlan } from "@runfabric/planner";
 import { createProviderRegistry } from "../providers/registry";
 import { loadPlanningContext } from "../utils/load-config";
@@ -24,12 +30,19 @@ export interface DeployWorkflowResult {
   project: ProjectConfig;
   deployments: Array<{ provider: string; endpoint?: string }>;
   failures: DeployFailure[];
+  rollbacks: Array<{ provider: string; ok: boolean; message?: string }>;
   summary: {
     targetedProviders: number;
     deployedProviders: number;
     failedProviders: number;
+    rolledBackProviders: number;
     exitCode: number;
   };
+}
+
+interface SuccessfulProviderDeployment {
+  provider: string;
+  adapter: ProviderAdapter;
 }
 
 function stringifyError(errorValue: unknown): string {
@@ -42,15 +55,29 @@ function stringifyError(errorValue: unknown): string {
 function summarizeResult(
   targetedProviders: number,
   deployments: Array<{ provider: string; endpoint?: string }>,
-  failures: DeployFailure[]
+  failures: DeployFailure[],
+  rollbacks: Array<{ provider: string; ok: boolean; message?: string }>
 ): DeployWorkflowResult["summary"] {
   const exitCode = failures.length === 0 ? 0 : deployments.length > 0 ? 2 : 1;
   return {
     targetedProviders,
     deployedProviders: deployments.length,
     failedProviders: failures.length,
+    rolledBackProviders: rollbacks.filter((rollback) => rollback.ok).length,
     exitCode
   };
+}
+
+function rollbackEnabled(): boolean {
+  const configured = process.env.RUNFABRIC_ROLLBACK_ON_FAILURE;
+  if (!configured) {
+    return false;
+  }
+  const normalized = configured.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return ["1", "true", "yes", "on"].includes(normalized);
 }
 
 export async function executeDeployWorkflow(
@@ -58,10 +85,7 @@ export async function executeDeployWorkflow(
 ): Promise<DeployWorkflowResult> {
   const context = await loadPlanningContext(input.projectDir, input.configPath, input.stage);
   const baseProject = resolveFunctionProject(context.project, input.functionName);
-  const planning =
-    baseProject === context.project
-      ? context.planning
-      : createPlan(baseProject);
+  const planning = baseProject === context.project ? context.planning : createPlan(baseProject);
 
   if (!planning.ok) {
     const failures: DeployFailure[] = planning.errors.map((planningError) => ({
@@ -69,12 +93,14 @@ export async function executeDeployWorkflow(
       phase: "deploy",
       message: planningError
     }));
+    const rollbacks: Array<{ provider: string; ok: boolean; message?: string }> = [];
     return {
       stage: baseProject.stage || "default",
       project: baseProject,
       deployments: [],
       failures,
-      summary: summarizeResult(0, [], failures)
+      rollbacks,
+      summary: summarizeResult(0, [], failures, rollbacks)
     };
   }
 
@@ -108,6 +134,8 @@ export async function executeDeployWorkflow(
 
   const deployments: Array<{ provider: string; endpoint?: string }> = [];
   const failures: DeployFailure[] = [];
+  const rollbacks: Array<{ provider: string; ok: boolean; message?: string }> = [];
+  const successfulDeployments: SuccessfulProviderDeployment[] = [];
   const stage = baseProject.stage || "default";
 
   for (const hook of hooks) {
@@ -123,11 +151,10 @@ export async function executeDeployWorkflow(
   for (const artifact of buildResult.artifacts) {
     const provider = providerRegistry[artifact.provider];
     if (!provider) {
-      const message = "provider adapter is not installed";
       failures.push({
         provider: artifact.provider,
         phase: "provider",
-        message
+        message: "provider adapter is not installed"
       });
       continue;
     }
@@ -144,57 +171,117 @@ export async function executeDeployWorkflow(
       continue;
     }
 
-      try {
-        const providerBuildPlan = await provider.planBuild(baseProject);
-        await provider.build(baseProject, providerBuildPlan);
-        const deployPlan = await provider.planDeploy(baseProject, artifact);
-        const deployResult = await provider.deploy(baseProject, deployPlan);
-        deployments.push(deployResult);
+    try {
+      const providerBuildPlan = await provider.planBuild(baseProject);
+      await provider.build(baseProject, providerBuildPlan);
+      const deployPlan = await provider.planDeploy(baseProject, artifact);
+      const deployResult = await provider.deploy(baseProject, deployPlan);
+      deployments.push(deployResult);
+      successfulDeployments.push({
+        provider: provider.name,
+        adapter: provider
+      });
 
-        const stateAddress = {
-          service: baseProject.service,
-          stage,
-          provider: provider.name
-        };
-        const stateRecord = {
-          schemaVersion: 1,
-          provider: provider.name,
-          service: baseProject.service,
-          stage,
-          endpoint: deployResult.endpoint,
-          updatedAt: new Date().toISOString(),
-          details: {
-            artifact,
-            deployPlan,
-            functionName: input.functionName
-          }
-        };
-
-        try {
-          await stateBackend.lock(stateAddress);
-          try {
-            await stateBackend.write(stateAddress, stateRecord);
-          } finally {
-            await stateBackend.unlock(stateAddress);
-          }
-        } catch (stateError) {
-          failures.push({
-            provider: provider.name,
-            phase: "state",
-            message: stringifyError(stateError)
-          });
+      const stateAddress = {
+        service: baseProject.service,
+        stage,
+        provider: provider.name
+      };
+      const stateRecord = {
+        schemaVersion: 1,
+        provider: provider.name,
+        service: baseProject.service,
+        stage,
+        endpoint: deployResult.endpoint,
+        updatedAt: new Date().toISOString(),
+        details: {
+          artifact,
+          deployPlan,
+          functionName: input.functionName
         }
-      } catch (deployError) {
-        const message = stringifyError(deployError);
+      };
+
+      try {
+        await stateBackend.lock(stateAddress);
+        try {
+          await stateBackend.write(stateAddress, stateRecord);
+        } finally {
+          await stateBackend.unlock(stateAddress);
+        }
+      } catch (stateError) {
         failures.push({
           provider: provider.name,
-          phase: "deploy",
+          phase: "state",
+          message: stringifyError(stateError)
+        });
+      }
+    } catch (deployError) {
+      failures.push({
+        provider: provider.name,
+        phase: "deploy",
+        message: stringifyError(deployError)
+      });
+    }
+  }
+
+  if (failures.length > 0 && successfulDeployments.length > 0 && rollbackEnabled()) {
+    for (const deployedProvider of [...successfulDeployments].reverse()) {
+      const cleanupTargets = [
+        resolve(input.projectDir, ".runfabric", "deploy", deployedProvider.provider),
+        resolve(
+          input.projectDir,
+          ".runfabric",
+          "state",
+          baseProject.service,
+          stage,
+          `${deployedProvider.provider}.state.json`
+        ),
+        resolve(
+          input.projectDir,
+          ".runfabric",
+          "state",
+          baseProject.service,
+          stage,
+          `${deployedProvider.provider}.state.json.lock`
+        )
+      ];
+
+      try {
+        if (!deployedProvider.adapter.destroy) {
+          throw new Error("provider destroy is not implemented");
+        }
+
+        await deployedProvider.adapter.destroy(baseProject);
+        for (const cleanupTarget of cleanupTargets) {
+          await rm(cleanupTarget, { recursive: true, force: true });
+        }
+
+        const deploymentIndex = deployments.findIndex((item) => item.provider === deployedProvider.provider);
+        if (deploymentIndex >= 0) {
+          deployments.splice(deploymentIndex, 1);
+        }
+
+        rollbacks.push({
+          provider: deployedProvider.provider,
+          ok: true
+        });
+      } catch (rollbackError) {
+        const message = stringifyError(rollbackError);
+        rollbacks.push({
+          provider: deployedProvider.provider,
+          ok: false,
+          message
+        });
+        failures.push({
+          provider: deployedProvider.provider,
+          phase: "rollback",
           message
         });
       }
+    }
   }
 
-  const summary = summarizeResult(buildResult.artifacts.length, deployments, failures);
+  const summary = summarizeResult(buildResult.artifacts.length, deployments, failures, rollbacks);
 
   for (const hook of hooks) {
     await hook.afterDeploy?.({
@@ -214,6 +301,7 @@ export async function executeDeployWorkflow(
     project: baseProject,
     deployments,
     failures,
+    rollbacks,
     summary
   };
 }
@@ -232,6 +320,17 @@ function logDeployResult(result: DeployWorkflowResult): void {
     }
     if (result.summary.exitCode === 2) {
       warn("deploy completed with partial failures (exit code 2)");
+    }
+  }
+
+  if (result.rollbacks.length > 0) {
+    info(`rollback actions: ${result.rollbacks.length}`);
+    for (const rollback of result.rollbacks) {
+      if (rollback.ok) {
+        info(`${rollback.provider}: rollback succeeded`);
+      } else {
+        warn(`${rollback.provider}: rollback failed (${rollback.message || "unknown"})`);
+      }
     }
   }
 }
@@ -285,14 +384,9 @@ export const registerDeployCommand: CommandRegistrar = (program) => {
     .option("-s, --stage <name>", "Stage name override")
     .option("-o, --out <path>", "Output directory")
     .option("--json", "Emit JSON output")
-    .action(
-      async (
-        name: string,
-        options: { config?: string; stage?: string; out?: string; json?: boolean }
-      ) => {
-        await runAndEmit(name, options);
-      }
-    );
+    .action(async (name: string, options: { config?: string; stage?: string; out?: string; json?: boolean }) => {
+      await runAndEmit(name, options);
+    });
 
   program
     .command("deploy-function <name>")

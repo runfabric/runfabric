@@ -1,15 +1,25 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
 import type {
   BuildArtifact,
   BuildPlan,
   BuildResult,
   DeployPlan,
   DeployResult,
-  ProviderCredentialSchema,
   ProjectConfig,
   ProviderAdapter,
+  ProviderCredentialSchema,
   ValidationResult
+} from "@runfabric/core";
+import {
+  appendProviderLog,
+  buildProviderLogsFromLocalArtifacts,
+  createDeploymentId,
+  destroyProviderArtifacts,
+  invokeProviderViaDeployedEndpoint,
+  isRealDeployModeEnabled,
+  missingRequiredCredentialErrors,
+  runJsonCommand,
+  runShellCommand,
+  writeDeploymentReceipt
 } from "@runfabric/core";
 import { netlifyCapabilities } from "./capabilities";
 
@@ -25,23 +35,47 @@ const netlifyCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function missingRequiredCredentialErrors(schema: ProviderCredentialSchema): string[] {
-  const errors: string[] = [];
-  for (const field of schema.fields) {
-    if (field.required === false) {
-      continue;
-    }
-    const envValue = process.env[field.env];
-    if (typeof envValue !== "string" || envValue.trim().length === 0) {
-      errors.push(`missing credential env ${field.env} (${field.description})`);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function endpointFromNetlifyResponse(response: unknown): string | undefined {
+  if (!isRecord(response)) {
+    return undefined;
+  }
+
+  const endpoint = readString(response.endpoint) || readString(response.url) || readString(response.deploy_url);
+  if (endpoint) {
+    return endpoint;
+  }
+
+  if (isRecord(response.published_deploy)) {
+    return readString(response.published_deploy.url);
+  }
+
+  return undefined;
+}
+
+function netlifyResourceMetadata(response: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(response)) {
+    return undefined;
+  }
+
+  const metadata: Record<string, unknown> = {};
+  for (const key of ["id", "site_id", "state"]) {
+    const value = readString(response[key]);
+    if (value) {
+      metadata[key] = value;
     }
   }
-  return errors;
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 export function createNetlifyProvider(options: ProviderOptions): ProviderAdapter {
-  const deployDir = resolve(options.projectDir, ".runfabric", "deploy", "netlify");
-
   return {
     name: "netlify",
     getCapabilities() {
@@ -51,8 +85,7 @@ export function createNetlifyProvider(options: ProviderOptions): ProviderAdapter
       return netlifyCredentialSchema;
     },
     async validate(): Promise<ValidationResult> {
-      const errors: string[] = [];
-      errors.push(...missingRequiredCredentialErrors(netlifyCredentialSchema));
+      const errors = missingRequiredCredentialErrors(netlifyCredentialSchema);
       return { ok: errors.length === 0, warnings: [], errors };
     },
     async planBuild(): Promise<BuildPlan> {
@@ -67,26 +100,98 @@ export function createNetlifyProvider(options: ProviderOptions): ProviderAdapter
     async planDeploy(_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> {
       return {
         provider: "netlify",
+        artifactPath: artifact.entry,
+        artifactManifestPath: artifact.outputPath,
         steps: [`deploy artifact from ${artifact.outputPath}`]
       };
     },
     async deploy(project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> {
-      await mkdir(deployDir, { recursive: true });
-      const endpoint = `https://${project.service}.netlify.app`;
-      await writeFile(
-        join(deployDir, "deployment.json"),
-        JSON.stringify(
-          {
-            provider: "netlify",
-            endpoint,
-            executedSteps: plan.steps
-          },
-          null,
-          2
-        ),
-        "utf8"
+      const stage = project.stage || "default";
+      const netlifyExtension = project.extensions?.netlify;
+      const siteName =
+        typeof netlifyExtension?.siteName === "string" && netlifyExtension.siteName.trim().length > 0
+          ? netlifyExtension.siteName
+          : project.service;
+      const deploymentId = createDeploymentId("netlify", siteName, stage);
+
+      let endpoint = `https://${siteName}.netlify.app`;
+      let mode: "simulated" | "cli" = "simulated";
+      let rawResponse: unknown;
+      let resource: Record<string, unknown> | undefined;
+
+      if (isRealDeployModeEnabled("RUNFABRIC_NETLIFY_REAL_DEPLOY")) {
+        const deployCommand = process.env.RUNFABRIC_NETLIFY_DEPLOY_CMD;
+        if (!deployCommand) {
+          throw new Error(
+            "netlify real deploy mode requires RUNFABRIC_NETLIFY_DEPLOY_CMD returning JSON output"
+          );
+        }
+
+        rawResponse = await runJsonCommand(deployCommand, {
+          cwd: options.projectDir,
+          env: {
+            RUNFABRIC_SERVICE: project.service,
+            RUNFABRIC_STAGE: stage,
+            RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
+            RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
+          }
+        });
+        const parsedEndpoint = endpointFromNetlifyResponse(rawResponse);
+        if (!parsedEndpoint) {
+          throw new Error("netlify deploy response does not include deployment URL");
+        }
+        endpoint = parsedEndpoint;
+        resource = netlifyResourceMetadata(rawResponse);
+        mode = "cli";
+      }
+
+      await writeDeploymentReceipt(options.projectDir, "netlify", {
+        provider: "netlify",
+        service: project.service,
+        stage,
+        deploymentId,
+        endpoint,
+        mode,
+        executedSteps: plan.steps,
+        artifactPath: plan.artifactPath,
+        artifactManifestPath: plan.artifactManifestPath,
+        resource,
+        rawResponse,
+        createdAt: new Date().toISOString()
+      });
+      await appendProviderLog(
+        options.projectDir,
+        "netlify",
+        `deploy deploymentId=${deploymentId} mode=${mode} endpoint=${endpoint}`
       );
+
       return { provider: "netlify", endpoint };
+    },
+    async invoke(input) {
+      return invokeProviderViaDeployedEndpoint(options.projectDir, "netlify", input);
+    },
+    async logs(input) {
+      return buildProviderLogsFromLocalArtifacts(options.projectDir, "netlify", input);
+    },
+    async destroy(project: ProjectConfig) {
+      if (
+        isRealDeployModeEnabled("RUNFABRIC_NETLIFY_REAL_DEPLOY") &&
+        process.env.RUNFABRIC_NETLIFY_DESTROY_CMD
+      ) {
+        const result = await runShellCommand(process.env.RUNFABRIC_NETLIFY_DESTROY_CMD, {
+          cwd: options.projectDir,
+          env: {
+            RUNFABRIC_SERVICE: project.service,
+            RUNFABRIC_STAGE: project.stage || "default"
+          }
+        });
+        if (result.code !== 0) {
+          throw new Error(result.stderr || result.stdout || "netlify destroy command failed");
+        }
+      }
+
+      await appendProviderLog(options.projectDir, "netlify", "destroy local artifacts");
+      await destroyProviderArtifacts(options.projectDir, "netlify");
     }
   };
 }

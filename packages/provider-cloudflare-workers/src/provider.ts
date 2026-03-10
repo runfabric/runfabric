@@ -1,15 +1,25 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
 import type {
   BuildArtifact,
   BuildPlan,
   BuildResult,
   DeployPlan,
   DeployResult,
-  ProviderCredentialSchema,
   ProjectConfig,
   ProviderAdapter,
+  ProviderCredentialSchema,
   ValidationResult
+} from "@runfabric/core";
+import {
+  appendProviderLog,
+  buildProviderLogsFromLocalArtifacts,
+  createDeploymentId,
+  destroyProviderArtifacts,
+  invokeProviderViaDeployedEndpoint,
+  isRealDeployModeEnabled,
+  missingRequiredCredentialErrors,
+  runShellCommand,
+  writeDeploymentReceipt
 } from "@runfabric/core";
 import { cloudflareWorkersCapabilities } from "./capabilities";
 
@@ -25,20 +35,6 @@ const cloudflareCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function missingRequiredCredentialErrors(schema: ProviderCredentialSchema): string[] {
-  const errors: string[] = [];
-  for (const field of schema.fields) {
-    if (field.required === false) {
-      continue;
-    }
-    const envValue = process.env[field.env];
-    if (typeof envValue !== "string" || envValue.trim().length === 0) {
-      errors.push(`missing credential env ${field.env} (${field.description})`);
-    }
-  }
-  return errors;
-}
-
 function sanitizeScriptName(value: string): string {
   const normalized = value
     .toLowerCase()
@@ -50,10 +46,7 @@ function sanitizeScriptName(value: string): string {
 }
 
 function canUseRealDeploy(): boolean {
-  const mode = (process.env.RUNFABRIC_CLOUDFLARE_REAL_DEPLOY || "")
-    .trim()
-    .toLowerCase();
-  return mode === "1" || mode === "true" || mode === "yes";
+  return isRealDeployModeEnabled("RUNFABRIC_CLOUDFLARE_REAL_DEPLOY");
 }
 
 interface CloudflareSubdomainResponse {
@@ -80,6 +73,10 @@ async function resolveWorkersSubdomain(accountId: string, apiToken: string): Pro
 interface CloudflareDeployResponse {
   success: boolean;
   errors?: Array<{ message?: string }>;
+  result?: {
+    id?: string;
+    etag?: string;
+  };
 }
 
 async function deployWorkerScript(params: {
@@ -87,7 +84,7 @@ async function deployWorkerScript(params: {
   apiToken: string;
   scriptName: string;
   scriptContent: string;
-}): Promise<void> {
+}): Promise<CloudflareDeployResponse> {
   const response = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${params.accountId}/workers/scripts/${params.scriptName}`,
     {
@@ -105,11 +102,10 @@ async function deployWorkerScript(params: {
     const reason = json.errors?.map((item) => item.message).filter(Boolean).join("; ");
     throw new Error(`cloudflare-workers deploy failed${reason ? `: ${reason}` : ""}`);
   }
+  return json;
 }
 
 export function createCloudflareWorkersProvider(options: ProviderOptions): ProviderAdapter {
-  const deployDir = resolve(options.projectDir, ".runfabric", "deploy", "cloudflare-workers");
-
   return {
     name: "cloudflare-workers",
     getCapabilities() {
@@ -121,8 +117,9 @@ export function createCloudflareWorkersProvider(options: ProviderOptions): Provi
     async validate(project: ProjectConfig): Promise<ValidationResult> {
       const warnings: string[] = [];
       const errors: string[] = [];
-      if (project.runtime !== "nodejs") {
-        warnings.push("cloudflare-workers runtime handling beyond nodejs is not implemented yet");
+      const runtime = project.runtime.trim().toLowerCase();
+      if (!["nodejs", "javascript", "typescript", "edge"].includes(runtime)) {
+        warnings.push("cloudflare-workers works best with nodejs/javascript/typescript/edge runtimes");
       }
       errors.push(...missingRequiredCredentialErrors(cloudflareCredentialSchema));
       return { ok: errors.length === 0, warnings, errors };
@@ -147,13 +144,13 @@ export function createCloudflareWorkersProvider(options: ProviderOptions): Provi
       };
     },
     async deploy(project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> {
-      await mkdir(deployDir, { recursive: true });
-
       const cloudflareExtension = project.extensions?.["cloudflare-workers"];
       const scriptName =
         typeof cloudflareExtension?.scriptName === "string"
           ? sanitizeScriptName(cloudflareExtension.scriptName)
           : sanitizeScriptName(project.service);
+      const stage = project.stage || "default";
+      const deploymentId = createDeploymentId("cloudflare-workers", scriptName, stage);
 
       const apiToken = process.env.CLOUDFLARE_API_TOKEN;
       const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -161,6 +158,8 @@ export function createCloudflareWorkersProvider(options: ProviderOptions): Provi
 
       let endpoint = `https://${scriptName}.workers.dev`;
       let deploymentMode: "simulated" | "api" = "simulated";
+      let rawResponse: unknown;
+      let resource: Record<string, unknown> | undefined;
 
       if (useRealDeploy) {
         if (!apiToken || !accountId) {
@@ -173,7 +172,7 @@ export function createCloudflareWorkersProvider(options: ProviderOptions): Provi
         }
 
         const scriptContent = await readFile(plan.artifactPath, "utf8");
-        await deployWorkerScript({
+        const deployResponse = await deployWorkerScript({
           accountId,
           apiToken,
           scriptName,
@@ -184,26 +183,63 @@ export function createCloudflareWorkersProvider(options: ProviderOptions): Provi
         if (subdomain) {
           endpoint = `https://${scriptName}.${subdomain}.workers.dev`;
         }
+        rawResponse = deployResponse;
+        resource = {
+          accountId,
+          scriptName,
+          etag: deployResponse.result?.etag
+        };
         deploymentMode = "api";
       }
 
-      await writeFile(
-        join(deployDir, "deployment.json"),
-        JSON.stringify(
-          {
-            provider: "cloudflare-workers",
-            endpoint,
-            mode: deploymentMode,
-            artifactPath: plan.artifactPath,
-            artifactManifestPath: plan.artifactManifestPath,
-            executedSteps: plan.steps
-          },
-          null,
-          2
-        ),
-        "utf8"
+      await writeDeploymentReceipt(options.projectDir, "cloudflare-workers", {
+        provider: "cloudflare-workers",
+        service: project.service,
+        stage,
+        deploymentId,
+        endpoint,
+        mode: deploymentMode,
+        artifactPath: plan.artifactPath,
+        artifactManifestPath: plan.artifactManifestPath,
+        executedSteps: plan.steps,
+        resource,
+        rawResponse,
+        createdAt: new Date().toISOString()
+      });
+      await appendProviderLog(
+        options.projectDir,
+        "cloudflare-workers",
+        `deploy deploymentId=${deploymentId} mode=${deploymentMode} endpoint=${endpoint}`
       );
+
       return { provider: "cloudflare-workers", endpoint };
+    },
+    async invoke(input) {
+      return invokeProviderViaDeployedEndpoint(options.projectDir, "cloudflare-workers", input);
+    },
+    async logs(input) {
+      return buildProviderLogsFromLocalArtifacts(options.projectDir, "cloudflare-workers", input);
+    },
+    async destroy(project: ProjectConfig) {
+      const stage = project.stage || "default";
+      if (
+        isRealDeployModeEnabled("RUNFABRIC_CLOUDFLARE_REAL_DEPLOY") &&
+        process.env.RUNFABRIC_CLOUDFLARE_DESTROY_CMD
+      ) {
+        const result = await runShellCommand(process.env.RUNFABRIC_CLOUDFLARE_DESTROY_CMD, {
+          cwd: options.projectDir,
+          env: {
+            RUNFABRIC_SERVICE: project.service,
+            RUNFABRIC_STAGE: stage
+          }
+        });
+        if (result.code !== 0) {
+          throw new Error(result.stderr || result.stdout || "cloudflare-workers destroy command failed");
+        }
+      }
+
+      await appendProviderLog(options.projectDir, "cloudflare-workers", "destroy local artifacts");
+      await destroyProviderArtifacts(options.projectDir, "cloudflare-workers");
     }
   };
 }

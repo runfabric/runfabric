@@ -38,6 +38,11 @@ function runtimeWrapperFilename(provider: string): string {
   return `${toProviderSlug(provider)}-handler.mjs`;
 }
 
+function isNodeLikeRuntime(runtime: string): boolean {
+  const normalized = runtime.trim().toLowerCase();
+  return normalized === "nodejs" || normalized === "node" || normalized.startsWith("node");
+}
+
 function createRuntimeWrapperContent(
   provider: string,
   sourceEntryRelativePath: string,
@@ -136,16 +141,9 @@ async function buildProviderArtifact(
   const sourceEntryPath = resolve(projectDir, project.entry);
   const sourceEntryName = basename(project.entry);
   const copiedEntryPath = join(sourceDir, sourceEntryName);
-  const runtimeFileName = runtimeWrapperFilename(provider);
-  const runtimeFilePath = join(runtimeDir, runtimeFileName);
 
   await mkdir(sourceDir, { recursive: true });
-  await mkdir(runtimeDir, { recursive: true });
   await copyFile(sourceEntryPath, copiedEntryPath);
-
-  const relativeSourceFromRuntime = `../src/${sourceEntryName}`;
-  const wrapperContent = createRuntimeWrapperContent(provider, relativeSourceFromRuntime, project.service);
-  await writeFile(runtimeFilePath, wrapperContent, "utf8");
 
   const copiedEntryContent = await readFileAsUtf8(copiedEntryPath);
   const generatedFiles: GeneratedFile[] = [
@@ -154,14 +152,25 @@ async function buildProviderArtifact(
       bytes: Buffer.byteLength(copiedEntryContent, "utf8"),
       sha256: hashContent(copiedEntryContent),
       role: "entry-source"
-    },
-    {
+    }
+  ];
+
+  let artifactEntry = copiedEntryPath;
+  if (isNodeLikeRuntime(project.runtime)) {
+    await mkdir(runtimeDir, { recursive: true });
+    const runtimeFileName = runtimeWrapperFilename(provider);
+    const runtimeFilePath = join(runtimeDir, runtimeFileName);
+    const relativeSourceFromRuntime = `../src/${sourceEntryName}`;
+    const wrapperContent = createRuntimeWrapperContent(provider, relativeSourceFromRuntime, project.service);
+    await writeFile(runtimeFilePath, wrapperContent, "utf8");
+    generatedFiles.push({
       path: runtimeFilePath,
       bytes: Buffer.byteLength(wrapperContent, "utf8"),
       sha256: hashContent(wrapperContent),
       role: "runtime-wrapper"
-    }
-  ];
+    });
+    artifactEntry = runtimeFilePath;
+  }
 
   const manifestContent = {
     provider,
@@ -184,7 +193,7 @@ async function buildProviderArtifact(
 
   return {
     provider,
-    entry: runtimeFilePath,
+    entry: artifactEntry,
     outputPath: manifestPath
   };
 }

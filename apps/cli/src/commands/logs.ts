@@ -19,7 +19,8 @@ export const registerLogsCommand: CommandRegistrar = (program) => {
       }
 
       if (!provider.logs) {
-        info(`${provider.name}: logs are not implemented`);
+        error(`${provider.name}: logs are not supported by this adapter`);
+        process.exitCode = 1;
         return;
       }
 
