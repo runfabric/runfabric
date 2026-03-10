@@ -23,5 +23,9 @@ jobs:
         run: pnpm run check:syntax
       - name: Capability matrix check
         run: pnpm run check:capabilities
+      - name: Workspace lint
+        run: pnpm -r --if-present run lint
       - name: Test
         run: pnpm test
+      - name: Workspace typecheck
+        run: pnpm -r --if-present run typecheck
