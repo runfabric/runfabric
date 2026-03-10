@@ -1,0 +1,11 @@
+service: compose-api
+runtime: nodejs
+entry: src/index.ts
+
+providers:
+  - cloudflare-workers
+
+triggers:
+  - type: http
+    method: GET
+    path: /api

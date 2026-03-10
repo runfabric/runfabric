@@ -1,0 +1,13 @@
+service: compose-worker
+runtime: nodejs
+entry: src/index.ts
+
+env:
+  API_ENDPOINT_ENV: RUNFABRIC_OUTPUT_API_CLOUDFLARE_WORKERS_ENDPOINT
+
+providers:
+  - aws-lambda
+
+triggers:
+  - type: queue
+    queue: compose-jobs

@@ -15,6 +15,7 @@ All example configs use the same handler (`src/index.ts`) and HTTP trigger.
 - `runfabric.fly-machines.yml`
 - `runfabric.ibm-openwhisk.yml`
 - `runfabric.compose.yml` (compose orchestration sample)
+- `../compose-contracts/runfabric.compose.yml` (cross-service contract reference)
 
 ## Run Any Provider Example
 From repo root:
