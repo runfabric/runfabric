@@ -18,6 +18,10 @@
     "runfabric": "node --import ./tests/register-loader.mjs apps/cli/src/index.ts",
     "test": "tsx --tsconfig tsconfig.runtime.json --test tests/*.test.ts",
     "release:check": "npm run check:syntax && npm run check:capabilities && npm test && pnpm -r --if-present run build && pnpm -r --if-present run typecheck",
+    "release:notes:verify": "node scripts/release/verify-release-notes.mjs",
+    "release:notes:sign": "node scripts/release/sign-release-notes.mjs",
+    "release:publish": "node scripts/release/publish-packages.mjs",
+    "release:publish:dry-run": "node scripts/release/publish-packages.mjs --dry-run",
     "release:pack:cli": "pnpm --filter @runfabric/cli pack --pack-destination ./.artifacts",
     "test:all": "pnpm -r --if-present run test",
     "clean": "pnpm -r --if-present run clean"

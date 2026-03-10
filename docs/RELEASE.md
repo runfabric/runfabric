@@ -1,71 +1,57 @@
 # Release Guide
 
-This document is the maintainer playbook for releasing `runfabric` as npm packages.
-For the root-level release runbook, see `RELEASE_PROCESS.md`.
+Maintainer guide for publishing `runfabric` packages.
 
-## 1. Release Model (Finalized)
+## 1. Prepare Version Artifacts
 
-Release model is finalized as **Model B**:
+- Update package versions.
+- Update `CHANGELOG.md` with `## [<version>]` section.
+- Add `release-notes/<version>.md`.
+- Sign notes:
 
-- publish the full repo package set
-- dependency order: `@runfabric/core` -> planner/builder/runtime/providers -> `@runfabric/cli`
+```bash
+RELEASE_NOTES_SIGNING_KEY="<key>" pnpm run release:notes:sign -- --version <version>
+```
 
-## 2. Preflight Checklist
-
-- All target package manifests are publish-ready:
-  - `private` flags are correct,
-  - metadata is present (`description`, `license`, `repository`, `engines`, `keywords`),
-  - `publishConfig` is set as intended.
-- `pnpm-lock.yaml` is committed.
-- CI is green on `main`.
-- `docs/QUICKSTART.md` and `docs/CREDENTIALS.md` match current CLI behavior.
-- At least one provider has a real deploy path (Cloudflare API mode) and endpoint output behavior is documented.
-
-## 3. Verification Commands
-
-From repo root:
+## 2. Validate Locally
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm run check:syntax
-pnpm run check:capabilities
-pnpm test
-pnpm -r --if-present run build
-pnpm -r --if-present run typecheck
+pnpm run release:check
+pnpm run release:notes:verify -- --version <version>
 ```
 
-## 4. Pack Dry Run
+## 3. Run Release Workflow
 
-Validate publish artifacts before `npm publish`:
+Use GitHub Actions workflow `release`:
 
-```bash
-pnpm --filter @runfabric/cli pack --pack-destination ./.artifacts
-```
+- input `version`
+- input `publish` (true/false)
+- input `dry_run` (true/false)
 
-If publishing multiple packages, run pack per publishable package.
+Workflow gates:
 
-## 5. Publish Sequence (Example)
+- `release:check`
+- signed release notes verification
 
-For multi-package release, publish in dependency order:
+If `publish=true` and `dry_run=false` it will:
+
+1. publish packages in dependency order
+2. create git tag `v<version>`
+3. create GitHub release using `release-notes/<version>.md`
+
+## 4. Publish Order
+
+The automation uses this order:
 
 1. `@runfabric/core`
 2. `@runfabric/planner`
 3. `@runfabric/builder`
 4. `@runfabric/runtime-node`
-5. provider packages
+5. all `@runfabric/provider-*`
 6. `@runfabric/cli`
 
-For single-package release, publish only `@runfabric/cli`.
+## 5. Required Secrets
 
-## 6. Post-Release Validation
-
-- Install package from npm in a clean directory.
-- Run Hello World flow from `docs/QUICKSTART.md`.
-- Confirm `runfabric doctor`, `runfabric plan`, `runfabric build`, `runfabric deploy` work with documented credentials.
-- Update `CHANGELOG.md` per `CHANGELOG_POLICY.md`.
-
-## 7. Rollback Plan
-
-- Deprecate bad release versions via npm deprecate notice.
-- Publish fixed patch release with clear changelog notes.
-- Update docs with known issues and workarounds until fixed.
+- `NPM_TOKEN`
+- `RELEASE_NOTES_SIGNING_KEY`

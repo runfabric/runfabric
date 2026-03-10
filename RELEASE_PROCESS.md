@@ -1,59 +1,50 @@
 # Release Process
 
-This document is the maintainer runbook for shipping `runfabric` package releases.
+This is the root runbook for shipping `runfabric`.
 
-## 1. Plan The Release
+## 1. Version + Changelog
 
-- Define target version(s) per `VERSIONING.md`.
-- Confirm scope (bugfix, feature, breaking).
-- Confirm docs impacted by the release.
+- Decide release version per `VERSIONING.md`.
+- Update versions.
+- Update `CHANGELOG.md` section `## [<version>]`.
 
-## 2. Pre-release Validation
+## 2. Release Notes + Signature
 
-From repo root:
+Create release notes file:
+
+- `release-notes/<version>.md`
+
+Sign file:
+
+```bash
+RELEASE_NOTES_SIGNING_KEY="<key>" pnpm run release:notes:sign -- --version <version>
+```
+
+Verify signature + changelog alignment:
+
+```bash
+RELEASE_NOTES_SIGNING_KEY="<key>" pnpm run release:notes:verify -- --version <version>
+```
+
+## 3. Validation
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm run check:syntax
-pnpm test
-pnpm -r --if-present run build
-pnpm -r --if-present run typecheck
 pnpm run release:check
 ```
 
-## 3. Packaging Dry Run
+## 4. Automation
 
-```bash
-pnpm --filter @runfabric/cli pack --pack-destination ./.artifacts
-```
+Run `.github/workflows/release.yml` with:
 
-If releasing multiple packages, pack each publishable package.
+- `version=<version>`
+- `publish=true`
+- `dry_run=false` for actual publish
 
-## 4. Publish Order
+Use `dry_run=true` first when validating process.
 
-Publish in dependency order:
+## 5. Post-release
 
-1. `@runfabric/core`
-2. `@runfabric/planner`
-3. `@runfabric/builder`
-4. `@runfabric/runtime-node`
-5. `@runfabric/provider-*`
-6. `@runfabric/cli`
-
-## 5. Post-release Verification
-
-- Install released package(s) in a clean directory.
-- Run Hello World from `docs/QUICKSTART.md`.
-- Validate `runfabric doctor`, `runfabric plan`, `runfabric build`, `runfabric deploy`.
-
-## 6. Communication
-
-- Update `CHANGELOG.md` according to `CHANGELOG_POLICY.md`.
-- Publish release notes with key features/fixes and migration notes.
-- Link updated docs (`README.md`, `docs/MIGRATION.md`, `docs/CREDENTIALS.md`).
-
-## 7. Rollback / Recovery
-
-- Deprecate bad versions on npm.
-- Publish a patch release with fix notes.
-- Document temporary workarounds until fix is available.
+- Confirm npm packages are available.
+- Confirm git tag and GitHub release are created.
+- Run quick smoke from `docs/QUICKSTART.md`.
