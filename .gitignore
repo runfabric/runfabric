@@ -1,0 +1,8 @@
+node_modules
+dist
+.turbo
+.artifacts
+.corepack-cache
+.runfabric
+.DS_Store
+*.log

@@ -1,0 +1,37 @@
+{
+  "name": "runfabric-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.5.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r --if-present run build",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "lint": "pnpm -r --if-present run lint",
+    "prepare": "husky",
+    "lint-staged": "lint-staged",
+    "check:syntax": "node scripts/check-syntax.mjs",
+    "check:capabilities": "node scripts/sync-provider-capabilities.mjs --check",
+    "runfabric": "node --import ./tests/register-loader.mjs apps/cli/src/index.ts",
+    "test": "tsx --tsconfig tsconfig.runtime.json --test tests/*.test.ts",
+    "release:check": "npm run check:syntax && npm run check:capabilities && npm test && pnpm -r --if-present run build && pnpm -r --if-present run typecheck",
+    "release:pack:cli": "pnpm --filter @runfabric/cli pack --pack-destination ./.artifacts",
+    "test:all": "pnpm -r --if-present run test",
+    "clean": "pnpm -r --if-present run clean"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  },
+  "lint-staged": {
+    "*": [
+      "npm run check:syntax"
+    ]
+  }
+}

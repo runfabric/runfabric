@@ -1,0 +1,40 @@
+{
+  "name": "@runfabric/runtime-node",
+  "version": "0.1.0",
+  "private": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "echo \"@runfabric/runtime-node: lint not configured yet\"",
+    "test": "echo \"@runfabric/runtime-node: test not configured yet\"",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@runfabric/core": "workspace:*"
+  },
+  "description": "Node.js runtime adapters for runfabric handlers",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runfabric/runfabric-framework-scaffold.git",
+    "directory": "packages/runtime-node"
+  },
+  "keywords": [
+    "runfabric",
+    "serverless",
+    "functions",
+    "runtime",
+    "nodejs"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

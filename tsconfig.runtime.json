@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@runfabric/core": ["packages/core/src/index.ts"],
+      "@runfabric/planner": ["packages/planner/src/index.ts"],
+      "@runfabric/builder": ["packages/builder/src/index.ts"],
+      "@runfabric/runtime-node": ["packages/runtime-node/src/index.ts"],
+      "@runfabric/provider-*": ["packages/provider-*/src/index.ts"],
+      "@runfabric/cli": ["apps/cli/src/index.ts"]
+    }
+  }
+}

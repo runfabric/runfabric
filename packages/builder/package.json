@@ -1,0 +1,41 @@
+{
+  "name": "@runfabric/builder",
+  "version": "0.1.0",
+  "private": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "echo \"@runfabric/builder: lint not configured yet\"",
+    "test": "echo \"@runfabric/builder: test not configured yet\"",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@runfabric/core": "workspace:*",
+    "@runfabric/planner": "workspace:*"
+  },
+  "description": "Artifact packaging pipeline for runfabric providers",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runfabric/runfabric-framework-scaffold.git",
+    "directory": "packages/builder"
+  },
+  "keywords": [
+    "runfabric",
+    "serverless",
+    "functions",
+    "builder",
+    "artifacts"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@runfabric/core",
+  "version": "0.1.0",
+  "private": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "echo \"@runfabric/core: lint not configured yet\"",
+    "test": "echo \"@runfabric/core: test not configured yet\"",
+    "clean": "rm -rf dist"
+  },
+  "description": "Core contracts and shared types for runfabric",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runfabric/runfabric-framework-scaffold.git",
+    "directory": "packages/core"
+  },
+  "keywords": [
+    "runfabric",
+    "serverless",
+    "functions",
+    "core",
+    "types"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

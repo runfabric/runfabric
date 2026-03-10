@@ -1,0 +1,40 @@
+{
+  "name": "@runfabric/provider-netlify",
+  "version": "0.1.0",
+  "private": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "echo \"@runfabric/provider-netlify: lint not configured yet\"",
+    "test": "echo \"@runfabric/provider-netlify: test not configured yet\"",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@runfabric/core": "workspace:*"
+  },
+  "description": "netlify provider adapter for runfabric",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runfabric/runfabric-framework-scaffold.git",
+    "directory": "packages/provider-netlify"
+  },
+  "keywords": [
+    "runfabric",
+    "serverless",
+    "functions",
+    "provider",
+    "netlify"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

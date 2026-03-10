@@ -1,0 +1,55 @@
+{
+  "name": "@runfabric/cli",
+  "version": "0.1.0",
+  "private": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "runfabric": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "echo \"@runfabric/cli: lint not configured yet\"",
+    "test": "echo \"@runfabric/cli: test not configured yet\"",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@runfabric/builder": "workspace:*",
+    "@runfabric/core": "workspace:*",
+    "@runfabric/planner": "workspace:*",
+    "@runfabric/provider-aws-lambda": "workspace:*",
+    "@runfabric/provider-alibaba-fc": "workspace:*",
+    "@runfabric/provider-azure-functions": "workspace:*",
+    "@runfabric/provider-cloudflare-workers": "workspace:*",
+    "@runfabric/provider-digitalocean-functions": "workspace:*",
+    "@runfabric/provider-fly-machines": "workspace:*",
+    "@runfabric/provider-gcp-functions": "workspace:*",
+    "@runfabric/provider-ibm-openwhisk": "workspace:*",
+    "@runfabric/provider-netlify": "workspace:*",
+    "@runfabric/provider-vercel": "workspace:*",
+    "commander": "^14.0.1"
+  },
+  "description": "CLI for the runfabric multi-provider serverless framework",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runfabric/runfabric-framework-scaffold.git",
+    "directory": "apps/cli"
+  },
+  "keywords": [
+    "runfabric",
+    "serverless",
+    "functions",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

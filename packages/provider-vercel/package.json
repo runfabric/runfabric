@@ -1,0 +1,40 @@
+{
+  "name": "@runfabric/provider-vercel",
+  "version": "0.1.0",
+  "private": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "echo \"@runfabric/provider-vercel: lint not configured yet\"",
+    "test": "echo \"@runfabric/provider-vercel: test not configured yet\"",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@runfabric/core": "workspace:*"
+  },
+  "description": "vercel provider adapter for runfabric",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runfabric/runfabric-framework-scaffold.git",
+    "directory": "packages/provider-vercel"
+  },
+  "keywords": [
+    "runfabric",
+    "serverless",
+    "functions",
+    "provider",
+    "vercel"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
