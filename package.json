@@ -1,5 +1,5 @@
 {
-  "name": "runfabric-monorepo",
+  "name": "runfabric-core",
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@10.5.2",
