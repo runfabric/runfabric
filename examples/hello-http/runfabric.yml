@@ -1,0 +1,13 @@
+
+service: hello-http
+runtime: nodejs
+entry: src/index.ts
+
+providers:
+  - aws-lambda
+  - cloudflare-workers
+
+triggers:
+  - type: http
+    method: GET
+    path: /hello

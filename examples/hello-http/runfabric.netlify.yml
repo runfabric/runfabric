@@ -1,0 +1,11 @@
+service: hello-http
+runtime: nodejs
+entry: src/index.ts
+
+providers:
+  - netlify
+
+triggers:
+  - type: http
+    method: GET
+    path: /hello

@@ -1,0 +1,11 @@
+service: hello-http
+runtime: nodejs
+entry: src/index.ts
+
+providers:
+  - azure-functions
+
+triggers:
+  - type: http
+    method: GET
+    path: /hello
