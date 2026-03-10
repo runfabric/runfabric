@@ -1,74 +1,50 @@
-# Provider Setup Playbooks
+# Provider Setup
 
-This guide provides provider-by-provider bootstrap steps before running:
+This document is a provider-by-provider checklist for credentials and deploy command wiring.
 
-- `runfabric doctor`
-- `runfabric deploy`
+## Common Flow
 
-For the full credential variable matrix, see `docs/CREDENTIALS.md`.
-
-## Common Workflow
-
-1. Pick your provider config (`examples/hello-http/runfabric.<provider>.yml`).
-2. Create/verify cloud account and target project/subscription/app.
-3. Provision least-privilege credentials.
-4. Export credentials in your shell or `.env`.
-5. Run diagnostics:
+For any provider config:
 
 ```bash
-runfabric doctor -c <path-to-config>
-runfabric deploy -c <path-to-config>
+runfabric doctor -c <provider-config.yml>
+runfabric plan -c <provider-config.yml>
+runfabric build -c <provider-config.yml>
+runfabric deploy -c <provider-config.yml>
 ```
+
+Real mode is optional. Simulated mode is default.
 
 ## AWS Lambda
 
-### Bootstrap
-
-1. Create an AWS account/project boundary (account or sub-account strategy).
-2. Create IAM user or role for deploy automation.
-3. Grant function deployment permissions (Lambda + required networking/logging roles).
-
-### Required Env
+Required env:
 
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_REGION`
 
-### Verify
+Optional real mode:
 
-```bash
-runfabric doctor -c examples/hello-http/runfabric.aws-lambda.yml
-```
+- `RUNFABRIC_AWS_REAL_DEPLOY=1`
+- `RUNFABRIC_AWS_DEPLOY_CMD` (JSON output)
+- `RUNFABRIC_AWS_DESTROY_CMD`
 
-## Google Cloud Functions
+## GCP Functions
 
-### Bootstrap
-
-1. Create/select GCP project.
-2. Enable Cloud Functions and related APIs.
-3. Create service account for deployment.
-4. Grant Cloud Functions and supporting permissions.
-
-### Required Env
+Required env:
 
 - `GCP_PROJECT_ID`
 - `GCP_SERVICE_ACCOUNT_KEY`
 
-### Verify
+Optional real mode:
 
-```bash
-runfabric doctor -c examples/hello-http/runfabric.gcp-functions.yml
-```
+- `RUNFABRIC_GCP_REAL_DEPLOY=1`
+- `RUNFABRIC_GCP_DEPLOY_CMD`
+- `RUNFABRIC_GCP_DESTROY_CMD`
 
 ## Azure Functions
 
-### Bootstrap
-
-1. Create/select subscription and resource group.
-2. Create or identify Function App deployment target.
-3. Create service principal with scoped permissions.
-
-### Required Env
+Required env:
 
 - `AZURE_TENANT_ID`
 - `AZURE_CLIENT_ID`
@@ -76,149 +52,112 @@ runfabric doctor -c examples/hello-http/runfabric.gcp-functions.yml
 - `AZURE_SUBSCRIPTION_ID`
 - `AZURE_RESOURCE_GROUP`
 
-### Verify
+Optional real mode:
 
-```bash
-runfabric doctor -c examples/hello-http/runfabric.azure-functions.yml
-```
+- `RUNFABRIC_AZURE_REAL_DEPLOY=1`
+- `RUNFABRIC_AZURE_DEPLOY_CMD`
+- `RUNFABRIC_AZURE_DESTROY_CMD`
 
 ## Cloudflare Workers
 
-### Bootstrap
-
-1. Create API token with Workers deployment permissions.
-2. Copy account ID.
-3. Optional real deploy mode for API provisioning.
-
-### Required Env
+Required env:
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
 
-### Optional Env
+Optional real mode:
 
-- `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1` for real API deploy
-- `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=0` for simulated receipt mode
-
-### Verify
-
-```bash
-runfabric doctor -c examples/hello-http/runfabric.cloudflare-workers.yml
-```
+- `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1` (direct API path)
+- optional destroy command: `RUNFABRIC_CLOUDFLARE_DESTROY_CMD`
 
 ## Vercel
 
-### Bootstrap
-
-1. Create personal/team token.
-2. Identify org/user ID.
-3. Identify project ID.
-
-### Required Env
+Required env:
 
 - `VERCEL_TOKEN`
 - `VERCEL_ORG_ID`
 - `VERCEL_PROJECT_ID`
 
-### Verify
+Optional real mode:
 
-```bash
-runfabric doctor -c examples/hello-http/runfabric.vercel.yml
-```
+- `RUNFABRIC_VERCEL_REAL_DEPLOY=1`
+- `RUNFABRIC_VERCEL_DEPLOY_CMD`
+- `RUNFABRIC_VERCEL_DESTROY_CMD`
 
 ## Netlify
 
-### Bootstrap
-
-1. Create personal access token.
-2. Identify site ID.
-
-### Required Env
+Required env:
 
 - `NETLIFY_AUTH_TOKEN`
 - `NETLIFY_SITE_ID`
 
-### Verify
+Optional real mode:
 
-```bash
-runfabric doctor -c examples/hello-http/runfabric.netlify.yml
-```
+- `RUNFABRIC_NETLIFY_REAL_DEPLOY=1`
+- `RUNFABRIC_NETLIFY_DEPLOY_CMD`
+- `RUNFABRIC_NETLIFY_DESTROY_CMD`
 
-## Alibaba Function Compute
+## Alibaba FC
 
-### Bootstrap
-
-1. Create RAM access key pair for deployment automation.
-2. Select target region and service scope.
-
-### Required Env
+Required env:
 
 - `ALICLOUD_ACCESS_KEY_ID`
 - `ALICLOUD_ACCESS_KEY_SECRET`
 - `ALICLOUD_REGION`
 
-### Verify
+Optional real mode:
 
-```bash
-runfabric doctor -c examples/hello-http/runfabric.alibaba-fc.yml
-```
+- `RUNFABRIC_ALIBABA_REAL_DEPLOY=1`
+- `RUNFABRIC_ALIBABA_DEPLOY_CMD`
+- `RUNFABRIC_ALIBABA_DESTROY_CMD`
 
 ## DigitalOcean Functions
 
-### Bootstrap
-
-1. Create API token.
-2. Create/identify namespace for functions.
-
-### Required Env
+Required env:
 
 - `DIGITALOCEAN_ACCESS_TOKEN`
 - `DIGITALOCEAN_NAMESPACE`
 
-### Verify
+Optional real mode:
 
-```bash
-runfabric doctor -c examples/hello-http/runfabric.digitalocean-functions.yml
-```
+- `RUNFABRIC_DIGITALOCEAN_REAL_DEPLOY=1`
+- `RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD`
+- `RUNFABRIC_DIGITALOCEAN_DESTROY_CMD`
 
 ## Fly Machines
 
-### Bootstrap
-
-1. Create Fly API token.
-2. Create/identify Fly app target.
-
-### Required Env
+Required env:
 
 - `FLY_API_TOKEN`
 - `FLY_APP_NAME`
 
-### Verify
+Optional real mode:
 
-```bash
-runfabric doctor -c examples/hello-http/runfabric.fly-machines.yml
-```
+- `RUNFABRIC_FLY_REAL_DEPLOY=1`
+- `RUNFABRIC_FLY_DEPLOY_CMD`
+- `RUNFABRIC_FLY_DESTROY_CMD`
 
 ## IBM OpenWhisk
 
-### Bootstrap
-
-1. Create IBM Cloud API key.
-2. Select region and namespace.
-
-### Required Env
+Required env:
 
 - `IBM_CLOUD_API_KEY`
 - `IBM_CLOUD_REGION`
 - `IBM_CLOUD_NAMESPACE`
 
-### Verify
+Optional real mode:
 
-```bash
-runfabric doctor -c examples/hello-http/runfabric.ibm-openwhisk.yml
-```
+- `RUNFABRIC_IBM_REAL_DEPLOY=1`
+- `RUNFABRIC_IBM_DEPLOY_CMD`
+- `RUNFABRIC_IBM_DESTROY_CMD`
 
-## Notes
+## Examples
 
-- `runfabric doctor` validates only providers listed in your config.
-- For package users, env-based credentials are first-class and do not require CI pipelines.
+Provider config examples:
+
+- `examples/hello-http/runfabric.<provider>.yml`
+- `examples/hello-http/runfabric.quickstart.yml`
+
+Compose contracts example:
+
+- `examples/compose-contracts/runfabric.compose.yml`

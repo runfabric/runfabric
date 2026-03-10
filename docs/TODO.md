@@ -1,28 +1,15 @@
 # Project TODO
 
-This file tracks only pending work, prioritized from highest impact to lowest.
+Only pending work is listed here. Completed items are removed.
 
-## P1 - Production Deployment Completeness
+## P1 - Release Readiness
 
-- Implement real deploy execution paths for non-Cloudflare providers (AWS, GCP, Azure, Vercel, Netlify, Alibaba FC, DigitalOcean Functions, Fly Machines, IBM OpenWhisk).
-- Replace simulated endpoint generation with provider API/CLI response parsing for all providers.
-- Add provider-specific rollback and partial-failure recovery semantics during deploy/remove operations.
+- Replace `release-notes/0.1.0.md.sig` placeholder (`UNSIGNED`) with a real signature using `RELEASE_NOTES_SIGNING_KEY`.
+- Run first non-dry-run release workflow execution and confirm:
+  - npm publish order succeeds,
+  - git tag is pushed,
+  - GitHub release is created from `release-notes/<version>.md`.
 
-## P2 - Runtime And Command Behavior
+## P2 - Real Deploy Validation
 
-- Implement real `invoke` behavior for providers that currently return placeholder responses.
-- Implement real `logs` retrieval for providers that currently report "not implemented".
-- Expand runtime support beyond `nodejs` where provider capability matrix allows it.
-- Add explicit provider destroy support where `remove` currently only cleans local artifacts/state.
-
-## P3 - Package Quality And Release Hardening
-
-- Replace per-package placeholder `lint`/`test` scripts with actual package-level checks.
-- Add release tagging and npm publish automation workflow built around `release:check`.
-- Add signed release notes process tied to `CHANGELOG.md` updates.
-
-## P4 - Ecosystem And Adoption
-
-- Add opinionated starter templates (`api`, `worker`, `queue`, `cron`) using `runfabric init`.
-- Publish reference compose examples with cross-service contracts and output conventions.
-- Add docs site/navigation for quick provider onboarding and command reference.
+- Add provider command fixtures/smoke checks for real deploy mode command parsing (`RUNFABRIC_*_DEPLOY_CMD`) in CI-friendly test coverage.

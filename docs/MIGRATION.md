@@ -1,32 +1,41 @@
-# Migration Guide (Scaffold -> Real Deployments)
+# Migration Guide
 
-This guide describes how to move from current scaffold behavior to production deployment behavior.
+This guide helps teams move from scaffold-style deploys to command/API-backed real provider deploys.
 
-## Current Scaffold Behavior
-- `runfabric deploy` currently writes deployment receipts to `.runfabric/deploy/<provider>/deployment.json`.
-- Several provider endpoints are placeholder/local values.
-- Builder output is metadata-focused, not a full production packaging pipeline.
+## Current Model
 
-## Target Production Behavior
-- Provider adapters call real provider APIs/CLIs.
-- Deploy outputs contain real resource identifiers and public endpoints.
-- Build pipeline emits provider-ready artifacts per runtime/provider contract.
+`runfabric` supports two deploy modes:
 
-## Migration Steps
+- simulated mode (default)
+- real mode (opt-in)
 
-1. Pick one provider as first production target.
-2. Replace provider `deploy` stub with real API/CLI flow.
-3. Replace placeholder endpoint generation with provider response parsing.
-4. Expand `validate` to enforce provider-specific required config and shape.
-5. Add integration tests for `plan -> build -> deploy` with deterministic fixtures.
-6. Add rollback/error semantics for failed deploy operations.
-7. Repeat per provider.
+Simulated mode still records deployment receipts/state so you can validate workflow shape before touching cloud resources.
 
-## Recommended First Target
-- `cloudflare-workers` or `aws-lambda` are practical first provider targets due broad usage and clear deploy APIs.
+## Migration Path
 
-## Definition Of Done For A Provider
-- `doctor` catches required credentials/config.
-- `build` generates provider-ready artifacts.
-- `deploy` returns real endpoint + resource metadata.
-- `logs` and `invoke` have real behavior (or documented provider limitation).
+1. Keep existing `runfabric.yml` provider config.
+2. Export required provider credentials.
+3. Enable real mode:
+   - `RUNFABRIC_REAL_DEPLOY=1` or `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1`
+4. Set provider deploy command env that returns JSON.
+5. Run `runfabric doctor`, `plan`, `build`, `deploy`.
+6. Validate endpoint and receipt output.
+7. Add destroy command env for cleanup and rollback.
+
+## Example (AWS)
+
+```bash
+export RUNFABRIC_AWS_REAL_DEPLOY=1
+export RUNFABRIC_AWS_DEPLOY_CMD='aws lambda create-function-url-config --function-name my-fn --output json'
+export RUNFABRIC_AWS_DESTROY_CMD='aws lambda delete-function-url-config --function-name my-fn'
+
+runfabric deploy -c runfabric.aws-lambda.yml
+```
+
+## Definition Of Done Per Provider
+
+- `doctor` validates required credentials.
+- `deploy` returns endpoint from provider response parsing.
+- receipt/state files are written.
+- `invoke` and `logs` are available.
+- `remove` path uses provider destroy and local cleanup.

@@ -16,11 +16,19 @@ The format is based on the policy in `CHANGELOG_POLICY.md` and follows Semantic 
 - Compose orchestration command with cross-service endpoint output sharing.
 - Function lifecycle commands (`package`, `deploy function`, `remove`).
 - Capability matrix sync automation.
+- `runfabric init` starter templates: `api`, `worker`, `queue`, `cron`.
+- Release automation workflow with ordered publish and tag/release creation.
+- Signed release notes verification scripts and `release-notes/` structure.
+- Docs site scaffold under `docs/site/`.
+- Compose contracts reference example under `examples/compose-contracts/`.
 
 ### Changed
 
 - Project identity standardized as `runfabric`.
 - Local artifacts/state paths standardized under `.runfabric/`.
+- Provider adapters now expose consistent `invoke`, `logs`, and `destroy` behavior.
+- Provider deploy flow supports optional command/API-backed real mode parsing.
+- Deploy workflow supports optional rollback-on-failure semantics.
 
 ### Notes
 

@@ -1,13 +1,55 @@
 # Provider Credentials
 
-`runfabric` reads credentials from environment variables (`process.env`).
+`runfabric` reads credentials from environment variables.
 
-For a minimal first run, use `examples/hello-http/runfabric.quickstart.yml` (requires only Cloudflare credentials).
-For provider-specific configs, use files listed in `examples/hello-http/PROVIDERS.md`.
+## How To Pass Credentials
 
-## Required Credentials By Provider
+### Option 1: Export in shell
 
-| Provider | Required Environment Variables |
+```bash
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_REGION="us-east-1"
+
+runfabric doctor
+runfabric deploy
+```
+
+### Option 2: `.env` + source
+
+```bash
+cp .env.example .env
+# edit values
+
+set -a
+source .env
+set +a
+
+runfabric doctor
+runfabric deploy
+```
+
+### Option 3: One-off command prefix
+
+```bash
+AWS_ACCESS_KEY_ID="..." AWS_SECRET_ACCESS_KEY="..." AWS_REGION="us-east-1" runfabric deploy
+```
+
+## Deploy Mode Controls
+
+- `RUNFABRIC_STAGE`: default stage when `--stage` is not provided.
+- `RUNFABRIC_REAL_DEPLOY=1`: enable real mode globally for all providers.
+- `RUNFABRIC_ROLLBACK_ON_FAILURE=1`: attempt provider rollback when deploy has failures.
+
+Per-provider real mode flag:
+
+- `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1`
+
+(Examples: `RUNFABRIC_AWS_REAL_DEPLOY`, `RUNFABRIC_GCP_REAL_DEPLOY`, `RUNFABRIC_IBM_REAL_DEPLOY`)
+
+## Provider Credential Matrix
+
+| Provider | Required Credentials |
 | --- | --- |
 | `aws-lambda` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` |
 | `gcp-functions` | `GCP_PROJECT_ID`, `GCP_SERVICE_ACCOUNT_KEY` |
@@ -20,50 +62,50 @@ For provider-specific configs, use files listed in `examples/hello-http/PROVIDER
 | `fly-machines` | `FLY_API_TOKEN`, `FLY_APP_NAME` |
 | `ibm-openwhisk` | `IBM_CLOUD_API_KEY`, `IBM_CLOUD_REGION`, `IBM_CLOUD_NAMESPACE` |
 
-## Deployment Mode Flags
+## Real Deploy Command Matrix
 
-| Flag | Description |
-| --- | --- |
-| `RUNFABRIC_STAGE` | Optional default stage to use when `--stage` is not provided on CLI commands. |
-| `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY` | Set to `1`/`true` to run real Cloudflare API deployment. If unset, Cloudflare deploy runs in simulated mode and writes a local receipt. |
+When real mode is enabled, set command envs that output JSON:
 
-## How To Pass Credentials
+| Provider | Real Deploy Command Env | Destroy Command Env |
+| --- | --- | --- |
+| `aws-lambda` | `RUNFABRIC_AWS_DEPLOY_CMD` | `RUNFABRIC_AWS_DESTROY_CMD` |
+| `gcp-functions` | `RUNFABRIC_GCP_DEPLOY_CMD` | `RUNFABRIC_GCP_DESTROY_CMD` |
+| `azure-functions` | `RUNFABRIC_AZURE_DEPLOY_CMD` | `RUNFABRIC_AZURE_DESTROY_CMD` |
+| `cloudflare-workers` | `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1` (API path) | `RUNFABRIC_CLOUDFLARE_DESTROY_CMD` |
+| `vercel` | `RUNFABRIC_VERCEL_DEPLOY_CMD` | `RUNFABRIC_VERCEL_DESTROY_CMD` |
+| `netlify` | `RUNFABRIC_NETLIFY_DEPLOY_CMD` | `RUNFABRIC_NETLIFY_DESTROY_CMD` |
+| `alibaba-fc` | `RUNFABRIC_ALIBABA_DEPLOY_CMD` | `RUNFABRIC_ALIBABA_DESTROY_CMD` |
+| `digitalocean-functions` | `RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD` | `RUNFABRIC_DIGITALOCEAN_DESTROY_CMD` |
+| `fly-machines` | `RUNFABRIC_FLY_DEPLOY_CMD` | `RUNFABRIC_FLY_DESTROY_CMD` |
+| `ibm-openwhisk` | `RUNFABRIC_IBM_DEPLOY_CMD` | `RUNFABRIC_IBM_DESTROY_CMD` |
 
-### Option 1: Export In Shell (recommended for local runs)
+## Examples
+
+### AWS real deploy mode
+
 ```bash
-export AWS_ACCESS_KEY_ID="..."
-export AWS_SECRET_ACCESS_KEY="..."
-export AWS_REGION="us-east-1"
+export RUNFABRIC_AWS_REAL_DEPLOY=1
+export RUNFABRIC_AWS_DEPLOY_CMD='aws lambda create-function-url-config --function-name my-fn --output json'
+export RUNFABRIC_AWS_DESTROY_CMD='aws lambda delete-function-url-config --function-name my-fn'
 
-runfabric doctor
-runfabric deploy
+runfabric deploy -c runfabric.yml
 ```
 
-### Option 2: Use `.env` File
+### Vercel real deploy mode
+
 ```bash
-cp .env.example .env
-# edit .env values
+export RUNFABRIC_VERCEL_REAL_DEPLOY=1
+export RUNFABRIC_VERCEL_DEPLOY_CMD='vercel deploy --yes --prod --json'
 
-set -a
-source .env
-set +a
-
-runfabric doctor
-runfabric deploy
+runfabric deploy -c runfabric.yml
 ```
 
-### Option 3: One-off Command Prefix
-```bash
-AWS_ACCESS_KEY_ID="..." \
-AWS_SECRET_ACCESS_KEY="..." \
-AWS_REGION="us-east-1" \
-runfabric deploy
-```
+## CI Secret Wiring
 
-## Optional CI Secret Mapping
-If you add a deploy workflow, map the same variable names as GitHub repository secrets and expose them in workflow `env`.
+Map secret names to the same env variable names in workflow `env`.
 
 Example:
+
 ```yaml
 env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -71,6 +113,9 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
 ```
 
-## Verification
-- Run `runfabric doctor` to confirm required credentials for providers in `runfabric.yml`.
-- Only credentials for providers listed in your `providers` block are required.
+Then run:
+
+```bash
+pnpm run runfabric -- doctor -c <config>
+pnpm run runfabric -- deploy -c <config>
+```

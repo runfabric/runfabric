@@ -2,62 +2,58 @@
 
 ## Repo Layout
 
-- `apps/cli`: command entrypoints and orchestration.
-- `packages/core`: shared model and contracts.
-- `packages/planner`: schema-validated config parsing and compatibility planning.
-- `packages/builder`: provider-oriented artifact packaging pipeline.
-- `packages/runtime-node`: runtime adapters.
-- `packages/provider-*`: provider adapter packages.
-- `tests`: unit/integration-style tests run with Node test runner.
+- `apps/cli`: command entrypoints and workflow orchestration.
+- `packages/core`: shared contracts, state backend, provider ops helpers.
+- `packages/planner`: config parsing, validation, and portability planning.
+- `packages/builder`: provider-oriented artifact assembly.
+- `packages/runtime-node`: runtime adapter utilities.
+- `packages/provider-*`: provider adapters.
+- `tests`: unit and integration tests.
 
 ## Execution Flow
 
-1. `runfabric.yml` is loaded (with optional stage selection).
-2. Planner validates provider support and trigger compatibility.
-3. Planner generates:
-   - per-provider plan status
-   - trigger portability diagnostics
-   - platform primitive compatibility diagnostics
-4. Builder creates provider-specific bundles under `.runfabric/build/<provider>/<service>/`:
-   - copied entry source
-   - provider runtime wrapper
-   - artifact manifest with file hashes
-5. Provider adapter deploy writes deployment receipt to `.runfabric/deploy/<provider>/deployment.json`.
-6. Deploy command writes provider state to `.runfabric/state/<service>/<stage>/<provider>.state.json`.
-7. Compose deploy orchestrates multiple services in dependency order and exports endpoint outputs as env vars.
+1. `runfabric.yml` is loaded (with stage overrides when applicable).
+2. Planner validates providers, triggers, and capability constraints.
+3. Builder creates artifacts in `.runfabric/build/<provider>/<service>/`.
+4. Provider deploy writes receipt in `.runfabric/deploy/<provider>/deployment.json`.
+5. CLI writes provider state in `.runfabric/state/<service>/<stage>/<provider>.state.json`.
+6. `invoke` and `logs` operate from receipt/state/log artifacts.
+7. `remove` triggers provider destroy + local cleanup (+ recovery notes on failure).
 
-## Core Model
+## Core Contracts
 
-- `ProjectConfig`: service metadata, runtime, entry, providers, triggers, functions, hooks, resources, env, extensions.
-- `ProviderAdapter`: validate, planBuild, build, planDeploy, deploy (+ optional invoke/logs/destroy).
-- `ProviderCredentialSchema`: provider-specific required/optional credential env contract.
-- `ProviderCapabilities`: boolean feature flags + max limits.
-- `PlatformPrimitive`: higher-level primitive compatibility model.
-- `StateBackend`: state abstraction (`read/write/lock/unlock`) with local file implementation.
-- `LifecycleHook`: extension points for `beforeBuild`, `afterBuild`, `beforeDeploy`, `afterDeploy`.
+- `ProjectConfig`: service metadata, runtime, entry, providers, triggers, functions, hooks, env, extensions.
+- `ProviderAdapter`: `validate`, `planBuild`, `build`, `planDeploy`, `deploy`, `invoke`, `logs`, `destroy`.
+- `ProviderCredentialSchema`: required/optional env contracts.
+- `StateBackend`: local state read/write/lock/unlock abstraction.
+- `DeploymentReceipt`: provider deployment metadata and endpoint output.
 
-## Current Behavior Boundaries
+## Deploy Modes
 
-- Cloudflare Workers supports real API deployment (opt-in via `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1`).
-- Other providers currently return deterministic endpoint patterns and write local deployment receipts.
-- Stage-aware config is supported via `stages.default` and named stage overrides.
-- Provider `extensions` blocks are schema-validated for known providers.
-- Deploy command returns explicit exit semantics: `0` success, `2` partial failure, `1` full failure.
-- Compose orchestration is available via `runfabric compose plan|deploy`.
-- Function lifecycle commands are available via `runfabric package`, `runfabric deploy function <name>`, and `runfabric remove`.
-- Some commands (`invoke`, `logs`) are fully implemented only for selected providers.
+- Simulated mode (default): deterministic endpoint generation + local receipt.
+- Real mode (opt-in): provider command/API response parsing.
 
-## State Direction
+Controls:
 
-- Local state location target: `.runfabric/state/<service>/<stage>/<provider>.state.json`.
-- State payload should track resource identifiers, outputs, deployment timestamps, and schema version.
-- Remote backend direction: object storage + lock primitive + metadata pointer (provider-specific implementations).
-- First remote backend target: AWS S3 (versioned objects) with lock coordination and parameter-store pointer.
+- `RUNFABRIC_REAL_DEPLOY=1` global
+- `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1` provider-specific
+- `RUNFABRIC_<PROVIDER>_DEPLOY_CMD` for command-driven real deploy
 
-## Tooling and Quality
+## Recovery Semantics
 
-- Syntax check: `npm run check:syntax`
-- Capability matrix sync check: `npm run check:capabilities`
-- Tests: `npm test` (tsx-backed runner, no Node `--loader` dependency)
-- CLI smoke coverage includes `doctor`, `plan`, `build`, and `deploy`.
-- CI workflow: `.github/workflows/ci.yml` (validation only: frozen install + syntax + tests)
+- Deploy failures support optional rollback (`RUNFABRIC_ROLLBACK_ON_FAILURE=1`).
+- Rollback uses provider `destroy` and cleans receipt/state artifacts.
+- Remove failures write recovery notes under `.runfabric/recovery/remove/*.json`.
+
+## Compose
+
+- `runfabric compose plan|deploy` resolves dependency order from compose file.
+- Deploy exports shared outputs as:
+  - `RUNFABRIC_OUTPUT_<SERVICE>_<PROVIDER>_ENDPOINT`
+
+## Tooling
+
+- Syntax: `npm run check:syntax`
+- Capability sync check: `npm run check:capabilities`
+- Tests: `npm test`
+- Workspace type checks: `pnpm -r --if-present run typecheck`

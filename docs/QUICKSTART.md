@@ -1,20 +1,16 @@
-# Quickstart: Hello World
+# Quickstart
 
-This guide helps you run the `hello-http` example end-to-end with minimal setup.
+This guide gives two easy onboarding paths:
 
-## What You Will Build
-- A Hello World HTTP function from `examples/hello-http/src/index.ts`
-- A single-provider deployment flow using `cloudflare-workers`
+1. run existing Hello World example
+2. scaffold a new project with `runfabric init`
 
 ## Prerequisites
-- Node.js `>= 20`
-- pnpm (via Corepack)
-- Cloudflare credentials:
-  - `CLOUDFLARE_API_TOKEN`
-  - `CLOUDFLARE_ACCOUNT_ID`
 
-## 1. Install Dependencies
-From repo root:
+- Node.js `>= 20`
+- pnpm via Corepack
+
+Install:
 
 ```bash
 corepack enable
@@ -22,77 +18,76 @@ corepack prepare pnpm@10.5.2 --activate
 pnpm install
 ```
 
-## 2. Set Credentials
+## Path A: Use Existing Hello HTTP Example
+
+Use `examples/hello-http/runfabric.quickstart.yml`.
+
+Set Cloudflare credentials:
+
 ```bash
 export CLOUDFLARE_API_TOKEN="your-token"
 export CLOUDFLARE_ACCOUNT_ID="your-account-id"
 ```
 
-Optional for real Cloudflare API deploy:
-```bash
-export RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1
-```
+Run:
 
-If `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY` is not set, `runfabric deploy` runs in simulated mode and writes a deployment receipt without provisioning cloud resources.
-
-Alternative using `.env`:
-```bash
-cp .env.example .env
-# set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in .env
-set -a
-source .env
-set +a
-```
-
-## 3. Run Doctor
 ```bash
 pnpm run runfabric -- doctor -c examples/hello-http/runfabric.quickstart.yml
-```
-
-You should see `doctor checks passed`.
-
-## 4. Plan
-```bash
 pnpm run runfabric -- plan -c examples/hello-http/runfabric.quickstart.yml
-```
-
-Optional stage override:
-```bash
-pnpm run runfabric -- plan -c examples/hello-http/runfabric.quickstart.yml --stage prod
-```
-
-## 5. Build
-```bash
 pnpm run runfabric -- build -c examples/hello-http/runfabric.quickstart.yml
-```
-
-## 6. Deploy
-```bash
 pnpm run runfabric -- deploy -c examples/hello-http/runfabric.quickstart.yml
 ```
 
-Expected output includes an endpoint like:
-- simulated mode: `cloudflare-workers: https://hello-http.workers.dev`
-- real API mode: `cloudflare-workers: https://<script>.<account-subdomain>.workers.dev`
-
-## 7. Verify Deployment Receipt
-`runfabric` writes a local deployment receipt:
+Optional real Cloudflare API deployment:
 
 ```bash
-cat examples/hello-http/.runfabric/deploy/cloudflare-workers/deployment.json
+export RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1
+pnpm run runfabric -- deploy -c examples/hello-http/runfabric.quickstart.yml
 ```
 
-It also writes stage-aware provider state:
+## Path B: Scaffold New Project
+
+Create API template:
+
 ```bash
-cat examples/hello-http/.runfabric/state/hello-http/default/cloudflare-workers.state.json
+pnpm run runfabric -- init --template api --dir ./my-api --provider aws-lambda
 ```
 
-## Notes
-- Cloudflare is the first provider with an optional real API deploy path. Other providers currently use simulated deployment receipts.
-- For provider-wise credential lists and other ways to pass creds, see `docs/CREDENTIALS.md`.
-- If you install `runfabric` as a package, run the same commands directly (replace `pnpm run runfabric --` with `runfabric`).
-- For one-provider configs across all supported providers, see `examples/hello-http/PROVIDERS.md`.
-- Additional lifecycle commands:
-  - `runfabric package -c <config>` for artifact packaging
-  - `runfabric deploy-function <name> -c <config>` for function-level deploy
-  - `runfabric remove -c <config>` for cleanup
+Available templates:
+
+- `api`
+- `worker`
+- `queue`
+- `cron`
+
+Run lifecycle:
+
+```bash
+pnpm run runfabric -- doctor -c ./my-api/runfabric.yml
+pnpm run runfabric -- plan -c ./my-api/runfabric.yml
+pnpm run runfabric -- build -c ./my-api/runfabric.yml
+pnpm run runfabric -- deploy -c ./my-api/runfabric.yml
+pnpm run runfabric -- logs --provider aws-lambda
+```
+
+## Local State And Receipts
+
+After deploy:
+
+- receipt: `.runfabric/deploy/<provider>/deployment.json`
+- state: `.runfabric/state/<service>/<stage>/<provider>.state.json`
+
+## Real Deploy Mode For Other Providers
+
+Default deploy is simulated. To enable real mode:
+
+- `RUNFABRIC_REAL_DEPLOY=1` globally, or
+- `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1` per provider
+
+Then set provider deploy command env var returning JSON, e.g.:
+
+- `RUNFABRIC_AWS_DEPLOY_CMD`
+- `RUNFABRIC_GCP_DEPLOY_CMD`
+- `RUNFABRIC_AZURE_DEPLOY_CMD`
+
+Full credential and command matrix: `docs/CREDENTIALS.md`.
