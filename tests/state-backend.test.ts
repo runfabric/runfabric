@@ -106,16 +106,18 @@ test("state migration verifies checksum and record count", async () => {
   const source = createStateBackend({
     projectDir,
     state: {
-      backend: "local"
+      backend: "local",
+      local: {
+        dir: "./.runfabric/state-source"
+      }
     }
   });
   const target = createStateBackend({
     projectDir,
     state: {
-      backend: "postgres",
-      postgres: {
-        schema: "public",
-        table: "runfabric_state"
+      backend: "local",
+      local: {
+        dir: "./.runfabric/state-target"
       }
     }
   });

@@ -14,6 +14,12 @@
     "test": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist"
   },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.901.0",
+    "@azure/storage-blob": "^12.28.0",
+    "@google-cloud/storage": "^7.17.1",
+    "pg": "^8.16.3"
+  },
   "description": "Core contracts and shared types for runfabric",
   "license": "MIT",
   "repository": {

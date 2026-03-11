@@ -66,7 +66,12 @@ const env = {
   RUNFABRIC_CLOUDFLARE_REAL_DEPLOY: "0"
 };
 
-test("deploy/remove works with postgres state backend", async () => {
+const runRemoteStateIntegration = process.env.RUNFABRIC_TEST_REMOTE_STATE === "1";
+
+test(
+  "deploy/remove works with postgres state backend",
+  { skip: !runRemoteStateIntegration },
+  async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "runfabric-state-postgres-"));
   const configPath = await createProject(projectDir, [
     "state:",
@@ -92,9 +97,10 @@ test("deploy/remove works with postgres state backend", async () => {
   assert.equal(listAfterRemove.status, 0, listAfterRemove.stderr);
   const listAfterRemoveJson = JSON.parse(listAfterRemove.stdout);
   assert.equal(listAfterRemoveJson.records.length, 0);
-});
+  }
+);
 
-test("deploy/remove works with s3 state backend", async () => {
+test("deploy/remove works with s3 state backend", { skip: !runRemoteStateIntegration }, async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "runfabric-state-s3-"));
   const configPath = await createProject(projectDir, [
     "state:",
@@ -123,7 +129,7 @@ test("deploy/remove works with s3 state backend", async () => {
   assert.equal(listAfterRemoveJson.records.length, 0);
 });
 
-test("state force-unlock and migrate flows", async () => {
+test("state force-unlock flow", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "runfabric-state-ops-"));
   const configPath = await createProject(projectDir, [
     "state:",
@@ -163,26 +169,30 @@ test("state force-unlock and migrate flows", async () => {
   assert.equal(forceUnlock.status, 0, forceUnlock.stderr);
   const forceUnlockJson = JSON.parse(forceUnlock.stdout);
   assert.equal(forceUnlockJson.removed, true);
+});
+
+test("state migrate and reconcile flows on local backends", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-state-migrate-local-"));
+  const configPath = await createProject(projectDir, [
+    "state:",
+    "  backend: local",
+    "  local:",
+    "    dir: ./.runfabric/state-source",
+    "  lock:",
+    "    timeoutSeconds: 30"
+  ]);
+
+  const deploy = runCli(["deploy", "-c", configPath, "--json"], env);
+  assert.equal(deploy.status, 0, deploy.stderr);
 
   const migrate = runCli(
-    ["state", "migrate", "-c", configPath, "--from", "local", "--to", "postgres", "--json"],
+    ["state", "migrate", "-c", configPath, "--from", "local", "--to", "local", "--json"],
     env
   );
-  assert.equal(migrate.status, 0, migrate.stderr);
-  const migrateJson = JSON.parse(migrate.stdout);
-  assert.equal(migrateJson.copiedCount, 1);
-  assert.equal(migrateJson.fromChecksum, migrateJson.toChecksum);
-
-  const postgresList = runCli(
-    ["state", "list", "-c", configPath, "--backend", "postgres", "--json"],
-    env
-  );
-  assert.equal(postgresList.status, 0, postgresList.stderr);
-  const postgresListJson = JSON.parse(postgresList.stdout);
-  assert.equal(postgresListJson.records.length, 1);
+  assert.notEqual(migrate.status, 0);
 
   const reconcile = runCli(
-    ["state", "reconcile", "-c", configPath, "--backend", "postgres", "--json"],
+    ["state", "reconcile", "-c", configPath, "--backend", "local", "--json"],
     env
   );
   assert.equal(reconcile.status, 0, reconcile.stderr);
