@@ -84,10 +84,7 @@ test("package + deploy function + remove workflow", async () => {
   assert.equal(packageJson.function, "api");
   assert.ok(packageJson.artifacts.length >= 1);
 
-  const deployed = runCli(
-    ["deploy-function", "api", "-c", join(projectDir, "runfabric.yml"), "--json"],
-    env
-  );
+  const deployed = runCli(["deploy", "-f", "api", "-c", join(projectDir, "runfabric.yml"), "--json"], env);
   assert.equal(deployed.status, 0, deployed.stderr);
   const deployJson = JSON.parse(deployed.stdout);
   assert.equal(deployJson.summary.exitCode, 0);

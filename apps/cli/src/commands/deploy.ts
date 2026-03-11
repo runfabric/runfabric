@@ -3,10 +3,13 @@ import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { buildProject } from "@runfabric/builder";
 import {
-  LocalFileStateBackend,
+  createStateBackend,
   type DeployFailure,
   type ProjectConfig,
-  type ProviderAdapter
+  type ProviderAdapter,
+  type StateAddress,
+  type StateBackend,
+  type StateLockInfo
 } from "@runfabric/core";
 import { createPlan } from "@runfabric/planner";
 import { createProviderRegistry } from "../providers/registry";
@@ -45,11 +48,32 @@ interface SuccessfulProviderDeployment {
   adapter: ProviderAdapter;
 }
 
+interface LockHeartbeat {
+  stop(): Promise<void>;
+  latestLock(): StateLockInfo;
+}
+
 function stringifyError(errorValue: unknown): string {
   if (errorValue instanceof Error) {
     return errorValue.message;
   }
   return String(errorValue);
+}
+
+function compactStringMap(
+  value: Record<string, string> | undefined
+): Record<string, string> | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const out: Record<string, string> = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (typeof entryValue !== "string" || entryValue.trim().length === 0) {
+      continue;
+    }
+    out[key] = entryValue.trim();
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function summarizeResult(
@@ -80,6 +104,46 @@ function rollbackEnabled(): boolean {
   return ["1", "true", "yes", "on"].includes(normalized);
 }
 
+function startLockHeartbeat(
+  stateBackend: StateBackend,
+  address: StateAddress,
+  lock: StateLockInfo
+): LockHeartbeat {
+  const intervalMs = Math.max(1, stateBackend.config.lock.heartbeatSeconds) * 1000;
+  let active = true;
+  let currentLock = lock;
+  let inFlight = false;
+
+  const timer = setInterval(() => {
+    if (!active || inFlight || lock.lockId === "locks-disabled") {
+      return;
+    }
+    inFlight = true;
+    void stateBackend
+      .renewLock(address, currentLock)
+      .then((renewed) => {
+        currentLock = renewed;
+      })
+      .catch(() => {
+        return undefined;
+      })
+      .finally(() => {
+        inFlight = false;
+      });
+  }, intervalMs);
+  timer.unref();
+
+  return {
+    latestLock() {
+      return currentLock;
+    },
+    async stop(): Promise<void> {
+      active = false;
+      clearInterval(timer);
+    }
+  };
+}
+
 export async function executeDeployWorkflow(
   input: DeployWorkflowInput
 ): Promise<DeployWorkflowResult> {
@@ -105,7 +169,10 @@ export async function executeDeployWorkflow(
   }
 
   const providerRegistry = createProviderRegistry(input.projectDir);
-  const stateBackend = new LocalFileStateBackend({ projectDir: input.projectDir });
+  const stateBackend = createStateBackend({
+    projectDir: input.projectDir,
+    state: baseProject.state
+  });
   const hooks = await loadLifecycleHooks(baseProject, input.projectDir);
 
   for (const hook of hooks) {
@@ -171,80 +238,177 @@ export async function executeDeployWorkflow(
       continue;
     }
 
+    const stateAddress: StateAddress = {
+      service: baseProject.service,
+      stage,
+      provider: provider.name
+    };
+
+    let stateLock: StateLockInfo | undefined;
+    let heartbeat: LockHeartbeat | undefined;
+    let failurePhase: "deploy" | "state" = "state";
+    const deploymentStartedAt = new Date().toISOString();
+
     try {
+      const existing = await stateBackend.read(stateAddress);
+      if (existing?.lifecycle === "in_progress") {
+        warn(
+          `${provider.name}: previous deployment state was in_progress; continuing with idempotent retry`
+        );
+      }
+
+      stateLock = await stateBackend.lock(
+        stateAddress,
+        `deploy:${process.pid}:${provider.name}:${baseProject.service}:${stage}`
+      );
+      heartbeat = startLockHeartbeat(stateBackend, stateAddress, stateLock);
+
+      await stateBackend.write(
+        stateAddress,
+        {
+          schemaVersion: 2,
+          provider: provider.name,
+          service: baseProject.service,
+          stage,
+          endpoint: existing?.endpoint,
+          lifecycle: "in_progress",
+          updatedAt: deploymentStartedAt,
+          details: {
+            artifact,
+            functionName: input.functionName,
+            retryFromInProgress: existing?.lifecycle === "in_progress",
+            startedAt: deploymentStartedAt
+          }
+        },
+        heartbeat.latestLock()
+      );
+
+      const provisionedResources = provider.provisionResources
+        ? await provider.provisionResources(baseProject)
+        : undefined;
+      const deployedWorkflows = provider.deployWorkflows
+        ? await provider.deployWorkflows(baseProject)
+        : undefined;
+      const materializedSecrets = provider.materializeSecrets
+        ? await provider.materializeSecrets(baseProject)
+        : undefined;
+
       const providerBuildPlan = await provider.planBuild(baseProject);
       await provider.build(baseProject, providerBuildPlan);
       const deployPlan = await provider.planDeploy(baseProject, artifact);
+      failurePhase = "deploy";
       const deployResult = await provider.deploy(baseProject, deployPlan);
+      const resourceAddresses = compactStringMap({
+        ...(provisionedResources?.resourceAddresses || {}),
+        ...(deployResult.resourceAddresses || {})
+      });
+      const workflowAddresses = compactStringMap({
+        ...(deployedWorkflows?.workflowAddresses || {}),
+        ...(deployResult.workflowAddresses || {})
+      });
+      const secretReferences = compactStringMap({
+        ...(materializedSecrets?.secretReferences || {}),
+        ...(deployResult.secretReferences || {})
+      });
       deployments.push(deployResult);
       successfulDeployments.push({
         provider: provider.name,
         adapter: provider
       });
 
-      const stateAddress = {
-        service: baseProject.service,
-        stage,
-        provider: provider.name
-      };
-      const stateRecord = {
-        schemaVersion: 1,
-        provider: provider.name,
-        service: baseProject.service,
-        stage,
-        endpoint: deployResult.endpoint,
-        updatedAt: new Date().toISOString(),
-        details: {
-          artifact,
-          deployPlan,
-          functionName: input.functionName
-        }
-      };
-
-      try {
-        await stateBackend.lock(stateAddress);
-        try {
-          await stateBackend.write(stateAddress, stateRecord);
-        } finally {
-          await stateBackend.unlock(stateAddress);
-        }
-      } catch (stateError) {
-        failures.push({
+      failurePhase = "state";
+      await stateBackend.write(
+        stateAddress,
+        {
+          schemaVersion: 2,
           provider: provider.name,
-          phase: "state",
-          message: stringifyError(stateError)
-        });
-      }
+          service: baseProject.service,
+          stage,
+          endpoint: deployResult.endpoint,
+          resourceAddresses,
+          workflowAddresses,
+          secretReferences,
+          lifecycle: "applied",
+          updatedAt: new Date().toISOString(),
+          details: {
+            artifact,
+            deployPlan,
+            functionName: input.functionName,
+            startedAt: deploymentStartedAt,
+            completedAt: new Date().toISOString(),
+            resourceAddresses,
+            workflowAddresses,
+            secretReferences
+          }
+        },
+        heartbeat.latestLock()
+      );
     } catch (deployError) {
+      const message = stringifyError(deployError);
       failures.push({
         provider: provider.name,
-        phase: "deploy",
-        message: stringifyError(deployError)
+        phase: failurePhase,
+        message
       });
+
+      if (stateLock) {
+        try {
+          await stateBackend.write(
+            stateAddress,
+            {
+              schemaVersion: 2,
+              provider: provider.name,
+              service: baseProject.service,
+              stage,
+              lifecycle: "failed",
+              updatedAt: new Date().toISOString(),
+              details: {
+                artifact,
+                functionName: input.functionName,
+                startedAt: deploymentStartedAt,
+                failedAt: new Date().toISOString(),
+                error: message
+              }
+            },
+            heartbeat ? heartbeat.latestLock() : stateLock
+          );
+        } catch (stateError) {
+          failures.push({
+            provider: provider.name,
+            phase: "state",
+            message: `failed to persist failed state: ${stringifyError(stateError)}`
+          });
+        }
+      }
+    } finally {
+      if (heartbeat) {
+        await heartbeat.stop();
+      }
+      if (stateLock) {
+        try {
+          await stateBackend.unlock(
+            stateAddress,
+            heartbeat ? heartbeat.latestLock() : stateLock
+          );
+        } catch (unlockError) {
+          failures.push({
+            provider: provider.name,
+            phase: "state",
+            message: `failed to release state lock: ${stringifyError(unlockError)}`
+          });
+        }
+      }
     }
   }
 
   if (failures.length > 0 && successfulDeployments.length > 0 && rollbackEnabled()) {
     for (const deployedProvider of [...successfulDeployments].reverse()) {
-      const cleanupTargets = [
-        resolve(input.projectDir, ".runfabric", "deploy", deployedProvider.provider),
-        resolve(
-          input.projectDir,
-          ".runfabric",
-          "state",
-          baseProject.service,
-          stage,
-          `${deployedProvider.provider}.state.json`
-        ),
-        resolve(
-          input.projectDir,
-          ".runfabric",
-          "state",
-          baseProject.service,
-          stage,
-          `${deployedProvider.provider}.state.json.lock`
-        )
-      ];
+      const stateAddress: StateAddress = {
+        service: baseProject.service,
+        stage,
+        provider: deployedProvider.provider
+      };
+      const cleanupTargets = [resolve(input.projectDir, ".runfabric", "deploy", deployedProvider.provider)];
 
       try {
         if (!deployedProvider.adapter.destroy) {
@@ -252,6 +416,8 @@ export async function executeDeployWorkflow(
         }
 
         await deployedProvider.adapter.destroy(baseProject);
+        await stateBackend.delete(stateAddress);
+        await stateBackend.forceUnlock(stateAddress);
         for (const cleanupTarget of cleanupTargets) {
           await rm(cleanupTarget, { recursive: true, force: true });
         }
@@ -370,10 +536,11 @@ export const registerDeployCommand: CommandRegistrar = (program) => {
     .description("Deploy built artifacts to providers")
     .option("-c, --config <path>", "Path to runfabric config")
     .option("-s, --stage <name>", "Stage name override")
+    .option("-f, --function <name>", "Deploy a specific function")
     .option("-o, --out <path>", "Output directory")
     .option("--json", "Emit JSON output")
-    .action(async (options: { config?: string; stage?: string; out?: string; json?: boolean }) => {
-      await runAndEmit(undefined, options);
+    .action(async (options: { config?: string; stage?: string; function?: string; out?: string; json?: boolean }) => {
+      await runAndEmit(options.function, options);
     });
 
   deployCommand

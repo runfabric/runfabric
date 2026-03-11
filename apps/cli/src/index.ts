@@ -8,11 +8,16 @@ import { registerDoctorCommand } from "./commands/doctor";
 import { registerInitCommand } from "./commands/init";
 import { registerInvokeCommand } from "./commands/invoke";
 import { registerLogsCommand } from "./commands/logs";
+import { registerMetricsCommand } from "./commands/metrics";
+import { registerMigrateCommand } from "./commands/migrate";
 import { registerPackageCommand } from "./commands/package";
 import { registerPlanCommand } from "./commands/plan";
 import { registerPrimitivesCommand } from "./commands/primitives";
 import { registerProvidersCommand } from "./commands/providers";
 import { registerRemoveCommand } from "./commands/remove";
+import { registerStateCommand } from "./commands/state";
+import { registerTracesCommand } from "./commands/traces";
+import { registerDevCommand } from "./commands/dev";
 
 const program = new Command();
 
@@ -30,9 +35,14 @@ registerRemoveCommand(program);
 registerInvokeCommand(program);
 registerCallLocalCommand(program);
 registerLogsCommand(program);
+registerTracesCommand(program);
+registerMetricsCommand(program);
+registerMigrateCommand(program);
 registerProvidersCommand(program);
 registerPrimitivesCommand(program);
 registerComposeCommand(program);
+registerStateCommand(program);
+registerDevCommand(program);
 
 void program.parseAsync(process.argv).catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);

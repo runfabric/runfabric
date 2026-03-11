@@ -167,23 +167,55 @@ function normalizeEntryPath(entry: string): string {
   return entry.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
+function shouldAllowTypeScriptFallback(): boolean {
+  const execArgv = process.execArgv.join(" ").toLowerCase();
+  return (
+    execArgv.includes("tsx") ||
+    execArgv.includes("ts-node") ||
+    execArgv.includes("register-loader") ||
+    Boolean(process.env.TS_NODE_PROJECT) ||
+    Boolean(process.env.TSX_TSCONFIG_PATH)
+  );
+}
+
+function withExtensions(basePath: string): string[] {
+  return [`${basePath}.js`, `${basePath}.mjs`, `${basePath}.cjs`];
+}
+
 function resolveHandlerCandidates(projectDir: string, entry: string): string[] {
   const normalizedEntry = normalizeEntryPath(entry);
   const candidates: string[] = [];
+  const allowTypeScriptFallback = shouldAllowTypeScriptFallback();
 
   if (normalizedEntry.endsWith(".ts")) {
-    // Prefer JavaScript artifacts for published CLI usage where no TS loader is present.
+    const withoutExtension = normalizedEntry.slice(0, -3);
+
+    // Prefer generated JavaScript artifacts first.
+    candidates.push(
+      ...withExtensions(resolve(projectDir, withoutExtension)),
+      ...withExtensions(resolve(projectDir, "dist", withoutExtension))
+    );
+
     if (normalizedEntry.startsWith("src/")) {
-      candidates.push(resolve(projectDir, "dist", normalizedEntry.slice(4).replace(/\.ts$/, ".js")));
+      const withoutSrcPrefix = withoutExtension.slice(4);
+      candidates.push(...withExtensions(resolve(projectDir, "dist", withoutSrcPrefix)));
     }
 
-    candidates.push(resolve(projectDir, normalizedEntry.replace(/\.ts$/, ".js")));
-    candidates.push(resolve(projectDir, normalizedEntry));
+    if (allowTypeScriptFallback) {
+      candidates.push(resolve(projectDir, normalizedEntry));
+    }
   } else {
     candidates.push(resolve(projectDir, normalizedEntry));
 
-    if (normalizedEntry.endsWith(".js") && normalizedEntry.startsWith("dist/")) {
-      candidates.push(resolve(projectDir, "src", normalizedEntry.slice(5).replace(/\.js$/, ".ts")));
+    if (
+      allowTypeScriptFallback &&
+      (normalizedEntry.endsWith(".js") || normalizedEntry.endsWith(".mjs") || normalizedEntry.endsWith(".cjs")) &&
+      normalizedEntry.startsWith("dist/")
+    ) {
+      const tsSource = normalizedEntry
+        .slice(5)
+        .replace(/\.(js|mjs|cjs)$/i, ".ts");
+      candidates.push(resolve(projectDir, "src", tsSource));
     }
   }
 
@@ -200,7 +232,11 @@ async function resolveHandlerPath(projectDir: string, entry: string): Promise<st
       // keep searching
     }
   }
-  throw new Error(`handler module not found. searched: ${candidates.join(", ")}`);
+  throw new Error(
+    `handler module not found. searched: ${candidates.join(
+      ", "
+    )}. For TypeScript projects run your build (for example: tsc -p tsconfig.json) before call-local in published CLI usage.`
+  );
 }
 
 async function loadHandler(projectDir: string, entry: string, fresh = false): Promise<UniversalHandler> {
@@ -353,7 +389,7 @@ export async function executeLocalCall(projectDir: string, options: LocalCallOpt
 
   const entry = options.entry || planning.project.entry;
   const request = await loadEvent(projectDir, parsed);
-  const handler = await loadHandler(projectDir, entry);
+  const handler = await loadHandler(projectDir, entry, Boolean(options.watch));
   const response = await invokeWithProvider(provider, handler, request);
 
   return {

@@ -4,6 +4,12 @@ import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { ProjectConfig } from "@runfabric/core";
+import {
+  buildProviderMetricsFromLocalArtifacts,
+  buildProviderTracesFromLocalArtifacts,
+  readDeploymentReceipt,
+  TriggerEnum
+} from "@runfabric/core";
 import { createAwsLambdaProvider } from "../packages/provider-aws-lambda/src/index.ts";
 
 function createProject(): ProjectConfig {
@@ -12,7 +18,7 @@ function createProject(): ProjectConfig {
     runtime: "nodejs",
     entry: "src/index.ts",
     providers: ["aws-lambda"],
-    triggers: [{ type: "http", method: "GET", path: "/hello" }]
+    triggers: [{ type: TriggerEnum.Http, method: "GET", path: "/hello" }]
   };
 }
 
@@ -59,9 +65,34 @@ test("provider invoke/logs read from deployment artifacts", async () => {
       });
       await provider.deploy(project, deployPlan);
 
+      const invokeAfterDeploy = await provider.invoke?.({
+        provider: "aws-lambda",
+        payload: JSON.stringify({ ping: "after-deploy" })
+      });
+      assert.ok(invokeAfterDeploy?.correlation?.invokeId);
+      assert.ok(invokeAfterDeploy?.correlation?.deploymentId);
+
       const logs = await provider.logs?.({ provider: "aws-lambda" });
       assert.ok((logs?.lines.length || 0) > 0);
       assert.ok(logs?.lines.some((line) => line.includes("deploy deploymentId=")));
+      assert.ok(logs?.lines.some((line) => line.includes("invokeId=")));
+
+      const receipt = await readDeploymentReceipt(projectDir, "aws-lambda");
+      assert.ok(receipt?.correlation?.deployTraceId);
+      assert.ok(receipt?.correlation?.latestInvokeId);
+
+      const traces = await buildProviderTracesFromLocalArtifacts(projectDir, "aws-lambda", {
+        provider: "aws-lambda"
+      });
+      assert.ok(traces.traces.length > 0);
+      assert.ok(traces.traces.some((trace) => typeof trace.deploymentId === "string"));
+      assert.ok(traces.traces.some((trace) => typeof trace.invokeId === "string"));
+
+      const metrics = await buildProviderMetricsFromLocalArtifacts(projectDir, "aws-lambda", {
+        provider: "aws-lambda"
+      });
+      assert.ok(metrics.metrics.some((metric) => metric.name === "invoke_total"));
+      assert.ok(metrics.metrics.some((metric) => metric.name === "deploy_total"));
     }
   );
 });

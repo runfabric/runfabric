@@ -104,6 +104,17 @@ test("cli smoke: doctor/plan/build/deploy complete for cloudflare fixture", asyn
   assert.equal(deployJson.deployments.length, 1);
   assert.ok(deployJson.deployments[0].endpoint.includes(".workers.dev"));
 
+  const traces = runCli(["traces", "-c", configPath, "--provider", "cloudflare-workers", "--json"], env);
+  assert.equal(traces.status, 0, traces.stderr);
+  const tracesJson = JSON.parse(traces.stdout);
+  assert.ok(Array.isArray(tracesJson.traces));
+
+  const metrics = runCli(["metrics", "-c", configPath, "--provider", "cloudflare-workers", "--json"], env);
+  assert.equal(metrics.status, 0, metrics.stderr);
+  const metricsJson = JSON.parse(metrics.stdout);
+  assert.ok(Array.isArray(metricsJson.metrics));
+  assert.ok(metricsJson.metrics.some((metric: { name: string }) => metric.name === "deploy_total"));
+
   const receiptPath = join(projectDir, ".runfabric", "deploy", "cloudflare-workers", "deployment.json");
   const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
   assert.equal(receipt.mode, "simulated");
@@ -215,4 +226,103 @@ test("call-local --serve starts localhost server", async () => {
     child.kill("SIGTERM");
     await once(child, "exit");
   }
+});
+
+test("call-local prefers built js artifact over ts source entry when available", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-call-local-artifact-priority-"));
+  await mkdir(join(projectDir, "src"), { recursive: true });
+  await mkdir(join(projectDir, "dist", "src"), { recursive: true });
+  await writeFile(
+    join(projectDir, "src", "index.ts"),
+    [
+      "throw new Error('ts source should not be loaded when built js artifact exists');",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    join(projectDir, "dist", "src", "index.js"),
+    [
+      "exports.handler = async () => ({",
+      "  status: 200,",
+      "  headers: { 'content-type': 'application/json' },",
+      "  body: JSON.stringify({ source: 'dist-src-js' })",
+      "});",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    join(projectDir, "runfabric.yml"),
+    [
+      "service: artifact-priority",
+      "runtime: nodejs",
+      "entry: src/index.ts",
+      "",
+      "providers:",
+      "  - aws-lambda",
+      "",
+      "triggers:",
+      "  - type: http",
+      "    method: GET",
+      "    path: /hello",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const configPath = join(projectDir, "runfabric.yml");
+  const result = runCli(
+    ["call-local", "-c", configPath, "--provider", "aws-lambda", "--method", "GET", "--path", "/hello"],
+    {}
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.response.statusCode, 200);
+  assert.ok(output.response.body.includes("\"source\":\"dist-src-js\""));
+});
+
+test("dev preset queue --once runs one local simulation and exits cleanly", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-dev-queue-once-"));
+  await mkdir(join(projectDir, "src"), { recursive: true });
+  await writeFile(
+    join(projectDir, "src", "index.ts"),
+    [
+      "export const handler = async () => ({",
+      "  status: 200,",
+      "  headers: { \"content-type\": \"application/json\" },",
+      "  body: JSON.stringify({ ok: true, source: \"dev-queue-once\" })",
+      "});",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    join(projectDir, "runfabric.yml"),
+    [
+      "service: dev-queue-once",
+      "runtime: nodejs",
+      "entry: src/index.ts",
+      "",
+      "providers:",
+      "  - aws-lambda",
+      "",
+      "triggers:",
+      "  - type: queue",
+      "    queue: jobs",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const configPath = join(projectDir, "runfabric.yml");
+  const result = runCli(["dev", "-c", configPath, "--preset", "queue", "--once", "--no-watch"], {
+    AWS_ACCESS_KEY_ID: "test",
+    AWS_SECRET_ACCESS_KEY: "test",
+    AWS_REGION: "us-east-1"
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.stdout.includes("queue simulation provider=aws-lambda status=200"));
 });

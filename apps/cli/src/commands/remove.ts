@@ -1,6 +1,7 @@
 import type { CommandRegistrar } from "../types/cli";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { createStateBackend, type StateAddress } from "@runfabric/core";
 import { createProviderRegistry } from "../providers/registry";
 import { loadPlanningContext } from "../utils/load-config";
 import { printJson } from "../utils/output";
@@ -33,6 +34,10 @@ export const registerRemoveCommand: CommandRegistrar = (program) => {
         const stage = context.project.stage || "default";
         const providers = options.provider ? [options.provider] : context.project.providers;
         const registry = createProviderRegistry(projectDir);
+        const stateBackend = createStateBackend({
+          projectDir,
+          state: context.project.state
+        });
         const removedPaths: string[] = [];
         const destroyedProviders: string[] = [];
         const failures: RemoveFailure[] = [];
@@ -91,25 +96,27 @@ export const registerRemoveCommand: CommandRegistrar = (program) => {
             }
           }
 
+          const stateAddress: StateAddress = {
+            service: context.project.service,
+            stage,
+            provider: providerName
+          };
+
+          try {
+            await stateBackend.delete(stateAddress);
+            await stateBackend.forceUnlock(stateAddress);
+          } catch (stateError) {
+            failures.push({
+              provider: providerName,
+              message: `state cleanup failed: ${
+                stateError instanceof Error ? stateError.message : String(stateError)
+              }`
+            });
+          }
+
           const providerPaths = [
             resolve(projectDir, ".runfabric", "deploy", providerName),
-            resolve(projectDir, ".runfabric", "build", providerName, context.project.service),
-            resolve(
-              projectDir,
-              ".runfabric",
-              "state",
-              context.project.service,
-              stage,
-              `${providerName}.state.json`
-            ),
-            resolve(
-              projectDir,
-              ".runfabric",
-              "state",
-              context.project.service,
-              stage,
-              `${providerName}.state.json.lock`
-            )
+            resolve(projectDir, ".runfabric", "build", providerName, context.project.service)
           ];
 
           for (const targetPath of providerPaths) {
