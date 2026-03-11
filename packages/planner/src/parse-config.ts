@@ -43,6 +43,9 @@ const providerExtensionSchema: Record<string, Record<string, ExtensionValueType>
   "aws-lambda": {
     stage: "string",
     region: "string",
+    roleArn: "string",
+    functionName: "string",
+    runtime: "string",
     iam: "object"
   },
   "gcp-functions": {
@@ -50,6 +53,7 @@ const providerExtensionSchema: Record<string, Record<string, ExtensionValueType>
   },
   "azure-functions": {
     functionApp: "string",
+    functionAppName: "string",
     routePrefix: "string"
   },
   "cloudflare-workers": {

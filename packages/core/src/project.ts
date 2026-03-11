@@ -58,6 +58,9 @@ export interface AwsIamConfig {
 export interface AwsLambdaExtensionConfig {
   stage?: string;
   region?: string;
+  roleArn?: string;
+  functionName?: string;
+  runtime?: string;
   iam?: AwsIamConfig;
   [key: string]: unknown;
 }

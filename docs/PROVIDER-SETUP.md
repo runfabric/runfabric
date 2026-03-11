@@ -7,11 +7,14 @@ This document is a provider-by-provider checklist for credentials and deploy com
 For any provider config:
 
 ```bash
+pnpm add -D @runfabric/provider-<provider-id>
 runfabric doctor -c <provider-config.yml>
 runfabric plan -c <provider-config.yml>
 runfabric build -c <provider-config.yml>
 runfabric deploy -c <provider-config.yml>
 ```
+
+Install only the provider adapters used by your project.
 
 Real mode is optional. Simulated mode is default.
 
@@ -41,8 +44,10 @@ Required env:
 Optional real mode:
 
 - `RUNFABRIC_GCP_REAL_DEPLOY=1`
-- `RUNFABRIC_GCP_DEPLOY_CMD`
-- `RUNFABRIC_GCP_DESTROY_CMD`
+- built-in deploy/remove uses `gcloud` command contract
+- optional overrides:
+  - `RUNFABRIC_GCP_DEPLOY_CMD`
+  - `RUNFABRIC_GCP_DESTROY_CMD`
 
 ## Azure Functions
 
@@ -57,8 +62,10 @@ Required env:
 Optional real mode:
 
 - `RUNFABRIC_AZURE_REAL_DEPLOY=1`
-- `RUNFABRIC_AZURE_DEPLOY_CMD`
-- `RUNFABRIC_AZURE_DESTROY_CMD`
+- built-in deploy/remove uses `func` + `az` command contract
+- optional overrides:
+  - `RUNFABRIC_AZURE_DEPLOY_CMD`
+  - `RUNFABRIC_AZURE_DESTROY_CMD`
 
 ## Cloudflare Workers
 
@@ -70,7 +77,7 @@ Required env:
 Optional real mode:
 
 - `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1` (direct API path)
-- optional destroy command: `RUNFABRIC_CLOUDFLARE_DESTROY_CMD`
+- optional destroy override: `RUNFABRIC_CLOUDFLARE_DESTROY_CMD` (otherwise built-in API destroy is used)
 
 ## Vercel
 
@@ -83,8 +90,10 @@ Required env:
 Optional real mode:
 
 - `RUNFABRIC_VERCEL_REAL_DEPLOY=1`
-- `RUNFABRIC_VERCEL_DEPLOY_CMD`
-- `RUNFABRIC_VERCEL_DESTROY_CMD`
+- built-in deploy/remove uses `vercel` command contract
+- optional overrides:
+  - `RUNFABRIC_VERCEL_DEPLOY_CMD`
+  - `RUNFABRIC_VERCEL_DESTROY_CMD`
 
 ## Netlify
 
@@ -96,8 +105,10 @@ Required env:
 Optional real mode:
 
 - `RUNFABRIC_NETLIFY_REAL_DEPLOY=1`
-- `RUNFABRIC_NETLIFY_DEPLOY_CMD`
-- `RUNFABRIC_NETLIFY_DESTROY_CMD`
+- built-in deploy/remove uses `netlify` command contract
+- optional overrides:
+  - `RUNFABRIC_NETLIFY_DEPLOY_CMD`
+  - `RUNFABRIC_NETLIFY_DESTROY_CMD`
 
 ## Alibaba FC
 
@@ -110,8 +121,10 @@ Required env:
 Optional real mode:
 
 - `RUNFABRIC_ALIBABA_REAL_DEPLOY=1`
-- `RUNFABRIC_ALIBABA_DEPLOY_CMD`
-- `RUNFABRIC_ALIBABA_DESTROY_CMD`
+- built-in deploy/remove uses `s` command contract
+- optional overrides:
+  - `RUNFABRIC_ALIBABA_DEPLOY_CMD`
+  - `RUNFABRIC_ALIBABA_DESTROY_CMD`
 
 ## DigitalOcean Functions
 
@@ -123,8 +136,10 @@ Required env:
 Optional real mode:
 
 - `RUNFABRIC_DIGITALOCEAN_REAL_DEPLOY=1`
-- `RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD`
-- `RUNFABRIC_DIGITALOCEAN_DESTROY_CMD`
+- built-in deploy/remove uses `doctl` command contract
+- optional overrides:
+  - `RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD`
+  - `RUNFABRIC_DIGITALOCEAN_DESTROY_CMD`
 
 ## Fly Machines
 
@@ -136,8 +151,10 @@ Required env:
 Optional real mode:
 
 - `RUNFABRIC_FLY_REAL_DEPLOY=1`
-- `RUNFABRIC_FLY_DEPLOY_CMD`
-- `RUNFABRIC_FLY_DESTROY_CMD`
+- built-in deploy/remove uses `flyctl` command contract
+- optional overrides:
+  - `RUNFABRIC_FLY_DEPLOY_CMD`
+  - `RUNFABRIC_FLY_DESTROY_CMD`
 
 ## IBM OpenWhisk
 
@@ -150,8 +167,10 @@ Required env:
 Optional real mode:
 
 - `RUNFABRIC_IBM_REAL_DEPLOY=1`
-- `RUNFABRIC_IBM_DEPLOY_CMD`
-- `RUNFABRIC_IBM_DESTROY_CMD`
+- built-in deploy/remove uses `ibmcloud` command contract
+- optional overrides:
+  - `RUNFABRIC_IBM_DEPLOY_CMD`
+  - `RUNFABRIC_IBM_DESTROY_CMD`
 
 ## Optional Provider-Native Traces/Metrics Commands
 

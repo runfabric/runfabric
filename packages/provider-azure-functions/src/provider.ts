@@ -93,6 +93,23 @@ function azureResourceMetadata(response: unknown): Record<string, unknown> | und
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
+function defaultAzureDeployCommand(functionAppName: string): string {
+  return [
+    `func azure functionapp publish ${JSON.stringify(functionAppName)} --no-build >/dev/null`,
+    "&&",
+    `az functionapp show --name ${JSON.stringify(functionAppName)} --resource-group "$AZURE_RESOURCE_GROUP" --output json`
+  ].join(" ");
+}
+
+function defaultAzureDestroyCommand(functionAppName: string): string {
+  return [
+    "az functionapp delete",
+    `--name ${JSON.stringify(functionAppName)}`,
+    '--resource-group "$AZURE_RESOURCE_GROUP"',
+    "--output none"
+  ].join(" ");
+}
+
 export function createAzureFunctionsProvider(options: ProviderOptions): ProviderAdapter {
   return {
     name: "azure-functions",
@@ -127,20 +144,21 @@ export function createAzureFunctionsProvider(options: ProviderOptions): Provider
     },
     async deploy(project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> {
       const stage = project.stage || "default";
+      const azureExtension = project.extensions?.["azure-functions"];
+      const functionAppName =
+        typeof azureExtension?.functionAppName === "string" && azureExtension.functionAppName.trim().length > 0
+          ? azureExtension.functionAppName
+          : process.env.AZURE_FUNCTION_APP_NAME || project.service;
       const deploymentId = createDeploymentId("azure-functions", project.service, stage);
 
-      let endpoint = `https://${project.service}.azurewebsites.net/api`;
+      let endpoint = `https://${functionAppName}.azurewebsites.net/api`;
       let mode: "simulated" | "cli" = "simulated";
       let rawResponse: unknown;
       let resource: Record<string, unknown> | undefined;
 
       if (isRealDeployModeEnabled("RUNFABRIC_AZURE_REAL_DEPLOY")) {
-        const deployCommand = process.env.RUNFABRIC_AZURE_DEPLOY_CMD;
-        if (!deployCommand) {
-          throw new Error(
-            "azure-functions real deploy mode requires RUNFABRIC_AZURE_DEPLOY_CMD returning JSON output"
-          );
-        }
+        const deployCommand = process.env.RUNFABRIC_AZURE_DEPLOY_CMD || defaultAzureDeployCommand(functionAppName);
+        const hasCommandOverride = Boolean(process.env.RUNFABRIC_AZURE_DEPLOY_CMD);
 
         rawResponse = await runJsonCommand(deployCommand, {
           cwd: options.projectDir,
@@ -152,11 +170,16 @@ export function createAzureFunctionsProvider(options: ProviderOptions): Provider
           }
         });
         const parsedEndpoint = endpointFromAzureResponse(rawResponse);
-        if (!parsedEndpoint) {
+        if (parsedEndpoint) {
+          endpoint = parsedEndpoint;
+        } else if (hasCommandOverride) {
           throw new Error("azure-functions deploy response does not include function app endpoint");
         }
-        endpoint = parsedEndpoint;
-        resource = azureResourceMetadata(rawResponse);
+        resource = {
+          ...(azureResourceMetadata(rawResponse) || {}),
+          functionAppName,
+          deployCommandSource: hasCommandOverride ? "override" : "builtin"
+        };
         mode = "cli";
       }
 
@@ -189,11 +212,15 @@ export function createAzureFunctionsProvider(options: ProviderOptions): Provider
       return buildProviderLogsFromLocalArtifacts(options.projectDir, "azure-functions", input);
     },
     async destroy(project: ProjectConfig) {
-      if (
-        isRealDeployModeEnabled("RUNFABRIC_AZURE_REAL_DEPLOY") &&
-        process.env.RUNFABRIC_AZURE_DESTROY_CMD
-      ) {
-        const result = await runShellCommand(process.env.RUNFABRIC_AZURE_DESTROY_CMD, {
+      const azureExtension = project.extensions?.["azure-functions"];
+      const functionAppName =
+        typeof azureExtension?.functionAppName === "string" && azureExtension.functionAppName.trim().length > 0
+          ? azureExtension.functionAppName
+          : process.env.AZURE_FUNCTION_APP_NAME || project.service;
+      if (isRealDeployModeEnabled("RUNFABRIC_AZURE_REAL_DEPLOY")) {
+        const destroyCommand =
+          process.env.RUNFABRIC_AZURE_DESTROY_CMD || defaultAzureDestroyCommand(functionAppName);
+        const result = await runShellCommand(destroyCommand, {
           cwd: options.projectDir,
           env: {
             RUNFABRIC_SERVICE: project.service,

@@ -79,6 +79,20 @@ function ibmResourceMetadata(response: unknown): Record<string, unknown> | undef
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
+function defaultIbmDeployCommand(): string {
+  return [
+    'ibmcloud fn action update "$RUNFABRIC_SERVICE" "$RUNFABRIC_ARTIFACT_PATH"',
+    '--kind "${RUNFABRIC_IBM_RUNTIME_KIND:-nodejs:20}"',
+    "--web true",
+    "--result",
+    "--output json"
+  ].join(" ");
+}
+
+function defaultIbmDestroyCommand(): string {
+  return 'ibmcloud fn action delete "$RUNFABRIC_SERVICE"';
+}
+
 export function createIbmOpenWhiskProvider(options: ProviderOptions): ProviderAdapter {
   return {
     name: "ibm-openwhisk",
@@ -126,12 +140,8 @@ export function createIbmOpenWhiskProvider(options: ProviderOptions): ProviderAd
       let resource: Record<string, unknown> | undefined;
 
       if (isRealDeployModeEnabled("RUNFABRIC_IBM_REAL_DEPLOY")) {
-        const deployCommand = process.env.RUNFABRIC_IBM_DEPLOY_CMD;
-        if (!deployCommand) {
-          throw new Error(
-            "ibm-openwhisk real deploy mode requires RUNFABRIC_IBM_DEPLOY_CMD returning JSON output"
-          );
-        }
+        const deployCommand = process.env.RUNFABRIC_IBM_DEPLOY_CMD || defaultIbmDeployCommand();
+        const hasCommandOverride = Boolean(process.env.RUNFABRIC_IBM_DEPLOY_CMD);
 
         rawResponse = await runJsonCommand(deployCommand, {
           cwd: options.projectDir,
@@ -143,11 +153,17 @@ export function createIbmOpenWhiskProvider(options: ProviderOptions): ProviderAd
           }
         });
         const parsedEndpoint = endpointFromIbmResponse(rawResponse);
-        if (!parsedEndpoint) {
+        if (parsedEndpoint) {
+          endpoint = parsedEndpoint;
+        } else if (hasCommandOverride) {
           throw new Error("ibm-openwhisk deploy response does not include endpoint");
         }
-        endpoint = parsedEndpoint;
-        resource = ibmResourceMetadata(rawResponse);
+        resource = {
+          ...(ibmResourceMetadata(rawResponse) || {}),
+          region,
+          namespace: effectiveNamespace,
+          deployCommandSource: hasCommandOverride ? "override" : "builtin"
+        };
         mode = "cli";
       }
 
@@ -180,8 +196,9 @@ export function createIbmOpenWhiskProvider(options: ProviderOptions): ProviderAd
       return buildProviderLogsFromLocalArtifacts(options.projectDir, "ibm-openwhisk", input);
     },
     async destroy(project: ProjectConfig) {
-      if (isRealDeployModeEnabled("RUNFABRIC_IBM_REAL_DEPLOY") && process.env.RUNFABRIC_IBM_DESTROY_CMD) {
-        const result = await runShellCommand(process.env.RUNFABRIC_IBM_DESTROY_CMD, {
+      if (isRealDeployModeEnabled("RUNFABRIC_IBM_REAL_DEPLOY")) {
+        const destroyCommand = process.env.RUNFABRIC_IBM_DESTROY_CMD || defaultIbmDestroyCommand();
+        const result = await runShellCommand(destroyCommand, {
           cwd: options.projectDir,
           env: {
             RUNFABRIC_SERVICE: project.service,

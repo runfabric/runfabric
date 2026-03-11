@@ -21,8 +21,56 @@
     "@runfabric/builder": "workspace:*",
     "@runfabric/core": "workspace:*",
     "@runfabric/planner": "workspace:*",
-    "@runfabric/provider-aws-lambda": "workspace:*",
+    "@runfabric/runtime-node": "workspace:*",
+    "commander": "^14.0.1"
+  },
+  "peerDependencies": {
+    "@runfabric/provider-alibaba-fc": "^0.1.0-beta.0",
+    "@runfabric/provider-aws-lambda": "^0.1.0-beta.0",
+    "@runfabric/provider-azure-functions": "^0.1.0-beta.0",
+    "@runfabric/provider-cloudflare-workers": "^0.1.0-beta.0",
+    "@runfabric/provider-digitalocean-functions": "^0.1.0-beta.0",
+    "@runfabric/provider-fly-machines": "^0.1.0-beta.0",
+    "@runfabric/provider-gcp-functions": "^0.1.0-beta.0",
+    "@runfabric/provider-ibm-openwhisk": "^0.1.0-beta.0",
+    "@runfabric/provider-netlify": "^0.1.0-beta.0",
+    "@runfabric/provider-vercel": "^0.1.0-beta.0"
+  },
+  "peerDependenciesMeta": {
+    "@runfabric/provider-alibaba-fc": {
+      "optional": true
+    },
+    "@runfabric/provider-aws-lambda": {
+      "optional": true
+    },
+    "@runfabric/provider-azure-functions": {
+      "optional": true
+    },
+    "@runfabric/provider-cloudflare-workers": {
+      "optional": true
+    },
+    "@runfabric/provider-digitalocean-functions": {
+      "optional": true
+    },
+    "@runfabric/provider-fly-machines": {
+      "optional": true
+    },
+    "@runfabric/provider-gcp-functions": {
+      "optional": true
+    },
+    "@runfabric/provider-ibm-openwhisk": {
+      "optional": true
+    },
+    "@runfabric/provider-netlify": {
+      "optional": true
+    },
+    "@runfabric/provider-vercel": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
     "@runfabric/provider-alibaba-fc": "workspace:*",
+    "@runfabric/provider-aws-lambda": "workspace:*",
     "@runfabric/provider-azure-functions": "workspace:*",
     "@runfabric/provider-cloudflare-workers": "workspace:*",
     "@runfabric/provider-digitalocean-functions": "workspace:*",
@@ -30,9 +78,7 @@
     "@runfabric/provider-gcp-functions": "workspace:*",
     "@runfabric/provider-ibm-openwhisk": "workspace:*",
     "@runfabric/provider-netlify": "workspace:*",
-    "@runfabric/runtime-node": "workspace:*",
-    "@runfabric/provider-vercel": "workspace:*",
-    "commander": "^14.0.1"
+    "@runfabric/provider-vercel": "workspace:*"
   },
   "description": "CLI for the runfabric multi-provider serverless framework",
   "license": "MIT",

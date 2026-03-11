@@ -75,6 +75,14 @@ function doResourceMetadata(response: unknown): Record<string, unknown> | undefi
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
+function defaultDigitalOceanDeployCommand(): string {
+  return "doctl serverless deploy . --remote-build --output json";
+}
+
+function defaultDigitalOceanDestroyCommand(): string {
+  return "doctl serverless undeploy . --output json";
+}
+
 export function createDigitalOceanFunctionsProvider(options: ProviderOptions): ProviderAdapter {
   return {
     name: "digitalocean-functions",
@@ -122,12 +130,9 @@ export function createDigitalOceanFunctionsProvider(options: ProviderOptions): P
       let resource: Record<string, unknown> | undefined;
 
       if (isRealDeployModeEnabled("RUNFABRIC_DIGITALOCEAN_REAL_DEPLOY")) {
-        const deployCommand = process.env.RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD;
-        if (!deployCommand) {
-          throw new Error(
-            "digitalocean-functions real deploy mode requires RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD returning JSON output"
-          );
-        }
+        const deployCommand =
+          process.env.RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD || defaultDigitalOceanDeployCommand();
+        const hasCommandOverride = Boolean(process.env.RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD);
 
         rawResponse = await runJsonCommand(deployCommand, {
           cwd: options.projectDir,
@@ -139,11 +144,17 @@ export function createDigitalOceanFunctionsProvider(options: ProviderOptions): P
           }
         });
         const parsedEndpoint = endpointFromDoResponse(rawResponse);
-        if (!parsedEndpoint) {
+        if (parsedEndpoint) {
+          endpoint = parsedEndpoint;
+        } else if (hasCommandOverride) {
           throw new Error("digitalocean-functions deploy response does not include endpoint");
         }
-        endpoint = parsedEndpoint;
-        resource = doResourceMetadata(rawResponse);
+        resource = {
+          ...(doResourceMetadata(rawResponse) || {}),
+          namespace,
+          region,
+          deployCommandSource: hasCommandOverride ? "override" : "builtin"
+        };
         mode = "cli";
       }
 
@@ -176,11 +187,10 @@ export function createDigitalOceanFunctionsProvider(options: ProviderOptions): P
       return buildProviderLogsFromLocalArtifacts(options.projectDir, "digitalocean-functions", input);
     },
     async destroy(project: ProjectConfig) {
-      if (
-        isRealDeployModeEnabled("RUNFABRIC_DIGITALOCEAN_REAL_DEPLOY") &&
-        process.env.RUNFABRIC_DIGITALOCEAN_DESTROY_CMD
-      ) {
-        const result = await runShellCommand(process.env.RUNFABRIC_DIGITALOCEAN_DESTROY_CMD, {
+      if (isRealDeployModeEnabled("RUNFABRIC_DIGITALOCEAN_REAL_DEPLOY")) {
+        const destroyCommand =
+          process.env.RUNFABRIC_DIGITALOCEAN_DESTROY_CMD || defaultDigitalOceanDestroyCommand();
+        const result = await runShellCommand(destroyCommand, {
           cwd: options.projectDir,
           env: {
             RUNFABRIC_SERVICE: project.service,

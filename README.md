@@ -55,6 +55,22 @@ npx @runfabric/cli@latest --help
 
 If the npm package is not published yet in your environment, use source/link setup in `docs/REPO_DEVELOPMENT.md`.
 
+## Install Provider Adapters (Only What You Use)
+
+`@runfabric/cli` loads provider adapters dynamically. Install only the providers your project needs.
+
+Example (AWS only):
+
+```bash
+npm install -D @runfabric/provider-aws-lambda
+```
+
+Example (AWS + Cloudflare):
+
+```bash
+npm install -D @runfabric/provider-aws-lambda @runfabric/provider-cloudflare-workers
+```
+
 ## Quick Start
 
 Create a new project:

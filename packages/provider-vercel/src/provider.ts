@@ -89,6 +89,14 @@ function vercelResourceMetadata(response: unknown): Record<string, unknown> | un
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
+function defaultVercelDeployCommand(): string {
+  return 'vercel deploy --yes --prod --json --cwd "${RUNFABRIC_VERCEL_SOURCE_DIR:-.}"';
+}
+
+function defaultVercelDestroyCommand(): string {
+  return 'vercel remove "$RUNFABRIC_SERVICE" --yes';
+}
+
 export function createVercelProvider(options: ProviderOptions): ProviderAdapter {
   return {
     name: "vercel",
@@ -134,12 +142,8 @@ export function createVercelProvider(options: ProviderOptions): ProviderAdapter 
       let resource: Record<string, unknown> | undefined;
 
       if (isRealDeployModeEnabled("RUNFABRIC_VERCEL_REAL_DEPLOY")) {
-        const deployCommand = process.env.RUNFABRIC_VERCEL_DEPLOY_CMD;
-        if (!deployCommand) {
-          throw new Error(
-            "vercel real deploy mode requires RUNFABRIC_VERCEL_DEPLOY_CMD returning JSON output"
-          );
-        }
+        const deployCommand = process.env.RUNFABRIC_VERCEL_DEPLOY_CMD || defaultVercelDeployCommand();
+        const hasCommandOverride = Boolean(process.env.RUNFABRIC_VERCEL_DEPLOY_CMD);
 
         rawResponse = await runJsonCommand(deployCommand, {
           cwd: options.projectDir,
@@ -151,11 +155,16 @@ export function createVercelProvider(options: ProviderOptions): ProviderAdapter 
           }
         });
         const parsedEndpoint = endpointFromVercelResponse(rawResponse);
-        if (!parsedEndpoint) {
+        if (parsedEndpoint) {
+          endpoint = parsedEndpoint;
+        } else if (hasCommandOverride) {
           throw new Error("vercel deploy response does not include deployment URL");
         }
-        endpoint = parsedEndpoint;
-        resource = vercelResourceMetadata(rawResponse);
+        resource = {
+          ...(vercelResourceMetadata(rawResponse) || {}),
+          projectName,
+          deployCommandSource: hasCommandOverride ? "override" : "builtin"
+        };
         mode = "cli";
       }
 
@@ -188,11 +197,9 @@ export function createVercelProvider(options: ProviderOptions): ProviderAdapter 
       return buildProviderLogsFromLocalArtifacts(options.projectDir, "vercel", input);
     },
     async destroy(project: ProjectConfig) {
-      if (
-        isRealDeployModeEnabled("RUNFABRIC_VERCEL_REAL_DEPLOY") &&
-        process.env.RUNFABRIC_VERCEL_DESTROY_CMD
-      ) {
-        const result = await runShellCommand(process.env.RUNFABRIC_VERCEL_DESTROY_CMD, {
+      if (isRealDeployModeEnabled("RUNFABRIC_VERCEL_REAL_DEPLOY")) {
+        const destroyCommand = process.env.RUNFABRIC_VERCEL_DESTROY_CMD || defaultVercelDestroyCommand();
+        const result = await runShellCommand(destroyCommand, {
           cwd: options.projectDir,
           env: {
             RUNFABRIC_SERVICE: project.service,

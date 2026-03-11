@@ -29,6 +29,8 @@ npm run link:cli
 runfabric --help
 ```
 
+`link:cli` builds only the CLI runtime graph (`core`, `planner`, `builder`, `runtime-node`, `cli`) and does not build provider adapters.
+
 Remove global local link:
 
 ```bash

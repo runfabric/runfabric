@@ -62,22 +62,29 @@ Per-provider real mode flag:
 | `fly-machines` | `FLY_API_TOKEN`, `FLY_APP_NAME` |
 | `ibm-openwhisk` | `IBM_CLOUD_API_KEY`, `IBM_CLOUD_REGION`, `IBM_CLOUD_NAMESPACE` |
 
-## Real Deploy Command Matrix
+Install the corresponding provider adapter package in your project (for example `@runfabric/provider-aws-lambda`).
 
-When real mode is enabled, set command envs that output JSON:
+## Real Deploy Execution Matrix
 
-| Provider | Real Deploy Command Env | Destroy Command Env |
+When real mode is enabled, every provider has a built-in deployer path. Command envs are optional overrides.
+
+| Provider | Built-in Real Deploy Path | Optional Override Env |
 | --- | --- | --- |
-| `aws-lambda` | optional override: `RUNFABRIC_AWS_DEPLOY_CMD` | optional override: `RUNFABRIC_AWS_DESTROY_CMD` |
-| `gcp-functions` | `RUNFABRIC_GCP_DEPLOY_CMD` | `RUNFABRIC_GCP_DESTROY_CMD` |
-| `azure-functions` | `RUNFABRIC_AZURE_DEPLOY_CMD` | `RUNFABRIC_AZURE_DESTROY_CMD` |
-| `cloudflare-workers` | `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1` (API path) | `RUNFABRIC_CLOUDFLARE_DESTROY_CMD` |
-| `vercel` | `RUNFABRIC_VERCEL_DEPLOY_CMD` | `RUNFABRIC_VERCEL_DESTROY_CMD` |
-| `netlify` | `RUNFABRIC_NETLIFY_DEPLOY_CMD` | `RUNFABRIC_NETLIFY_DESTROY_CMD` |
-| `alibaba-fc` | `RUNFABRIC_ALIBABA_DEPLOY_CMD` | `RUNFABRIC_ALIBABA_DESTROY_CMD` |
-| `digitalocean-functions` | `RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD` | `RUNFABRIC_DIGITALOCEAN_DESTROY_CMD` |
-| `fly-machines` | `RUNFABRIC_FLY_DEPLOY_CMD` | `RUNFABRIC_FLY_DESTROY_CMD` |
-| `ibm-openwhisk` | `RUNFABRIC_IBM_DEPLOY_CMD` | `RUNFABRIC_IBM_DESTROY_CMD` |
+| `aws-lambda` | AWS SDK deploy + destroy | `RUNFABRIC_AWS_DEPLOY_CMD`, `RUNFABRIC_AWS_DESTROY_CMD` |
+| `gcp-functions` | built-in `gcloud` command contract | `RUNFABRIC_GCP_DEPLOY_CMD`, `RUNFABRIC_GCP_DESTROY_CMD` |
+| `azure-functions` | built-in `func/az` command contract | `RUNFABRIC_AZURE_DEPLOY_CMD`, `RUNFABRIC_AZURE_DESTROY_CMD` |
+| `cloudflare-workers` | Cloudflare Workers API deploy + destroy | `RUNFABRIC_CLOUDFLARE_DESTROY_CMD` |
+| `vercel` | built-in `vercel` command contract | `RUNFABRIC_VERCEL_DEPLOY_CMD`, `RUNFABRIC_VERCEL_DESTROY_CMD` |
+| `netlify` | built-in `netlify` command contract | `RUNFABRIC_NETLIFY_DEPLOY_CMD`, `RUNFABRIC_NETLIFY_DESTROY_CMD` |
+| `alibaba-fc` | built-in `s` command contract | `RUNFABRIC_ALIBABA_DEPLOY_CMD`, `RUNFABRIC_ALIBABA_DESTROY_CMD` |
+| `digitalocean-functions` | built-in `doctl` command contract | `RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD`, `RUNFABRIC_DIGITALOCEAN_DESTROY_CMD` |
+| `fly-machines` | built-in `flyctl` command contract | `RUNFABRIC_FLY_DEPLOY_CMD`, `RUNFABRIC_FLY_DESTROY_CMD` |
+| `ibm-openwhisk` | built-in `ibmcloud` command contract | `RUNFABRIC_IBM_DEPLOY_CMD`, `RUNFABRIC_IBM_DESTROY_CMD` |
+
+Notes:
+
+- For command-contract providers, ensure the relevant provider CLI is installed and authenticated in your environment.
+- Override commands should return JSON on stdout for deploy parsing.
 
 ## Provider Observability Command Matrix
 
@@ -118,6 +125,22 @@ export RUNFABRIC_AWS_LAMBDA_ROLE_ARN='arn:aws:iam::123456789012:role/runfabric-l
 runfabric deploy -c runfabric.yml
 ```
 
+If the execution role does not exist yet, create it once:
+
+```bash
+aws iam create-role \
+  --role-name runfabric-lambda-exec \
+  --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+
+aws iam attach-role-policy \
+  --role-name runfabric-lambda-exec \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+export RUNFABRIC_AWS_LAMBDA_ROLE_ARN="$(aws iam get-role --role-name runfabric-lambda-exec --query 'Role.Arn' --output text)"
+```
+
+If AWS returns assume-role errors right after role creation, wait 20-60 seconds and retry deploy.
+
 Optional command overrides for custom AWS workflows:
 
 ```bash
@@ -129,9 +152,14 @@ export RUNFABRIC_AWS_DESTROY_CMD='aws lambda delete-function-url-config --functi
 
 ```bash
 export RUNFABRIC_VERCEL_REAL_DEPLOY=1
-export RUNFABRIC_VERCEL_DEPLOY_CMD='vercel deploy --yes --prod --json'
 
 runfabric deploy -c runfabric.yml
+```
+
+Optional override for custom Vercel workflow:
+
+```bash
+export RUNFABRIC_VERCEL_DEPLOY_CMD='vercel deploy --yes --prod --json'
 ```
 
 ## CI Secret Wiring

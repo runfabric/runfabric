@@ -1,5 +1,5 @@
 import type { CommandRegistrar } from "../types/cli";
-import { createProviderRegistry } from "../providers/registry";
+import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { printJson } from "../utils/output";
 import { resolveProjectDir } from "../utils/resolve-project";
 import { error } from "../utils/logger";
@@ -12,10 +12,15 @@ export const registerInvokeCommand: CommandRegistrar = (program) => {
     .option("--payload <json>", "JSON payload string")
     .action(async (options: { provider: string; payload?: string }) => {
       const projectDir = await resolveProjectDir();
-      const providers = createProviderRegistry(projectDir);
+      const providers = createProviderRegistry(projectDir, [options.provider]);
       const provider = providers[options.provider];
       if (!provider) {
-        error(`unknown provider: ${options.provider}`);
+        const packageName = getProviderPackageName(options.provider);
+        error(
+          packageName
+            ? `unknown provider: ${options.provider} (install ${packageName})`
+            : `unknown provider: ${options.provider}`
+        );
         process.exitCode = 1;
         return;
       }

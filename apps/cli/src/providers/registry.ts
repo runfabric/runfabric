@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+import { join } from "node:path";
 import type { ProviderAdapter } from "@runfabric/core";
 import {
   buildProviderMetricsFromLocalArtifacts,
@@ -7,16 +9,58 @@ import {
   type TraceRecord,
   type TracesResult
 } from "@runfabric/core";
-import { createAwsLambdaProvider } from "@runfabric/provider-aws-lambda";
-import { createAlibabaFcProvider } from "@runfabric/provider-alibaba-fc";
-import { createAzureFunctionsProvider } from "@runfabric/provider-azure-functions";
-import { createCloudflareWorkersProvider } from "@runfabric/provider-cloudflare-workers";
-import { createDigitalOceanFunctionsProvider } from "@runfabric/provider-digitalocean-functions";
-import { createFlyMachinesProvider } from "@runfabric/provider-fly-machines";
-import { createGcpFunctionsProvider } from "@runfabric/provider-gcp-functions";
-import { createIbmOpenWhiskProvider } from "@runfabric/provider-ibm-openwhisk";
-import { createNetlifyProvider } from "@runfabric/provider-netlify";
-import { createVercelProvider } from "@runfabric/provider-vercel";
+
+interface ProviderModuleSpec {
+  packageName: string;
+  factoryExport: string;
+}
+
+type ProviderFactory = (options: { projectDir: string }) => ProviderAdapter;
+
+const PROVIDER_MODULE_SPECS: Record<string, ProviderModuleSpec> = {
+  "aws-lambda": {
+    packageName: "@runfabric/provider-aws-lambda",
+    factoryExport: "createAwsLambdaProvider"
+  },
+  "gcp-functions": {
+    packageName: "@runfabric/provider-gcp-functions",
+    factoryExport: "createGcpFunctionsProvider"
+  },
+  "azure-functions": {
+    packageName: "@runfabric/provider-azure-functions",
+    factoryExport: "createAzureFunctionsProvider"
+  },
+  "cloudflare-workers": {
+    packageName: "@runfabric/provider-cloudflare-workers",
+    factoryExport: "createCloudflareWorkersProvider"
+  },
+  vercel: {
+    packageName: "@runfabric/provider-vercel",
+    factoryExport: "createVercelProvider"
+  },
+  netlify: {
+    packageName: "@runfabric/provider-netlify",
+    factoryExport: "createNetlifyProvider"
+  },
+  "alibaba-fc": {
+    packageName: "@runfabric/provider-alibaba-fc",
+    factoryExport: "createAlibabaFcProvider"
+  },
+  "digitalocean-functions": {
+    packageName: "@runfabric/provider-digitalocean-functions",
+    factoryExport: "createDigitalOceanFunctionsProvider"
+  },
+  "fly-machines": {
+    packageName: "@runfabric/provider-fly-machines",
+    factoryExport: "createFlyMachinesProvider"
+  },
+  "ibm-openwhisk": {
+    packageName: "@runfabric/provider-ibm-openwhisk",
+    factoryExport: "createIbmOpenWhiskProvider"
+  }
+};
+
+export const KNOWN_PROVIDER_IDS = Object.keys(PROVIDER_MODULE_SPECS);
 
 const OBSERVABILITY_ENV_PREFIX: Record<string, string> = {
   "aws-lambda": "AWS",
@@ -30,6 +74,77 @@ const OBSERVABILITY_ENV_PREFIX: Record<string, string> = {
   "fly-machines": "FLY",
   "ibm-openwhisk": "IBM"
 };
+
+function isModuleNotFoundError(error: unknown, packageName: string): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as { code?: string; message?: string };
+  if (candidate.code !== "MODULE_NOT_FOUND") {
+    return false;
+  }
+
+  const message = typeof candidate.message === "string" ? candidate.message : "";
+  return message.includes(`'${packageName}'`) || message.includes(`"${packageName}"`);
+}
+
+function createProjectRequire(projectDir: string): NodeJS.Require | undefined {
+  try {
+    return createRequire(join(projectDir, "package.json"));
+  } catch {
+    return undefined;
+  }
+}
+
+function loadProviderModule(
+  spec: ProviderModuleSpec,
+  projectDir: string
+): Record<string, unknown> | undefined {
+  const projectRequire = createProjectRequire(projectDir);
+  const requireChain: NodeJS.Require[] = [];
+  if (projectRequire) {
+    requireChain.push(projectRequire);
+  }
+  requireChain.push(require);
+
+  for (const loader of requireChain) {
+    try {
+      return loader(spec.packageName) as Record<string, unknown>;
+    } catch (error) {
+      if (isModuleNotFoundError(error, spec.packageName)) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return undefined;
+}
+
+function loadProviderFactory(provider: string, projectDir: string): ProviderFactory | undefined {
+  const spec = PROVIDER_MODULE_SPECS[provider];
+  if (!spec) {
+    return undefined;
+  }
+
+  const providerModule = loadProviderModule(spec, projectDir);
+  if (!providerModule) {
+    return undefined;
+  }
+
+  const factory = providerModule[spec.factoryExport];
+  if (typeof factory !== "function") {
+    throw new Error(
+      `${spec.packageName} is installed but does not export ${spec.factoryExport}; upgrade the provider package`
+    );
+  }
+  return factory as ProviderFactory;
+}
+
+export function getProviderPackageName(provider: string): string | undefined {
+  return PROVIDER_MODULE_SPECS[provider]?.packageName;
+}
 
 function withObservability(adapter: ProviderAdapter, projectDir: string): ProviderAdapter {
   const envPrefix = OBSERVABILITY_ENV_PREFIX[adapter.name];
@@ -132,20 +247,19 @@ function withObservability(adapter: ProviderAdapter, projectDir: string): Provid
   return adapter;
 }
 
-export function createProviderRegistry(projectDir: string): Record<string, ProviderAdapter> {
-  return {
-    "aws-lambda": withObservability(createAwsLambdaProvider({ projectDir }), projectDir),
-    "gcp-functions": withObservability(createGcpFunctionsProvider({ projectDir }), projectDir),
-    "azure-functions": withObservability(createAzureFunctionsProvider({ projectDir }), projectDir),
-    "cloudflare-workers": withObservability(createCloudflareWorkersProvider({ projectDir }), projectDir),
-    vercel: withObservability(createVercelProvider({ projectDir }), projectDir),
-    netlify: withObservability(createNetlifyProvider({ projectDir }), projectDir),
-    "alibaba-fc": withObservability(createAlibabaFcProvider({ projectDir }), projectDir),
-    "digitalocean-functions": withObservability(
-      createDigitalOceanFunctionsProvider({ projectDir }),
-      projectDir
-    ),
-    "fly-machines": withObservability(createFlyMachinesProvider({ projectDir }), projectDir),
-    "ibm-openwhisk": withObservability(createIbmOpenWhiskProvider({ projectDir }), projectDir)
-  };
+export function createProviderRegistry(
+  projectDir: string,
+  targetProviders: string[] = KNOWN_PROVIDER_IDS
+): Record<string, ProviderAdapter> {
+  const registry: Record<string, ProviderAdapter> = {};
+
+  for (const provider of targetProviders) {
+    const factory = loadProviderFactory(provider, projectDir);
+    if (!factory) {
+      continue;
+    }
+    registry[provider] = withObservability(factory({ projectDir }), projectDir);
+  }
+
+  return registry;
 }

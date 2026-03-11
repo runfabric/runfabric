@@ -1,7 +1,7 @@
 import type { CommandRegistrar } from "../types/cli";
 import { resolve } from "node:path";
 import { evaluateCredentialSchema } from "@runfabric/core";
-import { createProviderRegistry } from "../providers/registry";
+import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { loadPlanningContext } from "../utils/load-config";
 import { printList } from "../utils/output";
 import { resolveProjectDir } from "../utils/resolve-project";
@@ -26,11 +26,15 @@ export const registerDoctorCommand: CommandRegistrar = (program) => {
       const configPath = options.config ? resolve(process.cwd(), options.config) : undefined;
       const projectDir = await resolveProjectDir(process.cwd(), options.config);
       const context = await loadPlanningContext(projectDir, configPath, options.stage);
-      const registry = createProviderRegistry(projectDir);
+      const registry = createProviderRegistry(projectDir, context.project.providers);
 
       const unsupportedProviders = context.project.providers.filter((provider) => !registry[provider]);
       if (unsupportedProviders.length > 0) {
-        printList("Unsupported providers", unsupportedProviders);
+        const items = unsupportedProviders.map((provider) => {
+          const packageName = getProviderPackageName(provider);
+          return packageName ? `${provider} (install ${packageName})` : provider;
+        });
+        printList("Unsupported providers", items);
         process.exitCode = 1;
         return;
       }

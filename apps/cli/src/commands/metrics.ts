@@ -1,6 +1,6 @@
 import type { CommandRegistrar } from "../types/cli";
 import { buildProviderMetricsFromLocalArtifacts } from "@runfabric/core";
-import { createProviderRegistry } from "../providers/registry";
+import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { printJson } from "../utils/output";
 import { resolveProjectDir } from "../utils/resolve-project";
 import { error, info } from "../utils/logger";
@@ -15,10 +15,15 @@ export const registerMetricsCommand: CommandRegistrar = (program) => {
     .option("--json", "Emit JSON output")
     .action(async (options: { config?: string; provider: string; since?: string; json?: boolean }) => {
       const projectDir = await resolveProjectDir(process.cwd(), options.config);
-      const providers = createProviderRegistry(projectDir);
+      const providers = createProviderRegistry(projectDir, [options.provider]);
       const provider = providers[options.provider];
       if (!provider) {
-        error(`unknown provider: ${options.provider}`);
+        const packageName = getProviderPackageName(options.provider);
+        error(
+          packageName
+            ? `unknown provider: ${options.provider} (install ${packageName})`
+            : `unknown provider: ${options.provider}`
+        );
         process.exitCode = 1;
         return;
       }

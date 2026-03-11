@@ -29,7 +29,7 @@
     "release:publish:beta:dry-run": "node scripts/release/publish-packages.mjs --tag beta --dry-run",
     "release:verify:published": "node scripts/release/verify-published-release.mjs",
     "release:pack:cli": "pnpm --filter @runfabric/cli pack --pack-destination ./.artifacts",
-    "link:cli": "NODE_NO_WARNINGS=1 corepack pnpm --filter @runfabric/runtime-node run build && NODE_NO_WARNINGS=1 corepack pnpm --filter @runfabric/cli run build && PNPM_HOME=\"${PNPM_HOME:-${HOME:-$PWD}/.pnpm}\" && mkdir -p \"$PNPM_HOME\" && export PNPM_HOME && export PATH=\"$PNPM_HOME:$PATH\" && NODE_NO_WARNINGS=1 corepack pnpm -r --filter @runfabric/cli exec pnpm link --global --global-dir \"$PNPM_HOME/global\" --config.global-bin-dir=\"$PNPM_HOME\"",
+    "link:cli": "NODE_NO_WARNINGS=1 corepack pnpm --filter @runfabric/core --filter @runfabric/planner --filter @runfabric/builder --filter @runfabric/runtime-node --filter @runfabric/cli --if-present run build && PNPM_HOME=\"${PNPM_HOME:-${HOME:-$PWD}/.pnpm}\" && mkdir -p \"$PNPM_HOME\" && export PNPM_HOME && export PATH=\"$PNPM_HOME:$PATH\" && NODE_NO_WARNINGS=1 corepack pnpm -r --filter @runfabric/cli exec pnpm link --global --global-dir \"$PNPM_HOME/global\" --config.global-bin-dir=\"$PNPM_HOME\"",
     "unlink:cli": "PNPM_HOME=\"${PNPM_HOME:-${HOME:-$PWD}/.pnpm}\" && export PNPM_HOME && export PATH=\"$PNPM_HOME:$PATH\" && NODE_NO_WARNINGS=1 corepack pnpm -r --filter @runfabric/cli exec pnpm unlink --global --global-dir \"$PNPM_HOME/global\" --config.global-bin-dir=\"$PNPM_HOME\"",
     "test:all": "pnpm -r --if-present run test",
     "clean": "pnpm -r --if-present run clean"

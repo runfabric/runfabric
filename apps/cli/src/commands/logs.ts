@@ -1,5 +1,5 @@
 import type { CommandRegistrar } from "../types/cli";
-import { createProviderRegistry } from "../providers/registry";
+import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { resolveProjectDir } from "../utils/resolve-project";
 import { error, info } from "../utils/logger";
 
@@ -10,10 +10,15 @@ export const registerLogsCommand: CommandRegistrar = (program) => {
     .option("-p, --provider <name>", "Provider name", "aws-lambda")
     .action(async (options: { provider: string }) => {
       const projectDir = await resolveProjectDir();
-      const providers = createProviderRegistry(projectDir);
+      const providers = createProviderRegistry(projectDir, [options.provider]);
       const provider = providers[options.provider];
       if (!provider) {
-        error(`unknown provider: ${options.provider}`);
+        const packageName = getProviderPackageName(options.provider);
+        error(
+          packageName
+            ? `unknown provider: ${options.provider} (install ${packageName})`
+            : `unknown provider: ${options.provider}`
+        );
         process.exitCode = 1;
         return;
       }

@@ -84,6 +84,19 @@ function flyResourceMetadata(response: unknown): Record<string, unknown> | undef
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
+function defaultFlyDeployCommand(appName: string): string {
+  return [
+    "flyctl deploy",
+    "--json",
+    "--remote-only",
+    `--app ${JSON.stringify(appName)}`
+  ].join(" ");
+}
+
+function defaultFlyDestroyCommand(appName: string): string {
+  return `flyctl apps destroy ${JSON.stringify(appName)} --yes`;
+}
+
 export function createFlyMachinesProvider(options: ProviderOptions): ProviderAdapter {
   return {
     name: "fly-machines",
@@ -130,12 +143,8 @@ export function createFlyMachinesProvider(options: ProviderOptions): ProviderAda
       let resource: Record<string, unknown> | undefined;
 
       if (isRealDeployModeEnabled("RUNFABRIC_FLY_REAL_DEPLOY")) {
-        const deployCommand = process.env.RUNFABRIC_FLY_DEPLOY_CMD;
-        if (!deployCommand) {
-          throw new Error(
-            "fly-machines real deploy mode requires RUNFABRIC_FLY_DEPLOY_CMD returning JSON output"
-          );
-        }
+        const deployCommand = process.env.RUNFABRIC_FLY_DEPLOY_CMD || defaultFlyDeployCommand(appName);
+        const hasCommandOverride = Boolean(process.env.RUNFABRIC_FLY_DEPLOY_CMD);
 
         rawResponse = await runJsonCommand(deployCommand, {
           cwd: options.projectDir,
@@ -147,11 +156,16 @@ export function createFlyMachinesProvider(options: ProviderOptions): ProviderAda
           }
         });
         const parsedEndpoint = endpointFromFlyResponse(rawResponse);
-        if (!parsedEndpoint) {
+        if (parsedEndpoint) {
+          endpoint = parsedEndpoint;
+        } else if (hasCommandOverride) {
           throw new Error("fly-machines deploy response does not include endpoint");
         }
-        endpoint = parsedEndpoint;
-        resource = flyResourceMetadata(rawResponse);
+        resource = {
+          ...(flyResourceMetadata(rawResponse) || {}),
+          appName,
+          deployCommandSource: hasCommandOverride ? "override" : "builtin"
+        };
         mode = "cli";
       }
 
@@ -184,8 +198,14 @@ export function createFlyMachinesProvider(options: ProviderOptions): ProviderAda
       return buildProviderLogsFromLocalArtifacts(options.projectDir, "fly-machines", input);
     },
     async destroy(project: ProjectConfig) {
-      if (isRealDeployModeEnabled("RUNFABRIC_FLY_REAL_DEPLOY") && process.env.RUNFABRIC_FLY_DESTROY_CMD) {
-        const result = await runShellCommand(process.env.RUNFABRIC_FLY_DESTROY_CMD, {
+      const extension = project.extensions?.["fly-machines"];
+      const appName =
+        typeof extension?.appName === "string" && extension.appName.trim().length > 0
+          ? extension.appName
+          : process.env.FLY_APP_NAME || project.service;
+      if (isRealDeployModeEnabled("RUNFABRIC_FLY_REAL_DEPLOY")) {
+        const destroyCommand = process.env.RUNFABRIC_FLY_DESTROY_CMD || defaultFlyDestroyCommand(appName);
+        const result = await runShellCommand(destroyCommand, {
           cwd: options.projectDir,
           env: {
             RUNFABRIC_SERVICE: project.service,

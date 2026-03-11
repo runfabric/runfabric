@@ -2,7 +2,7 @@ import type { CommandRegistrar } from "../types/cli";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createStateBackend, type StateAddress } from "@runfabric/core";
-import { createProviderRegistry } from "../providers/registry";
+import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { loadPlanningContext } from "../utils/load-config";
 import { printJson } from "../utils/output";
 import { resolveProjectDir } from "../utils/resolve-project";
@@ -33,7 +33,7 @@ export const registerRemoveCommand: CommandRegistrar = (program) => {
         const context = await loadPlanningContext(projectDir, configPath, options.stage);
         const stage = context.project.stage || "default";
         const providers = options.provider ? [options.provider] : context.project.providers;
-        const registry = createProviderRegistry(projectDir);
+        const registry = createProviderRegistry(projectDir, providers);
         const stateBackend = createStateBackend({
           projectDir,
           state: context.project.state
@@ -48,9 +48,12 @@ export const registerRemoveCommand: CommandRegistrar = (program) => {
         for (const providerName of providers) {
           const provider = registry[providerName];
           if (!provider) {
+            const packageName = getProviderPackageName(providerName);
             failures.push({
               provider: providerName,
-              message: "provider adapter is not installed"
+              message: packageName
+                ? `provider adapter is not installed (${packageName})`
+                : "provider adapter is not installed"
             });
             continue;
           }

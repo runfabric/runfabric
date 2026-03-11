@@ -91,6 +91,30 @@ function gcpResourceMetadata(response: unknown): Record<string, unknown> | undef
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
+function defaultGcpDeployCommand(region: string): string {
+  return [
+    'gcloud functions deploy "$RUNFABRIC_SERVICE"',
+    "--gen2",
+    `--region=${JSON.stringify(region)}`,
+    '--runtime="${RUNFABRIC_GCP_RUNTIME:-nodejs20}"',
+    '--entry-point="${RUNFABRIC_GCP_ENTRY_POINT:-handler}"',
+    "--trigger-http",
+    "--allow-unauthenticated",
+    '--source="${RUNFABRIC_GCP_SOURCE_DIR:-.}"',
+    "--format=json"
+  ].join(" ");
+}
+
+function defaultGcpDestroyCommand(region: string): string {
+  return [
+    'gcloud functions delete "$RUNFABRIC_SERVICE"',
+    "--gen2",
+    `--region=${JSON.stringify(region)}`,
+    "--quiet",
+    "--format=json"
+  ].join(" ");
+}
+
 export function createGcpFunctionsProvider(options: ProviderOptions): ProviderAdapter {
   return {
     name: "gcp-functions",
@@ -135,12 +159,8 @@ export function createGcpFunctionsProvider(options: ProviderOptions): ProviderAd
       let resource: Record<string, unknown> | undefined;
 
       if (isRealDeployModeEnabled("RUNFABRIC_GCP_REAL_DEPLOY")) {
-        const deployCommand = process.env.RUNFABRIC_GCP_DEPLOY_CMD;
-        if (!deployCommand) {
-          throw new Error(
-            "gcp-functions real deploy mode requires RUNFABRIC_GCP_DEPLOY_CMD returning JSON output"
-          );
-        }
+        const deployCommand = process.env.RUNFABRIC_GCP_DEPLOY_CMD || defaultGcpDeployCommand(region);
+        const hasCommandOverride = Boolean(process.env.RUNFABRIC_GCP_DEPLOY_CMD);
 
         rawResponse = await runJsonCommand(deployCommand, {
           cwd: options.projectDir,
@@ -152,11 +172,15 @@ export function createGcpFunctionsProvider(options: ProviderOptions): ProviderAd
           }
         });
         const parsedEndpoint = endpointFromGcpResponse(rawResponse);
-        if (!parsedEndpoint) {
+        if (parsedEndpoint) {
+          endpoint = parsedEndpoint;
+        } else if (hasCommandOverride) {
           throw new Error("gcp-functions deploy response does not include endpoint URL");
         }
-        endpoint = parsedEndpoint;
-        resource = gcpResourceMetadata(rawResponse);
+        resource = {
+          ...(gcpResourceMetadata(rawResponse) || {}),
+          deployCommandSource: hasCommandOverride ? "override" : "builtin"
+        };
         mode = "cli";
       }
 
@@ -189,8 +213,12 @@ export function createGcpFunctionsProvider(options: ProviderOptions): ProviderAd
       return buildProviderLogsFromLocalArtifacts(options.projectDir, "gcp-functions", input);
     },
     async destroy(project: ProjectConfig) {
-      if (isRealDeployModeEnabled("RUNFABRIC_GCP_REAL_DEPLOY") && process.env.RUNFABRIC_GCP_DESTROY_CMD) {
-        const result = await runShellCommand(process.env.RUNFABRIC_GCP_DESTROY_CMD, {
+      const gcpExtension = project.extensions?.["gcp-functions"];
+      const region =
+        typeof gcpExtension?.region === "string" ? gcpExtension.region : process.env.GCP_REGION || "us-central1";
+      if (isRealDeployModeEnabled("RUNFABRIC_GCP_REAL_DEPLOY")) {
+        const destroyCommand = process.env.RUNFABRIC_GCP_DESTROY_CMD || defaultGcpDestroyCommand(region);
+        const result = await runShellCommand(destroyCommand, {
           cwd: options.projectDir,
           env: {
             RUNFABRIC_SERVICE: project.service,

@@ -12,6 +12,11 @@ runfabric is a CLI/serverless deployment framework with provider adapters. It is
 - `packages/provider-*`: provider adapters.
 - `tests`: unit and integration tests.
 
+Provider loading model:
+
+- CLI resolves provider adapters dynamically from project dependencies first, then CLI/global context.
+- Projects can install only required provider adapters (for example AWS-only projects do not need Vercel/GCP adapters).
+
 ## Execution Flow
 
 1. `runfabric.yml` is loaded (with stage overrides when applicable).
@@ -44,8 +49,11 @@ Controls:
 
 - `RUNFABRIC_REAL_DEPLOY=1` global
 - `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1` provider-specific
-- `RUNFABRIC_<PROVIDER>_DEPLOY_CMD` for command-driven real deploy
-- `aws-lambda` also supports internal SDK-based real deploy without command envs (requires role ARN configuration)
+- built-in real deployers are used by default in real mode:
+  - `aws-lambda`: AWS SDK
+  - `cloudflare-workers`: Cloudflare API
+  - other providers: built-in provider CLI command contracts
+- `RUNFABRIC_<PROVIDER>_DEPLOY_CMD` and `RUNFABRIC_<PROVIDER>_DESTROY_CMD` remain optional override hooks
 
 ## Recovery Semantics
 

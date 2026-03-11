@@ -9,8 +9,11 @@ import {
   GetFunctionCommand,
   GetFunctionUrlConfigCommand,
   LambdaClient,
+  RemovePermissionCommand,
   UpdateFunctionCodeCommand,
   UpdateFunctionConfigurationCommand,
+  waitUntilFunctionActiveV2,
+  waitUntilFunctionUpdatedV2,
   type Runtime
 } from "@aws-sdk/client-lambda";
 import JSZip from "jszip";
@@ -449,15 +452,34 @@ async function createZipFromArtifact(projectDir: string, plan: DeployPlan): Prom
 
 function resolveLambdaHandler(projectDir: string, plan: DeployPlan): string {
   const artifactPath = resolveProjectPath(projectDir, plan.artifactPath);
+  const artifactManifestPath = resolveProjectPath(projectDir, plan.artifactManifestPath);
   if (!artifactPath) {
     throw new Error("aws-lambda internal deploy requires artifactPath");
   }
+  if (!artifactManifestPath) {
+    throw new Error("aws-lambda internal deploy requires artifactManifestPath");
+  }
+
+  const artifactRoot = dirname(artifactManifestPath);
+  const artifactRelativePath = relative(artifactRoot, artifactPath).replace(/\\/g, "/");
+  if (
+    artifactRelativePath.length === 0 ||
+    artifactRelativePath.startsWith("..") ||
+    artifactRelativePath.startsWith("/")
+  ) {
+    throw new Error(
+      `aws-lambda internal deploy expected artifactPath within artifact root: ${artifactPath} vs ${artifactRoot}`
+    );
+  }
+
+  const artifactDir = dirname(artifactRelativePath).replace(/\\/g, "/");
   const extension = extname(artifactPath);
   const baseName = basename(artifactPath, extension);
   if (!baseName) {
     throw new Error(`cannot resolve lambda handler from artifactPath: ${artifactPath}`);
   }
-  return `${baseName}.handler`;
+  const modulePath = artifactDir === "." ? baseName : `${artifactDir}/${baseName}`;
+  return `${modulePath}.handler`;
 }
 
 function isAwsErrorNamed(error: unknown, ...names: string[]): boolean {
@@ -469,10 +491,79 @@ async function ensureFunctionUrl(
   functionName: string,
   stage: string
 ): Promise<string> {
+  const upsertPermission = async (
+    input: {
+      statementId: string;
+      action: string;
+      functionUrlAuthType?: "NONE" | "AWS_IAM";
+      invokedViaFunctionUrl?: boolean;
+    }
+  ) => {
+    const addPermission = async () => {
+      await client.send(
+        new AddPermissionCommand({
+          FunctionName: functionName,
+          StatementId: input.statementId,
+          Action: input.action,
+          Principal: "*",
+          ...(input.functionUrlAuthType
+            ? {
+                FunctionUrlAuthType: input.functionUrlAuthType
+              }
+            : {}),
+          ...(typeof input.invokedViaFunctionUrl === "boolean"
+            ? {
+                InvokedViaFunctionUrl: input.invokedViaFunctionUrl
+              }
+            : {})
+        })
+      );
+    };
+
+    try {
+      await addPermission();
+    } catch (error) {
+      if (!isAwsErrorNamed(error, "ResourceConflictException")) {
+        throw error;
+      }
+      try {
+        await client.send(
+          new RemovePermissionCommand({
+            FunctionName: functionName,
+            StatementId: input.statementId
+          })
+        );
+      } catch (removeError) {
+        if (!isAwsErrorNamed(removeError, "ResourceNotFoundException")) {
+          throw removeError;
+        }
+      }
+      await addPermission();
+    }
+  };
+
+  const ensureUrlPermission = async () => {
+    const urlStatementId = sanitizeIdentifier(`runfabric-url-${stage}`).slice(0, 100) || "runfabric-url";
+    const invokeStatementId =
+      sanitizeIdentifier(`runfabric-url-invoke-${stage}`).slice(0, 100) || "runfabric-url-invoke";
+
+    await upsertPermission({
+      statementId: urlStatementId,
+      action: "lambda:InvokeFunctionUrl",
+      functionUrlAuthType: "NONE"
+    });
+    await upsertPermission({
+      statementId: invokeStatementId,
+      action: "lambda:InvokeFunction",
+      invokedViaFunctionUrl: true
+    });
+  };
+
   try {
     const existing = await client.send(new GetFunctionUrlConfigCommand({ FunctionName: functionName }));
     const existingUrl = readString(existing.FunctionUrl);
     if (existingUrl) {
+      await ensureUrlPermission();
       return existingUrl;
     }
   } catch (error) {
@@ -491,23 +582,7 @@ async function ensureFunctionUrl(
   if (!createdUrl) {
     throw new Error("aws-lambda internal deploy did not return a function URL");
   }
-
-  const statementId = sanitizeIdentifier(`runfabric-url-${stage}`).slice(0, 100);
-  try {
-    await client.send(
-      new AddPermissionCommand({
-        FunctionName: functionName,
-        StatementId: statementId || "runfabric-url",
-        Action: "lambda:InvokeFunctionUrl",
-        Principal: "*",
-        FunctionUrlAuthType: "NONE"
-      })
-    );
-  } catch (error) {
-    if (!isAwsErrorNamed(error, "ResourceConflictException")) {
-      throw error;
-    }
-  }
+  await ensureUrlPermission();
 
   return createdUrl;
 }
@@ -553,6 +628,16 @@ async function deployWithAwsSdk(
   }
 
   if (existingFunction) {
+    await waitUntilFunctionUpdatedV2(
+      {
+        client,
+        maxWaitTime: 120,
+        minDelay: 1,
+        maxDelay: 5
+      },
+      { FunctionName: functionName }
+    );
+
     const codeResult = await client.send(
       new UpdateFunctionCodeCommand({
         FunctionName: functionName,
@@ -561,6 +646,16 @@ async function deployWithAwsSdk(
       })
     );
     functionArn = readString(codeResult.FunctionArn) || functionArn;
+
+    await waitUntilFunctionUpdatedV2(
+      {
+        client,
+        maxWaitTime: 120,
+        minDelay: 1,
+        maxDelay: 5
+      },
+      { FunctionName: functionName }
+    );
 
     await client.send(
       new UpdateFunctionConfigurationCommand({
@@ -571,6 +666,16 @@ async function deployWithAwsSdk(
         ...(typeof timeout === "number" ? { Timeout: timeout } : {}),
         ...(typeof memory === "number" ? { MemorySize: memory } : {})
       })
+    );
+
+    await waitUntilFunctionUpdatedV2(
+      {
+        client,
+        maxWaitTime: 120,
+        minDelay: 1,
+        maxDelay: 5
+      },
+      { FunctionName: functionName }
     );
   } else {
     const createResult = await client.send(
@@ -589,6 +694,16 @@ async function deployWithAwsSdk(
       })
     );
     functionArn = readString(createResult.FunctionArn) || functionArn;
+
+    await waitUntilFunctionActiveV2(
+      {
+        client,
+        maxWaitTime: 120,
+        minDelay: 1,
+        maxDelay: 5
+      },
+      { FunctionName: functionName }
+    );
   }
 
   const functionUrl = await ensureFunctionUrl(client, functionName, stage);

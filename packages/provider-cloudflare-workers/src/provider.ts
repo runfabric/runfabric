@@ -79,6 +79,11 @@ interface CloudflareDeployResponse {
   };
 }
 
+interface CloudflareDeleteResponse {
+  success: boolean;
+  errors?: Array<{ message?: string }>;
+}
+
 async function deployWorkerScript(params: {
   accountId: string;
   apiToken: string;
@@ -103,6 +108,28 @@ async function deployWorkerScript(params: {
     throw new Error(`cloudflare-workers deploy failed${reason ? `: ${reason}` : ""}`);
   }
   return json;
+}
+
+async function deleteWorkerScript(params: {
+  accountId: string;
+  apiToken: string;
+  scriptName: string;
+}): Promise<void> {
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${params.accountId}/workers/scripts/${params.scriptName}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${params.apiToken}`
+      }
+    }
+  );
+
+  const json = (await response.json()) as CloudflareDeleteResponse;
+  if (!response.ok || !json.success) {
+    const reason = json.errors?.map((item) => item.message).filter(Boolean).join("; ");
+    throw new Error(`cloudflare-workers destroy failed${reason ? `: ${reason}` : ""}`);
+  }
 }
 
 export function createCloudflareWorkersProvider(options: ProviderOptions): ProviderAdapter {
@@ -222,19 +249,36 @@ export function createCloudflareWorkersProvider(options: ProviderOptions): Provi
     },
     async destroy(project: ProjectConfig) {
       const stage = project.stage || "default";
-      if (
-        isRealDeployModeEnabled("RUNFABRIC_CLOUDFLARE_REAL_DEPLOY") &&
-        process.env.RUNFABRIC_CLOUDFLARE_DESTROY_CMD
-      ) {
-        const result = await runShellCommand(process.env.RUNFABRIC_CLOUDFLARE_DESTROY_CMD, {
-          cwd: options.projectDir,
-          env: {
-            RUNFABRIC_SERVICE: project.service,
-            RUNFABRIC_STAGE: stage
+      const cloudflareExtension = project.extensions?.["cloudflare-workers"];
+      const scriptName =
+        typeof cloudflareExtension?.scriptName === "string"
+          ? sanitizeScriptName(cloudflareExtension.scriptName)
+          : sanitizeScriptName(project.service);
+      if (isRealDeployModeEnabled("RUNFABRIC_CLOUDFLARE_REAL_DEPLOY")) {
+        if (process.env.RUNFABRIC_CLOUDFLARE_DESTROY_CMD) {
+          const result = await runShellCommand(process.env.RUNFABRIC_CLOUDFLARE_DESTROY_CMD, {
+            cwd: options.projectDir,
+            env: {
+              RUNFABRIC_SERVICE: project.service,
+              RUNFABRIC_STAGE: stage
+            }
+          });
+          if (result.code !== 0) {
+            throw new Error(result.stderr || result.stdout || "cloudflare-workers destroy command failed");
           }
-        });
-        if (result.code !== 0) {
-          throw new Error(result.stderr || result.stdout || "cloudflare-workers destroy command failed");
+        } else {
+          const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          if (!apiToken || !accountId) {
+            throw new Error(
+              "cloudflare-workers real destroy requested but CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID are missing"
+            );
+          }
+          await deleteWorkerScript({
+            accountId,
+            apiToken,
+            scriptName
+          });
         }
       }
 

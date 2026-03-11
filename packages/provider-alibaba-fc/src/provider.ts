@@ -85,6 +85,14 @@ function alibabaResourceMetadata(response: unknown): Record<string, unknown> | u
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
+function defaultAlibabaDeployCommand(): string {
+  return "s deploy --output json";
+}
+
+function defaultAlibabaDestroyCommand(): string {
+  return "s remove --yes";
+}
+
 export function createAlibabaFcProvider(options: ProviderOptions): ProviderAdapter {
   return {
     name: "alibaba-fc",
@@ -128,12 +136,8 @@ export function createAlibabaFcProvider(options: ProviderOptions): ProviderAdapt
       let resource: Record<string, unknown> | undefined;
 
       if (isRealDeployModeEnabled("RUNFABRIC_ALIBABA_REAL_DEPLOY")) {
-        const deployCommand = process.env.RUNFABRIC_ALIBABA_DEPLOY_CMD;
-        if (!deployCommand) {
-          throw new Error(
-            "alibaba-fc real deploy mode requires RUNFABRIC_ALIBABA_DEPLOY_CMD returning JSON output"
-          );
-        }
+        const deployCommand = process.env.RUNFABRIC_ALIBABA_DEPLOY_CMD || defaultAlibabaDeployCommand();
+        const hasCommandOverride = Boolean(process.env.RUNFABRIC_ALIBABA_DEPLOY_CMD);
 
         rawResponse = await runJsonCommand(deployCommand, {
           cwd: options.projectDir,
@@ -145,11 +149,16 @@ export function createAlibabaFcProvider(options: ProviderOptions): ProviderAdapt
           }
         });
         const parsedEndpoint = endpointFromAlibabaResponse(rawResponse);
-        if (!parsedEndpoint) {
+        if (parsedEndpoint) {
+          endpoint = parsedEndpoint;
+        } else if (hasCommandOverride) {
           throw new Error("alibaba-fc deploy response does not include endpoint");
         }
-        endpoint = parsedEndpoint;
-        resource = alibabaResourceMetadata(rawResponse);
+        resource = {
+          ...(alibabaResourceMetadata(rawResponse) || {}),
+          region,
+          deployCommandSource: hasCommandOverride ? "override" : "builtin"
+        };
         mode = "cli";
       }
 
@@ -182,11 +191,9 @@ export function createAlibabaFcProvider(options: ProviderOptions): ProviderAdapt
       return buildProviderLogsFromLocalArtifacts(options.projectDir, "alibaba-fc", input);
     },
     async destroy(project: ProjectConfig) {
-      if (
-        isRealDeployModeEnabled("RUNFABRIC_ALIBABA_REAL_DEPLOY") &&
-        process.env.RUNFABRIC_ALIBABA_DESTROY_CMD
-      ) {
-        const result = await runShellCommand(process.env.RUNFABRIC_ALIBABA_DESTROY_CMD, {
+      if (isRealDeployModeEnabled("RUNFABRIC_ALIBABA_REAL_DEPLOY")) {
+        const destroyCommand = process.env.RUNFABRIC_ALIBABA_DESTROY_CMD || defaultAlibabaDestroyCommand();
+        const result = await runShellCommand(destroyCommand, {
           cwd: options.projectDir,
           env: {
             RUNFABRIC_SERVICE: project.service,

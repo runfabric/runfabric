@@ -6,7 +6,7 @@ import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { emitKeypressEvents } from "node:readline";
 import { PROVIDER_IDS } from "@runfabric/core";
-import { createProviderRegistry } from "../providers/registry";
+import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { error, info, success, warn } from "../utils/logger";
 
 type InitTemplateName = "api" | "worker" | "queue" | "cron";
@@ -495,10 +495,16 @@ async function runCommand(
 async function installCoreDependency(
   projectDir: string,
   packageManager: PackageManager,
-  language: InitLanguage
+  language: InitLanguage,
+  provider: string
 ): Promise<void> {
+  const providerPackage = getProviderPackageName(provider);
+  const corePackages = providerPackage
+    ? ["@runfabric/core", providerPackage]
+    : ["@runfabric/core"];
+
   if (packageManager === "pnpm") {
-    await runCommand("pnpm", ["add", "@runfabric/core"], projectDir);
+    await runCommand("pnpm", ["add", ...corePackages], projectDir);
     if (language === "ts") {
       await runCommand("pnpm", ["add", "-D", "typescript", "@types/node"], projectDir);
     }
@@ -506,7 +512,7 @@ async function installCoreDependency(
   }
 
   if (packageManager === "yarn") {
-    await runCommand("yarn", ["add", "@runfabric/core"], projectDir);
+    await runCommand("yarn", ["add", ...corePackages], projectDir);
     if (language === "ts") {
       await runCommand("yarn", ["add", "-D", "typescript", "@types/node"], projectDir);
     }
@@ -514,14 +520,14 @@ async function installCoreDependency(
   }
 
   if (packageManager === "bun") {
-    await runCommand("bun", ["add", "@runfabric/core"], projectDir);
+    await runCommand("bun", ["add", ...corePackages], projectDir);
     if (language === "ts") {
       await runCommand("bun", ["add", "-d", "typescript", "@types/node"], projectDir);
     }
     return;
   }
 
-  await runCommand("npm", ["install", "@runfabric/core"], projectDir);
+  await runCommand("npm", ["install", ...corePackages], projectDir);
   if (language === "ts") {
     await runCommand("npm", ["install", "-D", "typescript", "@types/node"], projectDir);
   }
@@ -532,6 +538,19 @@ function packageManagerRunArgs(packageManager: PackageManager, scriptName: strin
     return ["yarn", [scriptName]];
   }
   return [packageManager, ["run", scriptName]];
+}
+
+function packageManagerAddCommand(packageManager: PackageManager, packages: string[]): string {
+  if (packageManager === "pnpm") {
+    return `pnpm add ${packages.join(" ")}`;
+  }
+  if (packageManager === "yarn") {
+    return `yarn add ${packages.join(" ")}`;
+  }
+  if (packageManager === "bun") {
+    return `bun add ${packages.join(" ")}`;
+  }
+  return `npm install ${packages.join(" ")}`;
 }
 
 export const registerInitCommand: CommandRegistrar = (program) => {
@@ -622,7 +641,7 @@ export const registerInitCommand: CommandRegistrar = (program) => {
         const tsConfigPath = join(projectDir, "tsconfig.json");
         const readmePath = join(projectDir, "README.md");
 
-        const provider = createProviderRegistry(projectDir)[providerRaw];
+        const provider = createProviderRegistry(projectDir, [providerRaw])[providerRaw];
         const credentialSchema = provider?.getCredentialSchema?.();
         const credentialEnvVars =
           credentialSchema?.fields.map((field) => field.env).filter((value) => value.trim().length > 0) || [];
@@ -660,12 +679,23 @@ export const registerInitCommand: CommandRegistrar = (program) => {
         if (!options.skipInstall) {
           info(`installing dependencies using ${packageManagerRaw}...`);
           try {
-            await installCoreDependency(projectDir, packageManagerRaw, language);
-            success("installed @runfabric/core");
+            await installCoreDependency(projectDir, packageManagerRaw, language, providerRaw);
+            const providerPackage = getProviderPackageName(providerRaw);
+            success(
+              providerPackage
+                ? `installed @runfabric/core and ${providerPackage}`
+                : "installed @runfabric/core"
+            );
           } catch (installError) {
             const message = installError instanceof Error ? installError.message : String(installError);
             warn(`dependency installation failed: ${message}`);
-            warn(`run manually: (cd ${projectDir} && ${packageManagerRaw} add @runfabric/core)`);
+            const providerPackage = getProviderPackageName(providerRaw);
+            const manualPackages = providerPackage
+              ? ["@runfabric/core", providerPackage]
+              : ["@runfabric/core"];
+            warn(
+              `run manually: (cd ${projectDir} && ${packageManagerAddCommand(packageManagerRaw, manualPackages)})`
+            );
           }
         } else {
           info("dependency installation skipped");

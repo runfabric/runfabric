@@ -34,13 +34,14 @@ Migration notes:
 3. Enable real mode:
    - `RUNFABRIC_REAL_DEPLOY=1` or `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1`
 4. Configure real deploy execution:
-   - AWS: set `RUNFABRIC_AWS_LAMBDA_ROLE_ARN` (built-in internal deployer), or
-   - any provider (including AWS): set provider deploy command env that returns JSON.
+   - AWS: set `RUNFABRIC_AWS_LAMBDA_ROLE_ARN` (built-in AWS SDK deployer), and
+   - for non-AWS providers ensure provider CLI/API prerequisites are installed/authenticated.
+   - optional for any provider: set `RUNFABRIC_<PROVIDER>_DEPLOY_CMD` override returning JSON.
 5. Run `runfabric doctor`, `plan`, `build`, `deploy`.
 6. Validate endpoint and receipt output.
 7. Configure cleanup:
-   - AWS: built-in destroy uses AWS SDK in real mode, or
-   - set destroy command env for command-driven cleanup and rollback.
+   - built-in destroy executes per provider in real mode, or
+   - set `RUNFABRIC_<PROVIDER>_DESTROY_CMD` override for custom cleanup/rollback workflows.
 
 ## Example (AWS)
 

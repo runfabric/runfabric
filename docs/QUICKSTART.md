@@ -65,10 +65,21 @@ It also creates:
 - `package.json` with `@runfabric/core`
 - `call:local` script that runs `runfabric call-local -c runfabric.yml --serve --watch`
 
+Provider adapters are loaded dynamically. Install only providers used by the project
+(init installs the selected provider adapter unless `--skip-install` is used).
+
 Non-interactive example:
 
 ```bash
 pnpm run runfabric -- init --dir ./my-api --template api --provider aws-lambda --lang ts --skip-install
+```
+
+If you used `--skip-install`, install project dependencies manually:
+
+```bash
+cd my-api
+pnpm add @runfabric/core @runfabric/provider-aws-lambda
+pnpm add -D typescript @types/node
 ```
 
 Migrate existing `serverless.yml` (best-effort bootstrap):
@@ -159,16 +170,33 @@ Default deploy is simulated. To enable real mode:
 - `RUNFABRIC_REAL_DEPLOY=1` globally, or
 - `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1` per provider
 
-AWS has a built-in internal deployer in real mode. Set:
+Built-in real deployers are used by default:
 
-- `RUNFABRIC_AWS_REAL_DEPLOY=1`
-- `RUNFABRIC_AWS_LAMBDA_ROLE_ARN=<iam-role-arn>`
+- `aws-lambda`: AWS SDK deployer (requires `RUNFABRIC_AWS_LAMBDA_ROLE_ARN`)
+- `cloudflare-workers`: direct Cloudflare API deployer
+- other providers: built-in provider CLI command contracts
 
-For command-driven provider flows (or custom AWS override), set deploy command env vars returning JSON, e.g.:
+One-time AWS role bootstrap for real deploy:
 
-- `RUNFABRIC_AWS_DEPLOY_CMD`
-- `RUNFABRIC_GCP_DEPLOY_CMD`
-- `RUNFABRIC_AZURE_DEPLOY_CMD`
+```bash
+aws iam create-role \
+  --role-name runfabric-lambda-exec \
+  --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+
+aws iam attach-role-policy \
+  --role-name runfabric-lambda-exec \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+export RUNFABRIC_AWS_REAL_DEPLOY=1
+export RUNFABRIC_AWS_LAMBDA_ROLE_ARN="$(aws iam get-role --role-name runfabric-lambda-exec --query 'Role.Arn' --output text)"
+```
+
+If AWS returns assume-role errors right after role creation, wait 20-60 seconds and retry deploy.
+
+Optional override hooks:
+
+- `RUNFABRIC_<PROVIDER>_DEPLOY_CMD` (deploy command must return JSON)
+- `RUNFABRIC_<PROVIDER>_DESTROY_CMD`
 
 Full credential and command matrix: `docs/CREDENTIALS.md`.
 State backend credentials/auth/IAM: `docs/STATE_BACKENDS.md`.
@@ -219,7 +247,7 @@ functions:
       BUCKET: media-uploads
 ```
 
-When `RUNFABRIC_AWS_REAL_DEPLOY=1` and `RUNFABRIC_AWS_DEPLOY_CMD` is set, deploy passes these JSON payload env vars to that command:
+When `RUNFABRIC_AWS_REAL_DEPLOY=1` and `RUNFABRIC_AWS_DEPLOY_CMD` is set (optional override), deploy passes these JSON payload env vars to that command:
 
 - `RUNFABRIC_AWS_QUEUE_EVENT_SOURCES_JSON`
 - `RUNFABRIC_AWS_STORAGE_EVENTS_JSON`

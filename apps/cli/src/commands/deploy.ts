@@ -14,7 +14,7 @@ import {
   readDeploymentReceipt
 } from "@runfabric/core";
 import { createPlan } from "@runfabric/planner";
-import { createProviderRegistry } from "../providers/registry";
+import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { loadPlanningContext } from "../utils/load-config";
 import { loadLifecycleHooks } from "../utils/hooks";
 import { resolveFunctionProject } from "../utils/project-functions";
@@ -170,7 +170,7 @@ export async function executeDeployWorkflow(
     };
   }
 
-  const providerRegistry = createProviderRegistry(input.projectDir);
+  const providerRegistry = createProviderRegistry(input.projectDir, baseProject.providers);
   const stateBackend = createStateBackend({
     projectDir: input.projectDir,
     state: baseProject.state
@@ -220,10 +220,13 @@ export async function executeDeployWorkflow(
   for (const artifact of buildResult.artifacts) {
     const provider = providerRegistry[artifact.provider];
     if (!provider) {
+      const packageName = getProviderPackageName(artifact.provider);
       failures.push({
         provider: artifact.provider,
         phase: "provider",
-        message: "provider adapter is not installed"
+        message: packageName
+          ? `provider adapter is not installed (${packageName})`
+          : "provider adapter is not installed"
       });
       continue;
     }

@@ -3,10 +3,11 @@
 Each provider follows this sequence:
 
 1. Add provider name to `providers` in `runfabric.yml`.
-2. Add provider-specific `extensions` when needed.
-3. Export required credential env vars.
-4. Run `runfabric doctor`.
-5. Run `runfabric deploy`.
+2. Install provider adapter package (`@runfabric/provider-<provider-id>`).
+3. Add provider-specific `extensions` when needed.
+4. Export required credential env vars.
+5. Run `runfabric doctor`.
+6. Run `runfabric deploy`.
 
 ## Real Deploy Mode
 
@@ -20,21 +21,16 @@ Global and per-provider flags:
 - `RUNFABRIC_REAL_DEPLOY=1` to enable real mode globally
 - `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1` to enable per provider
 
-Per-provider real deploy command env (for command-driven mode, must return JSON):
+Built-in real deployers are used by default in real mode:
 
-- `RUNFABRIC_AWS_DEPLOY_CMD` (optional override; AWS has built-in internal deployer when `RUNFABRIC_AWS_REAL_DEPLOY=1`)
-- `RUNFABRIC_GCP_DEPLOY_CMD`
-- `RUNFABRIC_AZURE_DEPLOY_CMD`
-- `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1` (direct API mode)
-- `RUNFABRIC_VERCEL_DEPLOY_CMD`
-- `RUNFABRIC_NETLIFY_DEPLOY_CMD`
-- `RUNFABRIC_ALIBABA_DEPLOY_CMD`
-- `RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD`
-- `RUNFABRIC_FLY_DEPLOY_CMD`
-- `RUNFABRIC_IBM_DEPLOY_CMD`
+- `aws-lambda`: AWS SDK path
+- `cloudflare-workers`: direct Cloudflare API path
+- `gcp-functions|azure-functions|vercel|netlify|alibaba-fc|digitalocean-functions|fly-machines|ibm-openwhisk`:
+  built-in provider CLI command contracts
 
-Destroy command envs for remove/rollback:
+Optional override envs (deploy command should return JSON on stdout):
 
+- `RUNFABRIC_<PROVIDER>_DEPLOY_CMD`
 - `RUNFABRIC_<PROVIDER>_DESTROY_CMD`
 
 Provider-native observability command envs (optional):
