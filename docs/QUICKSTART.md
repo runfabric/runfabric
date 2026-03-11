@@ -106,6 +106,8 @@ pnpm run call:local -- --provider aws-lambda --method GET --path /hello
 pnpm run call:local -- --provider aws-lambda --event ./event.json
 ```
 
+For TypeScript entries, `call-local` now runs an initial `tsc -p tsconfig.json` automatically when no built handler artifact is found (published CLI mode). Keep `typescript` installed in your project dev dependencies.
+
 Or use the unified dev loop:
 
 ```bash

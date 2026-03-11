@@ -59,7 +59,7 @@ interface LocalInvokeResponse {
 interface LocalExecutionContext {
   provider: string;
   entry: string;
-  handler: UniversalHandler;
+  handler?: UniversalHandler;
 }
 
 function parseHeaders(headerPairs: string[]): Record<string, string> {
@@ -239,6 +239,82 @@ async function resolveHandlerPath(projectDir: string, entry: string): Promise<st
   );
 }
 
+async function hasBuiltHandlerArtifact(projectDir: string, entry: string): Promise<boolean> {
+  const candidates = resolveHandlerCandidates(projectDir, entry).filter((candidate) =>
+    /\.(js|mjs|cjs)$/i.test(candidate)
+  );
+  for (const candidate of candidates) {
+    try {
+      await access(candidate, constants.F_OK);
+      return true;
+    } catch {
+      // continue
+    }
+  }
+  return false;
+}
+
+function resolveTypeScriptCompiler(projectDir: string): string {
+  const localTsc = resolve(
+    projectDir,
+    "node_modules",
+    ".bin",
+    process.platform === "win32" ? "tsc.cmd" : "tsc"
+  );
+  return existsSync(localTsc) ? localTsc : "tsc";
+}
+
+async function runTypeScriptBuild(projectDir: string): Promise<void> {
+  const tsconfigPath = resolve(projectDir, "tsconfig.json");
+  if (!existsSync(tsconfigPath)) {
+    throw new Error(
+      "TypeScript entry detected but tsconfig.json was not found. Add tsconfig.json or set entry to a built JavaScript file."
+    );
+  }
+
+  const compiler = resolveTypeScriptCompiler(projectDir);
+  info("no built handler artifact found; running TypeScript build (tsc -p tsconfig.json)");
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    const child = spawn(compiler, ["-p", "tsconfig.json"], {
+      cwd: projectDir,
+      stdio: "inherit",
+      env: process.env
+    });
+    child.on("error", (buildError) => {
+      if ((buildError as NodeJS.ErrnoException).code === "ENOENT") {
+        rejectPromise(
+          new Error(
+            "TypeScript compiler was not found. Install TypeScript in this project (for example: npm install -D typescript)."
+          )
+        );
+        return;
+      }
+      rejectPromise(buildError);
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolvePromise();
+        return;
+      }
+      rejectPromise(new Error(`TypeScript build failed with exit code ${code ?? 1}`));
+    });
+  });
+}
+
+async function ensureTypeScriptArtifacts(projectDir: string, entry: string): Promise<void> {
+  const normalizedEntry = normalizeEntryPath(entry);
+  if (!normalizedEntry.endsWith(".ts")) {
+    return;
+  }
+  if (shouldAllowTypeScriptFallback()) {
+    return;
+  }
+  if (await hasBuiltHandlerArtifact(projectDir, normalizedEntry)) {
+    return;
+  }
+  await runTypeScriptBuild(projectDir);
+}
+
 async function loadHandler(projectDir: string, entry: string, fresh = false): Promise<UniversalHandler> {
   const handlerPath = await resolveHandlerPath(projectDir, entry);
   const moduleUrl = pathToFileURL(handlerPath).href;
@@ -388,6 +464,7 @@ export async function executeLocalCall(projectDir: string, options: LocalCallOpt
   };
 
   const entry = options.entry || planning.project.entry;
+  await ensureTypeScriptArtifacts(projectDir, entry);
   const request = await loadEvent(projectDir, parsed);
   const handler = await loadHandler(projectDir, entry, Boolean(options.watch));
   const response = await invokeWithProvider(provider, handler, request);
@@ -414,7 +491,7 @@ function parsePort(value: string): number {
 
 async function resolveExecutionContext(
   projectDir: string,
-  options: Pick<LocalCallOptions, "config" | "provider" | "entry">
+  options: Pick<LocalCallOptions, "config" | "provider" | "entry" | "watch">
 ): Promise<LocalExecutionContext> {
   const planning = await loadPlanningContext(projectDir, options.config);
   const provider = options.provider || planning.project.providers[0] || "aws-lambda";
@@ -423,6 +500,13 @@ async function resolveExecutionContext(
   }
 
   const entry = options.entry || planning.project.entry;
+  await ensureTypeScriptArtifacts(projectDir, entry);
+  if (options.watch) {
+    return {
+      provider,
+      entry
+    };
+  }
   const handler = await loadHandler(projectDir, entry);
   return { provider, entry, handler };
 }
@@ -451,7 +535,7 @@ function startTypeScriptWatch(projectDir: string): ChildProcess | undefined {
   }
 
   info("watch mode: starting TypeScript compiler (tsc --watch -p tsconfig.json)");
-  const child = spawn("tsc", ["--watch", "-p", "tsconfig.json"], {
+  const child = spawn(resolveTypeScriptCompiler(projectDir), ["--watch", "-p", "tsconfig.json"], {
     cwd: projectDir,
     stdio: "inherit",
     env: process.env,
@@ -538,6 +622,9 @@ async function serveLocalCalls(projectDir: string, options: LocalCallOptions): P
       };
       const event = createEventFromOptions(parsed);
       const requestHandler = watchMode ? await loadHandler(projectDir, entry, true) : handler;
+      if (!requestHandler) {
+        throw new Error("handler is not loaded");
+      }
       const invokeResult = await invokeWithProvider(provider, requestHandler, event);
 
       response.statusCode = invokeResult.statusCode;

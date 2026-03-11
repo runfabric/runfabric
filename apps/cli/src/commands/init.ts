@@ -428,6 +428,10 @@ function buildProjectReadmeContent(params: {
     "- `--body <string>`",
     "- `--event <path-to-json>`",
     "",
+    params.language === "ts"
+      ? "- TypeScript mode: if no built handler is found, `call-local` runs an initial `tsc -p tsconfig.json` automatically (requires `typescript` in dev dependencies)."
+      : "- JavaScript mode: handler is loaded directly from configured entry.",
+    "",
     "## Credentials",
     "",
     `Set credentials for \`${params.provider}\` in your shell before running deploy:`,
