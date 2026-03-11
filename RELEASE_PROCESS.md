@@ -31,6 +31,7 @@ RELEASE_NOTES_SIGNING_KEY="<key>" pnpm run release:notes:verify -- --version <ve
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm run check:compatibility
 pnpm run release:check
 ```
 

@@ -151,6 +151,20 @@ Optional real mode:
 - `RUNFABRIC_IBM_DEPLOY_CMD`
 - `RUNFABRIC_IBM_DESTROY_CMD`
 
+## Optional Provider-Native Traces/Metrics Commands
+
+For providers where you want cloud-native observability calls instead of local artifact-derived data, set:
+
+- `RUNFABRIC_<PROVIDER>_TRACES_CMD`
+- `RUNFABRIC_<PROVIDER>_METRICS_CMD`
+
+Example (AWS):
+
+```bash
+export RUNFABRIC_AWS_TRACES_CMD='echo "{\"traces\":[{\"timestamp\":\"2026-01-01T00:00:00Z\",\"message\":\"trace\"}]}"'
+export RUNFABRIC_AWS_METRICS_CMD='echo "{\"metrics\":[{\"name\":\"invocations\",\"value\":10,\"unit\":\"count\"}]}"'
+```
+
 ## Examples
 
 Provider config examples:

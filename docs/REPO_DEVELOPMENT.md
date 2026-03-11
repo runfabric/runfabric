@@ -46,6 +46,7 @@ export PATH="$PNPM_HOME:$PATH"
 
 - `npm run check:syntax`
 - `npm run check:capabilities`
+- `npm run check:compatibility`
 - `npm test`
 - `pnpm -r --if-present run build`
 - `pnpm -r --if-present run typecheck`

@@ -4,6 +4,12 @@
 
 `runfabric` is a multi-provider serverless framework package. It gives you one config and one CLI workflow across cloud providers.
 
+Project scope (current):
+
+- CLI/serverless deployment framework, not a standalone scheduler/runtime fabric.
+- Uses `runfabric.yml`; not a drop-in config replacement for `serverless.yml`.
+- Node-first beta (`runtime: nodejs` production-ready path in current release train).
+
 ## Why runfabric
 
 - Single service config: `runfabric.yml`
@@ -16,9 +22,14 @@
 - Unified lifecycle: `doctor -> plan -> build -> deploy -> remove`
 - Interactive project scaffold: `runfabric init`
 - Local provider-mimic execution: `runfabric call-local`
+- Local dev loop with rebuild + presets: `runfabric dev`
 - Multi-provider invoke/logs/remove support
+- Trace and metric queries from local artifacts: `runfabric traces`, `runfabric metrics`
 - Compose deploy orchestration with dependency ordering
 - Stage-aware local state and deployment receipts
+- Node-first runtime guardrails for current beta (`runtime: nodejs` production-ready path)
+- Extended trigger model: `http`, `cron`, `queue`, `storage`, `eventbridge`, `pubsub`, `kafka`, `rabbitmq`
+- Workflow/resources/secrets schema support in `runfabric.yml`
 
 ## Install CLI
 
@@ -50,6 +61,12 @@ Create a new project:
 
 ```bash
 runfabric init --dir ./my-api
+```
+
+Migrate an existing Serverless Framework config (best-effort bootstrap):
+
+```bash
+runfabric migrate --input ./serverless.yml --output ./runfabric.yml --json
 ```
 
 Set provider credentials (provider-specific list):
@@ -95,12 +112,20 @@ export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);
 - `runfabric doctor`
 - `runfabric plan`
 - `runfabric build`
+- `runfabric package`
 - `runfabric deploy`
 - `runfabric call-local`
+- `runfabric dev`
+- `runfabric migrate`
 - `runfabric invoke`
 - `runfabric logs`
+- `runfabric traces`
+- `runfabric metrics`
 - `runfabric remove`
 - `runfabric compose plan|deploy`
+- `runfabric state pull|list|backup|restore|force-unlock|migrate|reconcile`
+
+`invoke` and `logs` resolve project context from the current working directory; run them from the target project root.
 
 Full command reference: `docs/site/command-reference.md`
 
@@ -130,6 +155,10 @@ Full command reference: `docs/site/command-reference.md`
 - `docs/PROVIDER-SETUP.md`
 - `docs/ARCHITECTURE.md`
 - `docs/REPO_DEVELOPMENT.md`
+- `docs/CI_TEMPLATES.md`
+- `docs/PLUGIN_API.md`
+- `docs/RUNFABRIC_YML_REFERENCE.md`
+- `docs/EXAMPLES_MATRIX.md`
 - `docs/site/README.md`
 
 ## Community

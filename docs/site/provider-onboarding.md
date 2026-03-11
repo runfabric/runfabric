@@ -36,3 +36,8 @@ Per-provider real deploy command env (must return JSON):
 Destroy command envs for remove/rollback:
 
 - `RUNFABRIC_<PROVIDER>_DESTROY_CMD`
+
+Provider-native observability command envs (optional):
+
+- `RUNFABRIC_<PROVIDER>_TRACES_CMD`
+- `RUNFABRIC_<PROVIDER>_METRICS_CMD`

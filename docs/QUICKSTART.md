@@ -9,6 +9,7 @@ This guide gives two easy onboarding paths:
 
 - Node.js `>= 20`
 - pnpm via Corepack
+- Current beta runtime target: `runtime: nodejs`
 
 Install:
 
@@ -70,14 +71,24 @@ Non-interactive example:
 pnpm run runfabric -- init --dir ./my-api --template api --provider aws-lambda --lang ts --skip-install
 ```
 
+Migrate existing `serverless.yml` (best-effort bootstrap):
+
+```bash
+pnpm run runfabric -- migrate --input ./serverless.yml --output ./runfabric.yml --json
+```
+
 Run lifecycle:
 
 ```bash
 pnpm run runfabric -- doctor -c ./my-api/runfabric.yml
 pnpm run runfabric -- plan -c ./my-api/runfabric.yml
 pnpm run runfabric -- build -c ./my-api/runfabric.yml
+pnpm run runfabric -- package -c ./my-api/runfabric.yml --function api
 pnpm run runfabric -- deploy -c ./my-api/runfabric.yml
+pnpm run runfabric -- deploy -c ./my-api/runfabric.yml --function api
 pnpm run runfabric -- logs --provider aws-lambda
+pnpm run runfabric -- traces --provider aws-lambda --json
+pnpm run runfabric -- metrics --provider aws-lambda --json
 ```
 
 Run local provider-mimic server from your scaffolded project:
@@ -95,12 +106,48 @@ pnpm run call:local -- --provider aws-lambda --method GET --path /hello
 pnpm run call:local -- --provider aws-lambda --event ./event.json
 ```
 
-## Local State And Receipts
+Or use the unified dev loop:
+
+```bash
+pnpm run runfabric -- dev -c ./my-api/runfabric.yml --preset http --watch
+pnpm run runfabric -- dev -c ./my-api/runfabric.yml --preset queue --once
+pnpm run runfabric -- dev -c ./my-api/runfabric.yml --preset storage --once
+```
+
+## State Backends And Receipts
 
 After deploy:
 
 - receipt: `.runfabric/deploy/<provider>/deployment.json`
-- state: `.runfabric/state/<service>/<stage>/<provider>.state.json`
+- state (`local` backend): `.runfabric/state/<service>/<stage>/<provider>.state.json`
+- state (`postgres|s3|gcs|azblob` backends): `.runfabric/state-remote/<backend>/...` (local simulation path in tests/dev)
+
+Example state config in `runfabric.yml`:
+
+```yaml
+state:
+  backend: s3
+  keyPrefix: runfabric/state
+  lock:
+    enabled: true
+    timeoutSeconds: 30
+  s3:
+    bucket: my-runfabric-state
+    region: us-east-1
+    keyPrefix: runfabric/state
+```
+
+State operations:
+
+```bash
+pnpm run runfabric -- state list -c ./my-api/runfabric.yml --json
+pnpm run runfabric -- state pull -c ./my-api/runfabric.yml --provider aws-lambda --json
+pnpm run runfabric -- state backup -c ./my-api/runfabric.yml --out ./.runfabric/backup/state.json --json
+pnpm run runfabric -- state restore -c ./my-api/runfabric.yml --file ./.runfabric/backup/state.json --json
+pnpm run runfabric -- state reconcile -c ./my-api/runfabric.yml --json
+pnpm run runfabric -- state force-unlock -c ./my-api/runfabric.yml --provider aws-lambda --json
+pnpm run runfabric -- state migrate -c ./my-api/runfabric.yml --from local --to postgres --json
+```
 
 ## Real Deploy Mode For Other Providers
 
@@ -116,6 +163,66 @@ Then set provider deploy command env var returning JSON, e.g.:
 - `RUNFABRIC_AZURE_DEPLOY_CMD`
 
 Full credential and command matrix: `docs/CREDENTIALS.md`.
+State backend credentials/auth/IAM: `docs/STATE_BACKENDS.md`.
+
+## AWS Queue/Storage/IAM Example
+
+Example `runfabric.yml` using queue + storage triggers, AWS IAM statements, and function-level env:
+
+```yaml
+service: media-worker
+runtime: nodejs
+entry: src/index.ts
+
+providers:
+  - aws-lambda
+
+triggers:
+  - type: queue
+    queue: arn:aws:sqs:us-east-1:123456789012:media-jobs
+    batchSize: 10
+    maximumBatchingWindowSeconds: 5
+    functionResponseType: ReportBatchItemFailures
+  - type: storage
+    bucket: media-uploads
+    events:
+      - s3:ObjectCreated:*
+    prefix: incoming/
+    suffix: .jpg
+
+extensions:
+  aws-lambda:
+    region: us-east-1
+    iam:
+      role:
+        statements:
+          - effect: Allow
+            actions:
+              - s3:GetObject
+              - s3:PutObject
+            resources:
+              - arn:aws:s3:::media-uploads/*
+
+functions:
+  - name: process-media
+    entry: src/process-media.ts
+    env:
+      BUCKET: media-uploads
+```
+
+When `RUNFABRIC_AWS_REAL_DEPLOY=1`, deploy passes these JSON payload env vars to `RUNFABRIC_AWS_DEPLOY_CMD`:
+
+- `RUNFABRIC_AWS_QUEUE_EVENT_SOURCES_JSON`
+- `RUNFABRIC_AWS_STORAGE_EVENTS_JSON`
+- `RUNFABRIC_AWS_IAM_ROLE_STATEMENTS_JSON`
+- `RUNFABRIC_FUNCTION_ENV_JSON`
+
+Additional AWS payloads for P3/P4 schema:
+
+- `RUNFABRIC_AWS_EVENTBRIDGE_RULES_JSON`
+- `RUNFABRIC_AWS_RESOURCE_ADDRESSES_JSON`
+- `RUNFABRIC_AWS_WORKFLOW_ADDRESSES_JSON`
+- `RUNFABRIC_AWS_SECRET_REFERENCES_JSON`
 
 ## Framework Handler Wrappers
 

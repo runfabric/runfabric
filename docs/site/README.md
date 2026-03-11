@@ -2,6 +2,12 @@
 
 This folder is the docs navigation source for quick onboarding.
 
+Canonical positioning:
+
+- runfabric is a CLI-first multi-provider serverless framework.
+- It uses `runfabric.yml`.
+- It is not a standalone runtime scheduler/fabric.
+
 ## Navigation
 
 - [Getting Started](./getting-started.md)
@@ -9,6 +15,12 @@ This folder is the docs navigation source for quick onboarding.
 - [Provider Onboarding](./provider-onboarding.md)
 - [Command Reference](./command-reference.md)
 - [Examples](./examples.md)
+- [State Backends](../STATE_BACKENDS.md)
+- [CI Templates](../CI_TEMPLATES.md)
+- [Plugin API](../PLUGIN_API.md)
+- [Config Reference](../RUNFABRIC_YML_REFERENCE.md)
+- [Examples Matrix](../EXAMPLES_MATRIX.md)
+- [Migration](../MIGRATION.md)
 - [Release](../RELEASE.md)
 - [Repository Development](../REPO_DEVELOPMENT.md)
 

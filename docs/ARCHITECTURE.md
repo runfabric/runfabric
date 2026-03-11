@@ -1,5 +1,7 @@
 # Architecture
 
+runfabric is a CLI/serverless deployment framework with provider adapters. It is not a standalone compute scheduler/runtime fabric.
+
 ## Repo Layout
 
 - `apps/cli`: command entrypoints and workflow orchestration.
@@ -13,19 +15,23 @@
 ## Execution Flow
 
 1. `runfabric.yml` is loaded (with stage overrides when applicable).
-2. Planner validates providers, triggers, and capability constraints.
+2. Planner validates providers, trigger schemas (`http|cron|queue|storage|eventbridge|pubsub|kafka|rabbitmq`), runtime constraints, and capability matrix constraints.
 3. Builder creates artifacts in `.runfabric/build/<provider>/<service>/`.
 4. Provider deploy writes receipt in `.runfabric/deploy/<provider>/deployment.json`.
-5. CLI writes provider state in `.runfabric/state/<service>/<stage>/<provider>.state.json`.
+5. CLI writes provider state through the selected state backend:
+  - `local` -> `.runfabric/state/<service>/<stage>/<provider>.state.json`
+  - `postgres|s3|gcs|azblob` -> `.runfabric/state-remote/<backend>/...` (local simulation path for tests/dev)
 6. `invoke` and `logs` operate from receipt/state/log artifacts.
 7. `remove` triggers provider destroy + local cleanup (+ recovery notes on failure).
+8. `traces` and `metrics` use provider-native command overrides when configured, otherwise derive data from receipts + provider event logs.
+9. `dev` provides local watch/build and trigger preset simulation (`http|queue|storage`).
 
 ## Core Contracts
 
-- `ProjectConfig`: service metadata, runtime, entry, providers, triggers, functions, hooks, env, extensions.
-- `ProviderAdapter`: `validate`, `planBuild`, `build`, `planDeploy`, `deploy`, `invoke`, `logs`, `destroy`.
+- `ProjectConfig`: service metadata, runtime, entry, providers, triggers, functions, hooks, env, resources, workflows, secrets, extensions, state.
+- `ProviderAdapter`: `validate`, `planBuild`, `build`, `planDeploy`, `deploy`, optional `provisionResources`, optional `deployWorkflows`, optional `materializeSecrets`, `invoke`, `logs`, `destroy`.
 - `ProviderCredentialSchema`: required/optional env contracts.
-- `StateBackend`: local state read/write/lock/unlock abstraction.
+- `StateBackend`: backend-neutral `read/write/delete/list/lock/unlock/backup/restore` abstraction.
 - `DeploymentReceipt`: provider deployment metadata and endpoint output.
 
 ## Deploy Modes
@@ -42,8 +48,23 @@ Controls:
 ## Recovery Semantics
 
 - Deploy failures support optional rollback (`RUNFABRIC_ROLLBACK_ON_FAILURE=1`).
-- Rollback uses provider `destroy` and cleans receipt/state artifacts.
+- Rollback uses provider `destroy` and backend state cleanup.
 - Remove failures write recovery notes under `.runfabric/recovery/remove/*.json`.
+
+## State Lifecycle
+
+- Deploy writes transactional state lifecycle:
+  - `in_progress` before provider deploy
+  - `applied` on success
+  - `failed` on deploy failure
+- State can persist provider address maps for deployed dependencies:
+  - `resourceAddresses`
+  - `workflowAddresses`
+  - `secretReferences` (references only; plaintext secrets are not persisted)
+- Locking is token-based with TTL + stale lock recovery.
+- Lock diagnostics + recovery are exposed via:
+  - `runfabric state list`
+  - `runfabric state force-unlock --service <name> --stage <name> --provider <name>`
 
 ## Compose
 
@@ -57,3 +78,15 @@ Controls:
 - Capability sync check: `npm run check:capabilities`
 - Tests: `npm test`
 - Workspace type checks: `pnpm -r --if-present run typecheck`
+- Compatibility checks:
+  - `npm run check:schema`
+  - `npm run check:provider-contracts`
+- Observability commands:
+  - `runfabric traces --provider <name>`
+  - `runfabric metrics --provider <name>`
+- Migration command:
+  - `runfabric migrate --input ./serverless.yml --output ./runfabric.yml`
+- Local dev loop:
+  - `runfabric dev --preset http --watch`
+  - `runfabric dev --preset queue --once`
+  - `runfabric dev --preset storage --once`

@@ -4,10 +4,6 @@ Use this guide when you need more than a single default `handler`.
 
 ## Scenario 1: Single Handler
 
-Use one entry file and one handler export.
-
-Config:
-
 ```yaml
 service: hello-api
 runtime: nodejs
@@ -22,8 +18,6 @@ triggers:
     path: /hello
 ```
 
-Handler:
-
 ```ts
 import type { UniversalHandler } from "@runfabric/core";
 
@@ -35,10 +29,6 @@ export const handler: UniversalHandler = async (req) => ({
 ```
 
 ## Scenario 2: Multiple Named Handlers
-
-Use `functions` when you need separate handlers, entries, and trigger sets.
-
-Config:
 
 ```yaml
 service: multi-api
@@ -68,21 +58,15 @@ functions:
         path: /admin
 ```
 
-Deploy only one function:
+Deploy one function quickly:
 
 ```bash
-runfabric deploy function public-api -c runfabric.yml
+runfabric deploy --function public-api -c runfabric.yml
 ```
 
-Local-call a specific function entry:
+## Scenario 3: Existing Framework Apps
 
-```bash
-runfabric call-local -c runfabric.yml --entry src/public.ts --method GET --path /public
-```
-
-## Scenario 3: Express/Fastify/NestJS Wrappers
-
-Use one wrapper API:
+Use `createHandler` from `@runfabric/runtime-node`:
 
 ```ts
 import type { UniversalHandler } from "@runfabric/core";
@@ -91,23 +75,20 @@ import { createHandler } from "@runfabric/runtime-node";
 export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);
 ```
 
-Express catch-all example:
+## Scenario 4: Queue + Storage
 
-```ts
-import express from "express";
-import { createHandler } from "@runfabric/runtime-node";
-
-const app = express();
-app.use(express.json());
-app.all("*", (req, res) => {
-  res.status(200).json({ method: req.method, path: req.originalUrl });
-});
-
-export const handler = createHandler(app);
+```yaml
+triggers:
+  - type: queue
+    queue: arn:aws:sqs:us-east-1:123456789012:jobs
+  - type: storage
+    bucket: uploads
+    events:
+      - s3:ObjectCreated:*
 ```
 
-## Ready-Made Example Files
+## Related Examples
 
-- `examples/handler-scenarios/single-handler/`
-- `examples/handler-scenarios/multi-handler/`
 - `examples/handler-scenarios/README.md`
+- `examples/handler-scenarios/single-handler/runfabric.yml`
+- `examples/handler-scenarios/multi-handler/runfabric.yml`

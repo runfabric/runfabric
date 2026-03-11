@@ -1,0 +1,48 @@
+name: runfabric-promotion-template
+
+on:
+  workflow_dispatch:
+    inputs:
+      promote_to:
+        description: "Target stage"
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Verify baseline
+        run: |
+          pnpm run check:syntax
+          pnpm run check:capabilities
+          pnpm test
+      - name: Deploy Staging
+        if: ${{ inputs.promote_to == 'staging' }}
+        env:
+          RUNFABRIC_AWS_REAL_DEPLOY: "1"
+          RUNFABRIC_AWS_DEPLOY_CMD: ${{ secrets.RUNFABRIC_AWS_DEPLOY_CMD_STAGING }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          AWS_REGION: ${{ vars.AWS_REGION_STAGING }}
+        run: pnpm run runfabric -- deploy -c runfabric.yml --stage staging --json
+      - name: Deploy Production
+        if: ${{ inputs.promote_to == 'prod' }}
+        env:
+          RUNFABRIC_AWS_REAL_DEPLOY: "1"
+          RUNFABRIC_AWS_DEPLOY_CMD: ${{ secrets.RUNFABRIC_AWS_DEPLOY_CMD_PROD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          AWS_REGION: ${{ vars.AWS_REGION_PROD }}
+        run: pnpm run runfabric -- deploy -c runfabric.yml --stage prod --json

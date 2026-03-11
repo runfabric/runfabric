@@ -79,6 +79,34 @@ When real mode is enabled, set command envs that output JSON:
 | `fly-machines` | `RUNFABRIC_FLY_DEPLOY_CMD` | `RUNFABRIC_FLY_DESTROY_CMD` |
 | `ibm-openwhisk` | `RUNFABRIC_IBM_DEPLOY_CMD` | `RUNFABRIC_IBM_DESTROY_CMD` |
 
+## Provider Observability Command Matrix
+
+Optional provider-native overrides for `runfabric traces` and `runfabric metrics`.
+If these are unset, runfabric falls back to local artifact-derived traces/metrics.
+
+| Provider | Traces Command Env | Metrics Command Env |
+| --- | --- | --- |
+| `aws-lambda` | `RUNFABRIC_AWS_TRACES_CMD` | `RUNFABRIC_AWS_METRICS_CMD` |
+| `gcp-functions` | `RUNFABRIC_GCP_TRACES_CMD` | `RUNFABRIC_GCP_METRICS_CMD` |
+| `azure-functions` | `RUNFABRIC_AZURE_TRACES_CMD` | `RUNFABRIC_AZURE_METRICS_CMD` |
+| `cloudflare-workers` | `RUNFABRIC_CLOUDFLARE_TRACES_CMD` | `RUNFABRIC_CLOUDFLARE_METRICS_CMD` |
+| `vercel` | `RUNFABRIC_VERCEL_TRACES_CMD` | `RUNFABRIC_VERCEL_METRICS_CMD` |
+| `netlify` | `RUNFABRIC_NETLIFY_TRACES_CMD` | `RUNFABRIC_NETLIFY_METRICS_CMD` |
+| `alibaba-fc` | `RUNFABRIC_ALIBABA_TRACES_CMD` | `RUNFABRIC_ALIBABA_METRICS_CMD` |
+| `digitalocean-functions` | `RUNFABRIC_DIGITALOCEAN_TRACES_CMD` | `RUNFABRIC_DIGITALOCEAN_METRICS_CMD` |
+| `fly-machines` | `RUNFABRIC_FLY_TRACES_CMD` | `RUNFABRIC_FLY_METRICS_CMD` |
+| `ibm-openwhisk` | `RUNFABRIC_IBM_TRACES_CMD` | `RUNFABRIC_IBM_METRICS_CMD` |
+
+Example output contract:
+
+```json
+{"traces":[{"timestamp":"2026-01-01T00:00:00.000Z","message":"trace line"}]}
+```
+
+```json
+{"metrics":[{"name":"invocations","value":42,"unit":"count"}]}
+```
+
 ## Examples
 
 ### AWS real deploy mode

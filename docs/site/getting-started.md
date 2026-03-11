@@ -1,5 +1,11 @@
 # Getting Started
 
+Scope note:
+
+- runfabric is a CLI-first serverless framework.
+- It uses `runfabric.yml` (not `serverless.yml`).
+- Current release train is Node-first (`runtime: nodejs`).
+
 1. Install dependencies:
 
 ```bash
@@ -28,7 +34,16 @@ Available templates:
 pnpm run runfabric -- doctor -c ./my-service/runfabric.yml
 pnpm run runfabric -- plan -c ./my-service/runfabric.yml
 pnpm run runfabric -- build -c ./my-service/runfabric.yml
+pnpm run runfabric -- package -c ./my-service/runfabric.yml
 pnpm run runfabric -- deploy -c ./my-service/runfabric.yml
+```
+
+Run `invoke` and `logs` from the target project directory (they resolve project context from current working directory).
+
+5. Optional migration from an existing Serverless Framework file:
+
+```bash
+pnpm run runfabric -- migrate --input ./serverless.yml --output ./runfabric.yml --json
 ```
 
 Handler patterns and framework wrappers:

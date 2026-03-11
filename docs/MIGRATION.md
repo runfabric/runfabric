@@ -11,6 +11,22 @@ This guide helps teams move from scaffold-style deploys to command/API-backed re
 
 Simulated mode still records deployment receipts/state so you can validate workflow shape before touching cloud resources.
 
+## Serverless Framework To runfabric Bootstrap
+
+Use built-in migration tooling for a best-effort initial conversion:
+
+```bash
+runfabric migrate --input ./serverless.yml --output ./runfabric.yml --json
+```
+
+Migration notes:
+
+- maps provider names (for example `aws` -> `aws-lambda`)
+- maps `provider.runtime` into `runtime` (`node*` -> `nodejs`)
+- maps function handlers into `entry` and `functions[].entry`
+- maps common event types: `http|httpApi|schedule|sqs|s3`
+- emits warnings when values need manual follow-up
+
 ## Migration Path
 
 1. Keep existing `runfabric.yml` provider config.

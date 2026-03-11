@@ -1,130 +1,203 @@
-# runfabric.yml Schema Proposal (AWS Event + IAM Parity)
+# runfabric.yml Schema Proposal (Current)
 
-Status: proposed schema for next implementation phase.
+Status: implemented schema and planner behavior.
+
+For day-to-day usage use `docs/RUNFABRIC_YML_REFERENCE.md`. This file tracks schema design intent/details.
 
 ## Goal
 
 Define exact `runfabric.yml` fields for:
 
-- SQS event source mappings
-- S3 object event triggers
-- AWS IAM role statements
-- function-level environment variables
+- trigger variants across providers
+- workflows
+- resources
+- secrets
+- AWS extension fields
+- state backend configuration + locking controls
 
-## Proposed Field Paths
+## Top-Level Fields
 
-### `triggers[]` union
+- `service`: string (required)
+- `runtime`: string (required)
+- `entry`: string (required)
+- `providers`: string[] (required, min 1)
+- `triggers`: trigger[] (required, min 1)
+- `functions`: function[] (optional)
+- `hooks`: string[] (optional)
+- `resources`: resources object (optional)
+- `env`: `Record<string, string>` (optional)
+- `secrets`: `Record<string, string>` (optional, values must be `secret://<ref>`)
+- `workflows`: workflow[] (optional)
+- `params`: `Record<string, string>` (optional)
+- `extensions`: provider extensions object (optional)
+- `state`: state backend config (optional)
+- `stages`: stage override map (optional)
 
-`triggers[].type` stays required and supports these exact variants.
+## Trigger Union (`triggers[]`)
 
-#### HTTP Trigger
+### HTTP
 
-- `triggers[].type`: `"http"` (required)
-- `triggers[].method`: string (required)
-- `triggers[].path`: string (required)
+- `type: http`
+- `method`: string
+- `path`: string
 
-#### Cron Trigger
+### Cron
 
-- `triggers[].type`: `"cron"` (required)
-- `triggers[].schedule`: string (required)
-- `triggers[].timezone`: string (optional)
+- `type: cron`
+- `schedule`: string
+- `timezone?`: string
 
-#### Queue Trigger (SQS)
+### Queue
 
-- `triggers[].type`: `"queue"` (required)
-- `triggers[].queue`: string (required, queue name/URL/ARN)
-- `triggers[].batchSize`: number (optional)
-- `triggers[].maximumBatchingWindowSeconds`: number (optional)
-- `triggers[].maximumConcurrency`: number (optional)
-- `triggers[].enabled`: boolean (optional, default `true`)
-- `triggers[].functionResponseType`: string (optional, allowed: `ReportBatchItemFailures`)
+- `type: queue`
+- `queue`: string
+- `batchSize?`: number
+- `maximumBatchingWindowSeconds?`: number
+- `maximumConcurrency?`: number
+- `enabled?`: boolean
+- `functionResponseType?`: `ReportBatchItemFailures`
 
-#### Storage Trigger (S3)
+### Storage
 
-- `triggers[].type`: `"storage"` (required)
-- `triggers[].bucket`: string (required)
-- `triggers[].events`: string[] (required, at least 1)
-- `triggers[].prefix`: string (optional)
-- `triggers[].suffix`: string (optional)
-- `triggers[].existingBucket`: boolean (optional, default `true`)
+- `type: storage`
+- `bucket`: string
+- `events`: string[] (min 1)
+- `prefix?`: string
+- `suffix?`: string
+- `existingBucket?`: boolean
 
-### Function-level env
+### EventBridge
 
-- `functions[].env`: `Record<string, string>` (optional)
+- `type: eventbridge`
+- `pattern`: object
+- `bus?`: string
 
-Merge order during deploy:
+### Pub/Sub
 
-1. `env` (root)
-2. `functions[].env` (function override wins)
+- `type: pubsub`
+- `topic`: string
+- `subscription?`: string
 
-### AWS IAM extension
+### Kafka
 
-- `extensions.aws-lambda.iam.role.statements[]`: array (optional)
-- `extensions.aws-lambda.iam.role.statements[].sid`: string (optional)
-- `extensions.aws-lambda.iam.role.statements[].effect`: `"Allow" | "Deny"` (required)
-- `extensions.aws-lambda.iam.role.statements[].actions`: string[] (required, at least 1)
-- `extensions.aws-lambda.iam.role.statements[].resources`: string[] (required, at least 1)
-- `extensions.aws-lambda.iam.role.statements[].condition`: object (optional)
+- `type: kafka`
+- `brokers`: string[] (min 1)
+- `topic`: string
+- `groupId`: string
 
-## Example: SQS Worker
+### RabbitMQ
 
-```yaml
-service: queue-worker
-runtime: nodejs
-entry: src/worker.ts
+- `type: rabbitmq`
+- `queue`: string
+- `exchange?`: string
+- `routingKey?`: string
 
-providers:
-  - aws-lambda
+## Functions (`functions[]`)
 
-triggers:
-  - type: queue
-    queue: arn:aws:sqs:us-west-1:123456789012:jobs
-    batchSize: 10
-    maximumBatchingWindowSeconds: 5
-    maximumConcurrency: 2
-    functionResponseType: ReportBatchItemFailures
-```
+- `name`: string (required)
+- `entry?`: string
+- `runtime?`: string
+- `triggers?`: trigger[]
+- `resources?`: resources object
+- `env?`: `Record<string, string>`
 
-## Example: S3 Event + IAM + Function Env
+## Resources (`resources`)
 
-```yaml
-service: fetch-file-and-store-in-s3
-runtime: nodejs
-entry: src/handler.ts
+- `memory?`: number
+- `timeout?`: number
+- `queues?`: `{ name: string, ... }[]`
+- `buckets?`: `{ name: string, ... }[]`
+- `topics?`: `{ name: string, ... }[]`
+- `databases?`: `{ name: string, ... }[]`
 
-providers:
-  - aws-lambda
+## Workflows (`workflows[]`)
 
-triggers:
-  - type: storage
-    bucket: my-upload-bucket
-    events:
-      - s3:ObjectCreated:*
-    prefix: incoming/
-    suffix: .json
+- `name`: string (required)
+- `steps`: workflow step[] (required, min 1)
 
-extensions:
-  aws-lambda:
-    region: us-west-1
-    iam:
-      role:
-        statements:
-          - effect: Allow
-            actions:
-              - s3:PutObject
-              - s3:PutObjectAcl
-            resources:
-              - arn:aws:s3:::my-upload-bucket/*
+Workflow step:
 
-functions:
-  - name: save
-    entry: src/handler.ts
-    env:
-      BUCKET: my-upload-bucket
-```
+- `function`: string (required)
+- `next?`: string
+- `retry?`: object
+- `retry.attempts?`: number (>= 1)
+- `retry.backoffSeconds?`: number (>= 0)
+- `timeoutSeconds?`: number (>= 1)
 
-## Backward Compatibility Rules
+## Secrets (`secrets`)
 
-- Existing `queue` trigger config (`type: queue` + `queue`) remains valid.
-- `http` and `cron` trigger shapes remain unchanged.
-- Existing scalar-only `extensions.aws-lambda.stage` and `extensions.aws-lambda.region` remain valid.
+- key: env-style secret key
+- value: `secret://<ref>`
+
+Deploy contract:
+
+- provider adapters materialize provider references from `secret://...`
+- plaintext secret values are not written to runfabric state
+
+## State Block
+
+- `state.backend`: `local | postgres | s3 | gcs | azblob` (default `local`)
+- `state.keyPrefix?`: string (default `runfabric/state`)
+- `state.lock.enabled?`: boolean
+- `state.lock.timeoutSeconds?`: number
+- `state.lock.heartbeatSeconds?`: number
+- `state.lock.staleAfterSeconds?`: number
+- `state.local.dir?`: string
+- `state.postgres.connectionStringEnv?`: string
+- `state.postgres.schema?`: string
+- `state.postgres.table?`: string
+- `state.s3.bucket`: string (required when backend is `s3`)
+- `state.s3.region?`: string
+- `state.s3.keyPrefix?`: string
+- `state.s3.useLockfile?`: boolean
+- `state.gcs.bucket`: string (required when backend is `gcs`)
+- `state.gcs.prefix?`: string
+- `state.azblob.container`: string (required when backend is `azblob`)
+- `state.azblob.prefix?`: string
+
+## Extensions (`extensions`)
+
+Typed provider extension fields currently validated:
+
+- `extensions.aws-lambda.stage`: string
+- `extensions.aws-lambda.region`: string
+- `extensions.aws-lambda.iam`: object
+- `extensions.gcp-functions.region`: string
+- `extensions.azure-functions.functionApp`: string
+- `extensions.azure-functions.routePrefix`: string
+- `extensions.cloudflare-workers.scriptName`: string
+- `extensions.vercel.projectName`: string
+- `extensions.netlify.siteName`: string
+- `extensions.alibaba-fc.region`: string
+- `extensions.digitalocean-functions.namespace`: string
+- `extensions.digitalocean-functions.region`: string
+- `extensions.fly-machines.appName`: string
+- `extensions.fly-machines.region`: string
+- `extensions.ibm-openwhisk.namespace`: string
+
+AWS IAM schema:
+
+- `extensions.aws-lambda.iam.role.statements[]`
+- `sid?`: string
+- `effect`: `Allow | Deny`
+- `actions`: string[]
+- `resources`: string[]
+- `condition?`: object
+
+## Deploy/State Contract for Resources, Workflows, Secrets
+
+Provider deploys can return:
+
+- `resourceAddresses`: `Record<string, string>`
+- `workflowAddresses`: `Record<string, string>`
+- `secretReferences`: `Record<string, string>`
+
+State stores these under provider state record fields:
+
+- `resourceAddresses`
+- `workflowAddresses`
+- `secretReferences`
+
+Example local state file path:
+
+- `.runfabric/state/<service>/<stage>/<provider>.state.json`
