@@ -52,6 +52,7 @@ Use clear, scoped commit messages. Suggested prefixes:
 
 ## Architecture References
 
+- `docs/REPO_DEVELOPMENT.md`
 - `docs/ARCHITECTURE.md`
 - `docs/CREDENTIALS.md`
 - `docs/QUICKSTART.md`

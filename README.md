@@ -1,62 +1,110 @@
 # runfabric
 
-**alternate of Serverless Framework**
+**Alternate of Serverless Framework**
 
-`runfabric` is a multi-provider serverless framework package for teams that want a single config and command flow across cloud providers.
+`runfabric` is a multi-provider serverless framework package. It gives you one config and one CLI workflow across cloud providers.
 
 ## Why runfabric
 
-- One service config (`runfabric.yml`) for multiple providers.
-- Portability diagnostics before deployment.
-- Package-first usage: local shell credentials, no mandatory CI deploy flow.
-- Works as an alternative to [Serverless Framework](https://github.com/serverless/serverless).
+- Single service config: `runfabric.yml`
+- Provider portability checks before deploy
+- Provider credential schema + `doctor` validation
+- Works as an alternative to [Serverless Framework](https://github.com/serverless/serverless)
 
 ## Features
 
-- Unified workflow: `doctor -> plan -> build -> deploy -> remove`
-- Provider credential schemas + doctor checks
-- Stage-aware state tracking under `.runfabric/state/<service>/<stage>/<provider>.state.json`
-- Provider deployment receipts under `.runfabric/deploy/<provider>/deployment.json`
-- `invoke`, `logs`, and `destroy` support across provider adapters
-- Optional rollback-on-failure during deploy: `RUNFABRIC_ROLLBACK_ON_FAILURE=1`
-- Function-level lifecycle (`package`, `deploy function`, `remove`)
-- Compose orchestration with dependency order + shared endpoint outputs
-- Starter scaffolds: `runfabric init --template api|worker|queue|cron`
+- Unified lifecycle: `doctor -> plan -> build -> deploy -> remove`
+- Interactive project scaffold: `runfabric init`
+- Local provider-mimic execution: `runfabric call-local`
+- Multi-provider invoke/logs/remove support
+- Compose deploy orchestration with dependency ordering
+- Stage-aware local state and deployment receipts
 
-## Install
+## Install CLI
 
-```bash
-corepack enable
-corepack prepare pnpm@10.5.2 --activate
-pnpm install
-```
-
-Run CLI from repo:
+Global install:
 
 ```bash
-pnpm run runfabric -- --help
+npm install -g @runfabric/cli
+runfabric --help
 ```
+
+Beta channel:
+
+```bash
+npm install -g @runfabric/cli@beta
+runfabric --help
+```
+
+Without global install:
+
+```bash
+npx @runfabric/cli@latest --help
+```
+
+If the npm package is not published yet in your environment, use source/link setup in `docs/REPO_DEVELOPMENT.md`.
 
 ## Quick Start
 
-Generate a project:
+Create a new project:
 
 ```bash
-pnpm run runfabric -- init --template api --dir ./my-api --provider cloudflare-workers
+runfabric init --dir ./my-api
 ```
 
-Run lifecycle commands:
+Set provider credentials (provider-specific list):
+
+- `docs/CREDENTIALS.md`
+- `docs/PROVIDER-SETUP.md`
+
+Run lifecycle:
 
 ```bash
-pnpm run runfabric -- doctor -c ./my-api/runfabric.yml
-pnpm run runfabric -- plan -c ./my-api/runfabric.yml
-pnpm run runfabric -- build -c ./my-api/runfabric.yml
-pnpm run runfabric -- deploy -c ./my-api/runfabric.yml
+runfabric doctor -c ./my-api/runfabric.yml
+runfabric plan -c ./my-api/runfabric.yml
+runfabric build -c ./my-api/runfabric.yml
+runfabric deploy -c ./my-api/runfabric.yml
 ```
+
+Run local provider-mimic server:
+
+```bash
+cd my-api
+npm run call:local
+curl -i http://127.0.0.1:8787/hello
+# stop server: Ctrl+C or type 'exit' and press Enter
+```
+
+`call:local` now runs in watch mode by default in scaffolded projects.
+
+## Framework Wrappers (Express, Fastify, NestJS)
+
+`@runfabric/runtime-node` exposes one wrapper helper so existing framework apps can be used as a `UniversalHandler`.
+
+```ts
+import type { UniversalHandler } from "@runfabric/core";
+import { createHandler } from "@runfabric/runtime-node";
+
+// Auto-detects Nest app (getHttpAdapter), Fastify instance (inject), or Express app function:
+export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);
+```
+
+## Core Commands
+
+- `runfabric init`
+- `runfabric doctor`
+- `runfabric plan`
+- `runfabric build`
+- `runfabric deploy`
+- `runfabric call-local`
+- `runfabric invoke`
+- `runfabric logs`
+- `runfabric remove`
+- `runfabric compose plan|deploy`
+
+Full command reference: `docs/site/command-reference.md`
 
 ## Providers
-
-Supported provider adapters:
 
 - `aws-lambda`
 - `gcp-functions`
@@ -69,67 +117,22 @@ Supported provider adapters:
 - `fly-machines`
 - `ibm-openwhisk`
 
-### Deploy modes
+## State And Receipts
 
-- Simulated mode (default): deterministic endpoint + local receipt.
-- Real mode (opt-in): provider command/API response parsing.
-
-Global or provider flag:
-
-- `RUNFABRIC_REAL_DEPLOY=1`
-- `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1`
-
-Provider real deploy command envs (JSON output expected):
-
-- `RUNFABRIC_AWS_DEPLOY_CMD`
-- `RUNFABRIC_GCP_DEPLOY_CMD`
-- `RUNFABRIC_AZURE_DEPLOY_CMD`
-- `RUNFABRIC_VERCEL_DEPLOY_CMD`
-- `RUNFABRIC_NETLIFY_DEPLOY_CMD`
-- `RUNFABRIC_ALIBABA_DEPLOY_CMD`
-- `RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD`
-- `RUNFABRIC_FLY_DEPLOY_CMD`
-- `RUNFABRIC_IBM_DEPLOY_CMD`
-
-Cloudflare uses direct API mode with:
-
-- `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1`
-
-Destroy command env pattern:
-
-- `RUNFABRIC_<PROVIDER>_DESTROY_CMD`
-
-## Compose
-
-Compose deploy exports endpoint outputs as env vars:
-
-- `RUNFABRIC_OUTPUT_<SERVICE>_<PROVIDER>_ENDPOINT`
-
-References:
-
-- `examples/hello-http/runfabric.compose.yml`
-- `examples/compose-contracts/runfabric.compose.yml`
+- Deploy receipt: `.runfabric/deploy/<provider>/deployment.json`
+- State file: `.runfabric/state/<service>/<stage>/<provider>.state.json`
 
 ## Docs
 
-Primary docs:
-
 - `docs/QUICKSTART.md`
+- `docs/HANDLER_SCENARIOS.md`
 - `docs/CREDENTIALS.md`
 - `docs/PROVIDER-SETUP.md`
 - `docs/ARCHITECTURE.md`
+- `docs/REPO_DEVELOPMENT.md`
 - `docs/site/README.md`
-- `docs/site/command-reference.md`
-- `docs/site/provider-onboarding.md`
-
-Release docs:
-
-- `docs/RELEASE.md`
-- `RELEASE_PROCESS.md`
 
 ## Community
-
-Planned channels checklist:
 
 - `SOCIAL_ACCOUNTS_TODO.md`
 

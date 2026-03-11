@@ -2,13 +2,14 @@
 
 ## Core
 
-- `runfabric init --template <api|worker|queue|cron> [--provider <name>] [--service <name>]`
+- `runfabric init [--template <api|worker|queue|cron>] [--provider <name>] [--lang <ts|js>] [--service <name>] [--pm <npm|pnpm|yarn|bun>] [--skip-install] [--call-local] [--no-interactive]`
 - `runfabric doctor -c <config> [--stage <name>]`
 - `runfabric plan -c <config> [--stage <name>] [--json]`
 - `runfabric build -c <config> [--stage <name>] [--out <dir>] [--json]`
 - `runfabric deploy -c <config> [--stage <name>] [--out <dir>] [--json]`
 - `runfabric deploy function <name> -c <config> [--json]`
 - `runfabric remove -c <config> [--stage <name>] [--provider <name>] [--json]`
+- `runfabric call-local -c <config> [--serve] [--watch] [--host <host>] [--port <number>] [--provider <name>] [--method <GET|POST|...>] [--path </route>] [--query <k=v&k2=v2>] [--header <k:v>] [--body <text>] [--event <file>] [--entry <path>]`
 - `runfabric invoke --provider <name> [--payload <json>]`
 - `runfabric logs --provider <name>`
 - `runfabric providers`

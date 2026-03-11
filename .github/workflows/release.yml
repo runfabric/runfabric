@@ -17,6 +17,11 @@ on:
         required: true
         default: true
         type: boolean
+      dist_tag:
+        description: "npm dist-tag (latest, beta, rc, etc.)"
+        required: true
+        default: "latest"
+        type: string
 
 permissions:
   contents: write
@@ -70,13 +75,14 @@ jobs:
 
       - name: Publish packages (dry run)
         if: ${{ inputs.dry_run }}
-        run: pnpm run release:publish:dry-run
+        run: pnpm run release:publish:dry-run -- --tag "${{ inputs.dist_tag }}"
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm run release:publish
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm run release:publish -- --tag "${{ inputs.dist_tag }}"
 
       - name: Create and push tag
         if: ${{ !inputs.dry_run }}

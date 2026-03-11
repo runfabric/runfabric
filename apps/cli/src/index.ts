@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { registerBuildCommand } from "./commands/build";
+import { registerCallLocalCommand } from "./commands/call-local";
 import { registerComposeCommand } from "./commands/compose";
 import { registerDeployCommand } from "./commands/deploy";
 import { registerDoctorCommand } from "./commands/doctor";
@@ -27,6 +28,7 @@ registerPackageCommand(program);
 registerDeployCommand(program);
 registerRemoveCommand(program);
 registerInvokeCommand(program);
+registerCallLocalCommand(program);
 registerLogsCommand(program);
 registerProvidersCommand(program);
 registerPrimitivesCommand(program);

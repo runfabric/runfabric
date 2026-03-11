@@ -1,0 +1,31 @@
+service: handler-scenario-multi
+runtime: nodejs
+entry: src/index.ts
+
+providers:
+  - aws-lambda
+
+triggers:
+  - type: http
+    method: GET
+    path: /health
+
+functions:
+  - name: public-api
+    entry: src/public.ts
+    triggers:
+      - type: http
+        method: GET
+        path: /public
+  - name: admin-api
+    entry: src/admin.ts
+    triggers:
+      - type: http
+        method: POST
+        path: /admin
+  - name: webhook
+    entry: src/webhook.ts
+    triggers:
+      - type: http
+        method: POST
+        path: /webhook

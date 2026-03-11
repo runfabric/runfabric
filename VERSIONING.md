@@ -27,7 +27,8 @@ A change is breaking when at least one is true:
 Use pre-release tags when needed:
 
 - `x.y.z-rc.n` for release candidates.
-- `x.y.z-beta.n` for broader testing.
+- `x.y.z-beta.0` for the first beta cut of a version.
+- Increment beta iterations as needed: `x.y.z-beta.1`, `x.y.z-beta.2`, and so on.
 
 ## Monorepo Release Strategy
 

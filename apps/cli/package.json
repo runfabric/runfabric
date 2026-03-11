@@ -1,6 +1,6 @@
 {
   "name": "@runfabric/cli",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.0",
   "private": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,6 +30,7 @@
     "@runfabric/provider-gcp-functions": "workspace:*",
     "@runfabric/provider-ibm-openwhisk": "workspace:*",
     "@runfabric/provider-netlify": "workspace:*",
+    "@runfabric/runtime-node": "workspace:*",
     "@runfabric/provider-vercel": "workspace:*",
     "commander": "^14.0.1"
   },

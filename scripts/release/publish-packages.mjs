@@ -18,7 +18,24 @@ const publishOrder = [
   "@runfabric/cli"
 ];
 
+function readArgValue(name) {
+  const index = process.argv.indexOf(name);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith("--")) {
+    console.error(`${name} requires a value`);
+    process.exit(1);
+  }
+
+  return value;
+}
+
 const dryRun = process.argv.includes("--dry-run");
+const distTag = readArgValue("--tag") ?? process.env.NPM_DIST_TAG ?? "latest";
+const otp = readArgValue("--otp") ?? process.env.NPM_OTP;
 
 if (!dryRun && (!process.env.NPM_TOKEN || process.env.NPM_TOKEN.trim().length === 0)) {
   console.error("NPM_TOKEN is required for publish");
@@ -26,12 +43,15 @@ if (!dryRun && (!process.env.NPM_TOKEN || process.env.NPM_TOKEN.trim().length ==
 }
 
 for (const pkg of publishOrder) {
-  const args = ["--filter", pkg, "publish", "--access", "public", "--no-git-checks"];
+  const args = ["--filter", pkg, "publish", "--access", "public", "--tag", distTag, "--no-git-checks"];
+  if (otp && otp.trim().length > 0) {
+    args.push("--otp", otp.trim());
+  }
   if (dryRun) {
     args.push("--dry-run");
   }
 
-  console.log(`publishing ${pkg}${dryRun ? " (dry-run)" : ""}`);
+  console.log(`publishing ${pkg} with tag ${distTag}${dryRun ? " (dry-run)" : ""}`);
   const result = spawnSync("pnpm", args, {
     stdio: "inherit",
     env: {
@@ -40,6 +60,11 @@ for (const pkg of publishOrder) {
   });
 
   if (result.status !== 0) {
+    console.error("");
+    console.error("publish failed");
+    console.error("if npm returns E403 requiring 2FA:");
+    console.error("1) use a granular npm token with publish permission and bypass-2FA enabled, or");
+    console.error("2) provide one-time OTP via NPM_OTP or --otp <code> for local publish");
     process.exit(result.status ?? 1);
   }
 }

@@ -8,3 +8,4 @@ export * from "./azure-http-adapter";
 export * from "./ibm-openwhisk-adapter";
 export * from "./netlify-http-adapter";
 export * from "./vercel-http-adapter";
+export * from "./framework-wrappers";

@@ -4,7 +4,7 @@ All notable changes to `runfabric` are documented in this file.
 
 The format is based on the policy in `CHANGELOG_POLICY.md` and follows Semantic Versioning in `VERSIONING.md`.
 
-## [0.1.0] - 2026-03-11
+## [0.1.0-beta.0] - 2026-03-11
 
 ### Added
 

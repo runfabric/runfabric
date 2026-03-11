@@ -1,0 +1,38 @@
+# Root package should never ship workspace sources or repo tooling files.
+.github/
+.husky/
+.corepack-cache/
+.pnpm-store/
+.pnpm-home*/
+apps/
+packages/
+docs/
+examples/
+tests/
+scripts/
+release-notes/
+node_modules/
+.artifacts/
+coverage/
+
+# Build and workspace metadata
+pnpm-lock.yaml
+pnpm-workspace.yaml
+turbo.json
+tsconfig*.json
+*.tsbuildinfo
+
+# Local and generated noise
+*.log
+.DS_Store
+.env*
+
+# Project governance docs not needed in package tarball
+AGENTS.md
+CHANGELOG.md
+CHANGELOG_POLICY.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+RELEASE_PROCESS.md
+SOCIAL_ACCOUNTS_TODO.md
+VERSIONING.md

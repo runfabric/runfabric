@@ -30,3 +30,8 @@ pnpm run runfabric -- plan -c ./my-service/runfabric.yml
 pnpm run runfabric -- build -c ./my-service/runfabric.yml
 pnpm run runfabric -- deploy -c ./my-service/runfabric.yml
 ```
+
+Handler patterns and framework wrappers:
+
+- `docs/HANDLER_SCENARIOS.md`
+- `examples/handler-scenarios/README.md`
