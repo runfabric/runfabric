@@ -101,3 +101,10 @@ jobs:
           tag_name: v${{ inputs.version }}
           name: runfabric v${{ inputs.version }}
           body_path: release-notes/${{ inputs.version }}.md
+
+      - name: Verify published release artifacts
+        if: ${{ !inputs.dry_run }}
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm run release:verify:published -- --version "${RELEASE_VERSION}"

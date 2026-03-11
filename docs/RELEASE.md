@@ -40,6 +40,13 @@ If `publish=true` and `dry_run=false` it will:
 1. publish packages in dependency order
 2. create git tag `v<version>`
 3. create GitHub release using `release-notes/<version>.md`
+4. verify npm publish + git tag + GitHub release body via `release:verify:published`
+
+Manual equivalent:
+
+```bash
+pnpm run release:verify:published -- --version <version>
+```
 
 ## 4. Publish Order
 
@@ -56,3 +63,4 @@ The automation uses this order:
 
 - `NPM_TOKEN`
 - `RELEASE_NOTES_SIGNING_KEY`
+- `GITHUB_TOKEN` (provided automatically in GitHub Actions, required for API-based release body verification)
