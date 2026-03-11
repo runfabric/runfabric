@@ -5,11 +5,13 @@ import { buildProject } from "@runfabric/builder";
 import {
   createStateBackend,
   type DeployFailure,
+  type DeploymentMode,
   type ProjectConfig,
   type ProviderAdapter,
   type StateAddress,
   type StateBackend,
-  type StateLockInfo
+  type StateLockInfo,
+  readDeploymentReceipt
 } from "@runfabric/core";
 import { createPlan } from "@runfabric/planner";
 import { createProviderRegistry } from "../providers/registry";
@@ -31,7 +33,7 @@ export interface DeployWorkflowInput {
 export interface DeployWorkflowResult {
   stage: string;
   project: ProjectConfig;
-  deployments: Array<{ provider: string; endpoint?: string }>;
+  deployments: Array<{ provider: string; endpoint?: string; mode?: DeploymentMode }>;
   failures: DeployFailure[];
   rollbacks: Array<{ provider: string; ok: boolean; message?: string }>;
   summary: {
@@ -78,7 +80,7 @@ function compactStringMap(
 
 function summarizeResult(
   targetedProviders: number,
-  deployments: Array<{ provider: string; endpoint?: string }>,
+  deployments: Array<{ provider: string; endpoint?: string; mode?: DeploymentMode }>,
   failures: DeployFailure[],
   rollbacks: Array<{ provider: string; ok: boolean; message?: string }>
 ): DeployWorkflowResult["summary"] {
@@ -199,7 +201,7 @@ export async function executeDeployWorkflow(
     });
   }
 
-  const deployments: Array<{ provider: string; endpoint?: string }> = [];
+  const deployments: Array<{ provider: string; endpoint?: string; mode?: DeploymentMode }> = [];
   const failures: DeployFailure[] = [];
   const rollbacks: Array<{ provider: string; ok: boolean; message?: string }> = [];
   const successfulDeployments: SuccessfulProviderDeployment[] = [];
@@ -310,7 +312,12 @@ export async function executeDeployWorkflow(
         ...(materializedSecrets?.secretReferences || {}),
         ...(deployResult.secretReferences || {})
       });
-      deployments.push(deployResult);
+      const receipt = await readDeploymentReceipt(input.projectDir, provider.name);
+      deployments.push({
+        provider: deployResult.provider,
+        endpoint: deployResult.endpoint,
+        mode: receipt?.mode
+      });
       successfulDeployments.push({
         provider: provider.name,
         adapter: provider
@@ -476,7 +483,19 @@ function logDeployResult(result: DeployWorkflowResult): void {
   info(`stage: ${result.stage}`);
   info(`deployed to ${result.deployments.length} provider(s)`);
   for (const deployment of result.deployments) {
-    info(`${deployment.provider}: ${deployment.endpoint || "no endpoint"}`);
+    const modeSuffix = deployment.mode ? ` [${deployment.mode}]` : "";
+    info(`${deployment.provider}${modeSuffix}: ${deployment.endpoint || "no endpoint"}`);
+  }
+
+  const simulatedProviders = result.deployments
+    .filter((deployment) => deployment.mode === "simulated")
+    .map((deployment) => deployment.provider);
+  if (simulatedProviders.length > 0) {
+    warn(
+      `simulated deploy mode detected for ${simulatedProviders.join(
+        ", "
+      )}; no cloud resources were created. Configure real deploy env vars and commands (see docs/CREDENTIALS.md).`
+    );
   }
 
   if (result.failures.length > 0) {
