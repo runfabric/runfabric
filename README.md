@@ -183,6 +183,7 @@ Full command reference: `docs/site/command-reference.md`
 - `docs/PLUGIN_API.md`
 - `docs/RUNFABRIC_YML_REFERENCE.md`
 - `docs/EXAMPLES_MATRIX.md`
+- `docs/COMPARISON.md`
 - `docs/site/README.md`
 
 ## Community

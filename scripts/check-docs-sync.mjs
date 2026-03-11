@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 const errors = [];
@@ -9,6 +9,50 @@ function addError(message) {
 
 function readText(path) {
   return readFileSync(resolve(path), "utf8");
+}
+
+function normalizeText(content) {
+  return content
+    .toLowerCase()
+    .replace(/[`*_]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function collectMarkdownFiles(rootDir) {
+  const root = resolve(rootDir);
+  const out = [];
+
+  function walk(currentDir) {
+    const entries = readdirSync(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const absolute = resolve(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        walk(absolute);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      if (entry.name.toLowerCase().endsWith(".md")) {
+        out.push(relativePath(absolute));
+      }
+    }
+  }
+
+  if (existsSync(root) && statSync(root).isDirectory()) {
+    walk(root);
+  }
+
+  return normalizeSet(out);
+}
+
+function relativePath(absolutePath) {
+  const cwd = resolve(".");
+  if (!absolutePath.startsWith(cwd)) {
+    return absolutePath;
+  }
+  return absolutePath.slice(cwd.length + 1);
 }
 
 function normalizeSet(values) {
@@ -513,10 +557,82 @@ function validateExamplesMatrix() {
   }
 }
 
+function validateComparisonDocs() {
+  const comparisonDocs = collectMarkdownFiles("docs").filter((path) =>
+    /(?:^|\/)(?:comp|comparison)\.md$/i.test(path)
+  );
+
+  for (const filePath of comparisonDocs) {
+    const top = readText(filePath).split(/\r?\n/).slice(0, 10).join("\n");
+    if (
+      !top.includes("Source of truth:") ||
+      !top.includes("README.md") ||
+      !top.includes("ARCHITECTURE.md")
+    ) {
+      addError(
+        `${filePath}: missing top source-of-truth note that points to README.md and docs/ARCHITECTURE.md`
+      );
+    }
+  }
+}
+
+function validateContradictoryPositioningPhrases() {
+  const filesToCheck = normalizeSet(["README.md", "AGENTS.md", ...collectMarkdownFiles("docs")]);
+  const forbiddenPhrases = [
+    "workflow / compute execution platform (ai + job orchestration)",
+    "workflow / compute execution platform",
+    "not a lambda deployment framework",
+    "targeting workflow orchestration and ai workloads"
+  ];
+
+  for (const filePath of filesToCheck) {
+    const normalized = readText(filePath).toLowerCase().replace(/\s+/g, " ");
+    for (const phrase of forbiddenPhrases) {
+      if (normalized.includes(phrase)) {
+        addError(`${filePath}: contradictory positioning phrase detected -> "${phrase}"`);
+      }
+    }
+  }
+}
+
+function validateAgentsProjectTruths() {
+  const filePath = "AGENTS.md";
+  if (!existsSync(resolve(filePath))) {
+    addError("AGENTS.md is missing");
+    return;
+  }
+
+  const content = readText(filePath);
+  const sectionLines = extractSectionLines(content, "## Project truths");
+  if (sectionLines.length === 0) {
+    addError('AGENTS.md: missing "## Project truths" section');
+    return;
+  }
+
+  const normalizedSection = normalizeText(sectionLines.join("\n"));
+  const requiredPhrases = [
+    "runfabric is a cli-first multi-provider serverless framework.",
+    "uses runfabric.yml, not serverless.yml.",
+    "not a cluster scheduler / standalone compute fabric runtime.",
+    "current production-ready path is node-first (runtime: nodejs).",
+    "core lifecycle: doctor -> plan -> build|package -> deploy -> invoke/logs/traces/metrics -> remove.",
+    "state operations are under runfabric state."
+  ];
+
+  for (const phrase of requiredPhrases) {
+    if (!normalizedSection.includes(normalizeText(phrase))) {
+      addError(`AGENTS.md: missing required project truth -> "${phrase}"`);
+    }
+  }
+}
+
 function main() {
   validateCommandReference();
   validateCredentialDocs();
   validateExamplesMatrix();
+  validateComparisonDocs();
+  validateContradictoryPositioningPhrases();
+  validateAgentsProjectTruths();
 
   if (errors.length > 0) {
     console.error("docs sync check failed:");

@@ -1,63 +1,99 @@
-# AGENTS
+# AGENTS.md
 
-Guidelines for automated coding agents and maintainers working in this repository.
+## Purpose
 
-## Objectives
+Instructions for coding agents working in the RunFabric monorepo.
 
-- Keep `runfabric` a portable, provider-oriented serverless framework.
-- Prefer incremental, test-backed changes.
-- Keep docs aligned with current CLI behavior.
-
-## Canonical Project Facts
-
-Use these statements as source-of-truth when generating docs, summaries, comparisons, or release notes:
+## Project truths
 
 - `runfabric` is a CLI-first multi-provider serverless framework.
-- It uses `runfabric.yml` (not `serverless.yml`) and is not a drop-in replacement for Serverless Framework config format.
-- Current release train is Node-first (`runtime: nodejs` is the production-ready path).
-- It is not a cluster scheduler or standalone compute fabric runtime.
-- Core flow is: `doctor -> plan -> build|package -> deploy -> invoke/logs/traces/metrics -> remove`.
-- State operations are exposed via `runfabric state` (`pull|list|backup|restore|force-unlock|migrate|reconcile`).
-- Migration bootstrap is available via `runfabric migrate --input ./serverless.yml --output ./runfabric.yml`.
-- Remote state backends (`postgres|s3|gcs|azblob`) currently use simulated local storage paths under `.runfabric/state-remote/...` for dev/test mode.
-- Local development entrypoints are `runfabric call-local` and `runfabric dev`.
+- Uses `runfabric.yml`, not `serverless.yml`.
+- Not a cluster scheduler / standalone compute fabric runtime.
+- Current production-ready path is Node-first (`runtime: nodejs`).
+- Core lifecycle: `doctor -> plan -> build|package -> deploy -> invoke/logs/traces/metrics -> remove`.
+- State operations are under `runfabric state`.
 
-If any document conflicts with these facts, prefer:
+## First actions
 
-1. `AGENTS.md`
-2. `README.md`
-3. `docs/ARCHITECTURE.md`
+1. Classify task: docs-only | bugfix | feature | provider adapter | schema/compat | release.
+2. Read only the owning module plus at most 2 directly related files first.
+3. Define success criteria before editing.
+4. Keep changes minimal and scoped.
 
-## Engineering Rules
+## Repo map
 
-- Do not introduce breaking CLI/config changes without updating versioning and migration docs.
-- Keep provider credential schema, doctor checks, and docs synchronized.
-- Add or update tests for planner, builder, and provider adapter behavior changes.
-- Avoid destructive git/file operations unless explicitly requested.
+- `apps/cli`: CLI commands and UX
+- `packages/core`: shared contracts and abstractions
+- `packages/planner`: parsing, validations, portability planning
+- `packages/builder`: artifact assembly
+- `packages/runtime-node`: Node runtime adapters
+- `packages/provider-*`: provider-specific adapters
+- `tests`: unit/integration tests
+- `scripts`: validation/release utilities
+- `docs`: product and contributor docs
 
-## Required Checks Before Finalizing Changes
+## Architecture guardrails
 
-```bash
-pnpm run check:syntax
-pnpm run check:compatibility
-pnpm test
-pnpm -r --if-present run build
-pnpm -r --if-present run typecheck
-```
+- Keep shared packages provider-neutral.
+- Put provider-specific behavior in `packages/provider-*`.
+- Do not weaken portability checks without tests and docs.
+- Do not introduce breaking CLI/config changes without migration/versioning updates.
 
-## Documentation Sync
+## Change matrix
 
-When changing behavior, update at least the relevant files:
+### CLI behavior change
 
-- `README.md`
-- `docs/QUICKSTART.md`
-- `docs/CREDENTIALS.md`
-- `docs/ARCHITECTURE.md`
-- `docs/TODO.md`
-- `docs/PLUGIN_API.md`
-- `docs/RUNFABRIC_YML_REFERENCE.md`
+- Update tests for command behavior.
+- Update `README.md` and `docs/QUICKSTART.md` if user-facing behavior changed.
 
-## Release Safety
+### Schema/config change
 
-- Follow `RELEASE_PROCESS.md` for release tasks.
-- Use `docs/RELEASE.md` for package publish order and verification steps.
+- Update schema compatibility checks.
+- Update `docs/RUNFABRIC_YML_REFERENCE.md`.
+- Update migration/versioning docs if breaking or behaviorally significant.
+
+### Provider adapter change
+
+- Update provider contract checks.
+- Run capabilities sync checks.
+- Update provider setup/credential docs if needed.
+
+### Docs-only
+
+- Do not run full workspace checks unless docs describe behavior that must be re-verified.
+
+## Required validation
+
+Default final gate for behavior changes:
+
+- `npm run release:check`
+
+Minimum allowed lighter checks:
+
+- docs-only: `npm run check:docs-sync`
+- small code change in one package: relevant tests + `npm run check:syntax` + `npm run check:compatibility`
+  Escalate to `npm run release:check` if shared contracts, schema, planner, provider behavior, or docs-sync are affected.
+
+## Documentation triggers
+
+- CLI/lifecycle changes -> `README.md`, `docs/QUICKSTART.md`
+- credentials/doctor changes -> `docs/CREDENTIALS.md`, `docs/PROVIDER-SETUP.md`
+- schema changes -> `docs/RUNFABRIC_YML_REFERENCE.md`
+- architecture/plugin changes -> `docs/ARCHITECTURE.md`, `docs/PLUGIN_API.md`
+
+## Do not
+
+- Do not perform destructive git operations unless explicitly asked.
+- Do not make unrelated formatting or cleanup changes.
+- Do not change config/flag names casually.
+- Do not edit release/signing artifacts unless the task is release-related.
+
+## Final output expectations
+
+State:
+
+- what changed,
+- what did not change,
+- checks run,
+- docs updated,
+- remaining risks or follow-ups.
