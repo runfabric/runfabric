@@ -2,7 +2,9 @@
 
 Only pending work is listed here. Completed items are removed.
 
-## P8 - Multi-Runtime Support (Post Node-First GA)
+## Backlog
+
+### P8 - Multi-Runtime Support (Post Node-First GA)
 
 - Add typed runtime support matrix in core/planner:
   - `runtime: nodejs | python | go | java | rust | dotnet`
@@ -14,7 +16,7 @@ Only pending work is listed here. Completed items are removed.
   - rust binary packaging adapter
   - dotnet publish adapter
 
-## P9 - Optional IaC Resource Provisioning (Terraform / Pulumi)
+### P9 - Optional IaC Resource Provisioning (Terraform / Pulumi)
 
 - Add optional Terraform-backed provisioning mode for resources:
   - `resources.provisioner: native | terraform | pulumi`
