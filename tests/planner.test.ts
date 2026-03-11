@@ -1,5 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {
+  AwsQueueFunctionResponseTypeEnum,
+  TriggerEnum
+} from "../packages/core/src/index.ts";
 import { parseProjectConfig } from "../packages/planner/src/parse-config.ts";
 import { createPlan } from "../packages/planner/src/planner.ts";
 
@@ -23,7 +27,7 @@ test("parseProjectConfig parses providers and triggers", () => {
   const project = parseProjectConfig(config);
   assert.equal(project.service, "hello-http");
   assert.equal(project.providers.length, 2);
-  assert.equal(project.triggers[0].type, "http");
+  assert.equal(project.triggers[0].type, TriggerEnum.Http);
 });
 
 test("parseProjectConfig validates schema and parses extensions scalars", () => {
@@ -185,6 +189,69 @@ test("parseProjectConfig parses hooks and function entries", () => {
   assert.equal(project.functions?.[0]?.entry, "src/api.ts");
 });
 
+test("parseProjectConfig parses state backend schema", () => {
+  const config = [
+    "service: state-schema",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "state:",
+    "  backend: s3",
+    "  keyPrefix: runfabric/custom",
+    "  lock:",
+    "    enabled: true",
+    "    timeoutSeconds: 45",
+    "    heartbeatSeconds: 15",
+    "    staleAfterSeconds: 90",
+    "  s3:",
+    "    bucket: deploy-state",
+    "    region: us-east-1",
+    "    keyPrefix: runfabric/s3-state",
+    "    useLockfile: true",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /state",
+    ""
+  ].join("\n");
+
+  const project = parseProjectConfig(config);
+  assert.equal(project.state?.backend, "s3");
+  assert.equal(project.state?.keyPrefix, "runfabric/custom");
+  assert.equal(project.state?.lock?.timeoutSeconds, 45);
+  assert.equal(project.state?.s3?.bucket, "deploy-state");
+  assert.equal(project.state?.s3?.keyPrefix, "runfabric/s3-state");
+});
+
+test("parseProjectConfig validates backend-specific state requirements", () => {
+  const invalidS3 = [
+    "service: invalid-state-s3",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "state:",
+    "  backend: s3",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /state",
+    ""
+  ].join("\n");
+
+  assert.throws(
+    () => parseProjectConfig(invalidS3),
+    /state\.s3\.bucket is required when state\.backend is s3/
+  );
+});
+
 test("createPlan reports unsupported queue trigger on cloudflare-workers", () => {
   const config = [
     "service: queue-worker",
@@ -317,4 +384,290 @@ test("createPlan adds portability warning for partially supported triggers", () 
   assert.equal(plan.ok, false);
   assert.ok(plan.warnings.some((value) => value.includes("partial portability")));
   assert.ok(plan.portability.partiallySupportedTriggerTypes.includes("queue"));
+});
+
+test("parseProjectConfig parses queue/storage trigger fields, aws iam extension, and function env", () => {
+  const config = [
+    "service: aws-events",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "triggers:",
+    "  - type: queue",
+    "    queue: arn:aws:sqs:us-east-1:123456789012:jobs",
+    "    batchSize: 10",
+    "    maximumBatchingWindowSeconds: 5",
+    "    enabled: true",
+    "    functionResponseType: ReportBatchItemFailures",
+    "  - type: storage",
+    "    bucket: uploads",
+    "    events:",
+    "      - s3:ObjectCreated:*",
+    "    prefix: incoming/",
+    "    suffix: .json",
+    "    existingBucket: true",
+    "",
+    "functions:",
+    "  - name: save",
+    "    entry: src/save.ts",
+    "    env:",
+    "      BUCKET: uploads",
+    "",
+    "extensions:",
+    "  aws-lambda:",
+    "    stage: prod",
+    "    region: us-east-1",
+    "    iam:",
+    "      role:",
+    "        statements:",
+    "          - effect: Allow",
+    "            actions:",
+    "              - s3:PutObject",
+    "            resources:",
+    "              - arn:aws:s3:::uploads/*",
+    ""
+  ].join("\n");
+
+  const project = parseProjectConfig(config);
+  const queueTrigger = project.triggers[0];
+  const storageTrigger = project.triggers[1];
+
+  assert.equal(queueTrigger.type, "queue");
+  assert.equal(queueTrigger.batchSize, 10);
+  assert.equal(queueTrigger.maximumBatchingWindowSeconds, 5);
+  assert.equal(queueTrigger.enabled, true);
+  assert.equal(
+    queueTrigger.functionResponseType,
+    AwsQueueFunctionResponseTypeEnum.ReportBatchItemFailures
+  );
+
+  assert.equal(storageTrigger.type, "storage");
+  assert.equal(storageTrigger.bucket, "uploads");
+  assert.deepEqual(storageTrigger.events, ["s3:ObjectCreated:*"]);
+  assert.equal(storageTrigger.existingBucket, true);
+  assert.equal(project.functions?.[0]?.env?.BUCKET, "uploads");
+
+  const awsExt = project.extensions?.["aws-lambda"] as Record<string, unknown> | undefined;
+  assert.ok(awsExt);
+  const iam = awsExt?.iam as Record<string, unknown>;
+  const role = iam.role as Record<string, unknown>;
+  const statements = role.statements as Array<Record<string, unknown>>;
+  assert.equal(statements[0].effect, "Allow");
+});
+
+test("parseProjectConfig rejects invalid aws iam statement schema", () => {
+  const invalidConfig = [
+    "service: invalid-iam",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /hello",
+    "",
+    "extensions:",
+    "  aws-lambda:",
+    "    iam:",
+    "      role:",
+    "        statements:",
+    "          - effect: Maybe",
+    "            actions:",
+    "              - s3:PutObject",
+    "            resources:",
+    "              - arn:aws:s3:::uploads/*",
+    ""
+  ].join("\n");
+
+  assert.throws(() => parseProjectConfig(invalidConfig), /effect must be Allow or Deny/);
+});
+
+test("createPlan validates queue/storage required fields", () => {
+  const queueMissing = createPlan({
+    service: "queue-missing",
+    runtime: "nodejs",
+    entry: "src/index.ts",
+    stage: "default",
+    providers: ["aws-lambda"],
+    triggers: [{ type: TriggerEnum.Queue }]
+  });
+  assert.equal(queueMissing.ok, false);
+  assert.ok(queueMissing.errors.some((message) => message.includes("queue trigger requires queue")));
+
+  const storageMissing = createPlan({
+    service: "storage-missing",
+    runtime: "nodejs",
+    entry: "src/index.ts",
+    stage: "default",
+    providers: ["aws-lambda"],
+    triggers: [{ type: TriggerEnum.Storage, bucket: "uploads" }]
+  });
+  assert.equal(storageMissing.ok, false);
+  assert.ok(storageMissing.errors.some((message) => message.includes("storage trigger requires events")));
+});
+
+test("createPlan reports unsupported storage trigger on cloudflare-workers", () => {
+  const plan = createPlan({
+    service: "storage-worker",
+    runtime: "nodejs",
+    entry: "src/worker.ts",
+    stage: "default",
+    providers: ["cloudflare-workers"],
+    triggers: [
+      {
+        type: TriggerEnum.Storage,
+        bucket: "uploads",
+        events: ["s3:ObjectCreated:*"]
+      }
+    ]
+  });
+
+  assert.equal(plan.ok, false);
+  assert.ok(plan.errors.some((message) => message.includes("storage trigger is not supported")));
+});
+
+test("parseProjectConfig parses eventbridge/pubsub/kafka/rabbitmq trigger schemas", () => {
+  const config = [
+    "service: advanced-triggers",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "  - gcp-functions",
+    "",
+    "triggers:",
+    "  - type: eventbridge",
+    "    bus: default",
+    "    pattern:",
+    "      source:",
+    "        - runfabric.test",
+    "  - type: pubsub",
+    "    topic: projects/test/topics/events",
+    "    subscription: projects/test/subscriptions/events-sub",
+    "  - type: kafka",
+    "    brokers:",
+    "      - broker-1:9092",
+    "      - broker-2:9092",
+    "    topic: stream-events",
+    "    groupId: consumer-a",
+    "  - type: rabbitmq",
+    "    queue: jobs",
+    "    exchange: jobs-exchange",
+    "    routingKey: jobs.created",
+    ""
+  ].join("\n");
+
+  const project = parseProjectConfig(config);
+  assert.equal(project.triggers[0].type, TriggerEnum.EventBridge);
+  assert.equal(project.triggers[1].type, TriggerEnum.PubSub);
+  assert.equal(project.triggers[2].type, TriggerEnum.Kafka);
+  assert.equal(project.triggers[3].type, TriggerEnum.RabbitMq);
+});
+
+test("parseProjectConfig parses workflows/resources/secrets schema", () => {
+  const config = [
+    "service: workflow-resources-secrets",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /",
+    "",
+    "resources:",
+    "  queues:",
+    "    - name: jobs",
+    "      fifo: false",
+    "  buckets:",
+    "    - name: uploads",
+    "  topics:",
+    "    - name: events",
+    "  databases:",
+    "    - name: appdb",
+    "      engine: postgres",
+    "",
+    "secrets:",
+    "  DB_PASSWORD: secret://prod/app/db-password",
+    "",
+    "workflows:",
+    "  - name: process-pipeline",
+    "    steps:",
+    "      - function: ingest",
+    "        next: transform",
+    "        retry:",
+    "          attempts: 3",
+    "          backoffSeconds: 5",
+    "      - function: transform",
+    "        timeoutSeconds: 120",
+    ""
+  ].join("\n");
+
+  const project = parseProjectConfig(config);
+  assert.equal(project.resources?.queues?.[0]?.name, "jobs");
+  assert.equal(project.resources?.databases?.[0]?.name, "appdb");
+  assert.equal(project.secrets?.DB_PASSWORD, "secret://prod/app/db-password");
+  assert.equal(project.workflows?.[0]?.name, "process-pipeline");
+  assert.equal(project.workflows?.[0]?.steps.length, 2);
+});
+
+test("parseProjectConfig rejects invalid secrets schema value", () => {
+  const config = [
+    "service: invalid-secrets",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /",
+    "",
+    "secrets:",
+    "  DB_PASSWORD: plaintext-secret",
+    ""
+  ].join("\n");
+
+  assert.throws(() => parseProjectConfig(config), /secrets\.DB_PASSWORD must use secret:\/\/<ref> format/);
+});
+
+test("createPlan validates support for new trigger types and warns on non-node runtime", () => {
+  const config = [
+    "service: non-node-advanced",
+    "runtime: python",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "  - gcp-functions",
+    "",
+    "triggers:",
+    "  - type: eventbridge",
+    "    pattern:",
+    "      source:",
+    "        - runfabric.test",
+    "  - type: pubsub",
+    "    topic: projects/test/topics/events",
+    ""
+  ].join("\n");
+
+  const plan = createPlan(parseProjectConfig(config));
+  assert.equal(plan.ok, false);
+  assert.ok(plan.warnings.some((warning) => warning.includes("runtime python is not production-ready")));
+  assert.ok(plan.errors.some((error) => error.includes("gcp-functions: eventbridge trigger is not supported")));
+  assert.ok(plan.errors.some((error) => error.includes("aws-lambda: pubsub trigger is not supported")));
+  assert.ok(plan.portability.partiallySupportedTriggerTypes.includes("eventbridge"));
+  assert.ok(plan.portability.partiallySupportedTriggerTypes.includes("pubsub"));
 });

@@ -35,7 +35,10 @@ export function resolveFunctionProject(project: ProjectConfig, functionName?: st
     runtime: target.runtime || project.runtime,
     entry: target.entry || project.entry,
     triggers: target.triggers || project.triggers,
-    resources: target.resources || project.resources
+    resources: target.resources || project.resources,
+    env: {
+      ...(project.env || {}),
+      ...(target.env || {})
+    }
   };
 }
-

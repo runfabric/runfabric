@@ -1,3 +1,4 @@
+import { TriggerEnum } from "@runfabric/core";
 import type { ProjectConfig, ProviderCapabilities } from "@runfabric/core";
 
 export interface PortabilityDiagnostics {
@@ -7,15 +8,30 @@ export interface PortabilityDiagnostics {
   providerGaps: Record<string, string[]>;
 }
 
-function supportsTrigger(type: string, capabilities: ProviderCapabilities): boolean {
-  if (type === "http") {
+function supportsTrigger(type: TriggerEnum, capabilities: ProviderCapabilities): boolean {
+  if (type === TriggerEnum.Http) {
     return capabilities.http;
   }
-  if (type === "cron") {
+  if (type === TriggerEnum.Cron) {
     return capabilities.cron;
   }
-  if (type === "queue") {
+  if (type === TriggerEnum.Queue) {
     return capabilities.queue;
+  }
+  if (type === TriggerEnum.Storage) {
+    return capabilities.storageEvent;
+  }
+  if (type === TriggerEnum.EventBridge) {
+    return capabilities.eventbridge;
+  }
+  if (type === TriggerEnum.PubSub) {
+    return capabilities.pubsub;
+  }
+  if (type === TriggerEnum.Kafka) {
+    return capabilities.kafka;
+  }
+  if (type === TriggerEnum.RabbitMq) {
+    return capabilities.rabbitmq;
   }
   return false;
 }

@@ -4,6 +4,7 @@ import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { ProviderAdapter, ProjectConfig } from "@runfabric/core";
+import { TriggerEnum } from "@runfabric/core";
 import { createAlibabaFcProvider } from "../packages/provider-alibaba-fc/src/index.ts";
 import { createAzureFunctionsProvider } from "../packages/provider-azure-functions/src/index.ts";
 import { createCloudflareWorkersProvider } from "../packages/provider-cloudflare-workers/src/index.ts";
@@ -26,7 +27,7 @@ function createProject(provider: string): ProjectConfig {
     runtime: "nodejs",
     entry: "src/index.ts",
     providers: [provider],
-    triggers: [{ type: "http", method: "GET", path: "/hello" }]
+    triggers: [{ type: TriggerEnum.Http, method: "GET", path: "/hello" }]
   };
 }
 

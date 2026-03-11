@@ -3,6 +3,10 @@ export interface ProviderCapabilities {
   cron: boolean;
   queue: boolean;
   storageEvent: boolean;
+  eventbridge: boolean;
+  pubsub: boolean;
+  kafka: boolean;
+  rabbitmq: boolean;
   streamingResponse: boolean;
   edgeRuntime: boolean;
   containerImage: boolean;

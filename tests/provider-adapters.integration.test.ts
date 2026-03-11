@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { ProjectConfig, ProviderAdapter } from "../packages/core/src/index.ts";
+import { TriggerEnum } from "../packages/core/src/index.ts";
 import { createPlan } from "../packages/planner/src/planner.ts";
 import { buildProject } from "../packages/builder/src/index.ts";
 import { createAlibabaFcProvider } from "../packages/provider-alibaba-fc/src/index.ts";
@@ -131,7 +132,7 @@ function createProject(provider: string): ProjectConfig {
     runtime: "nodejs",
     entry: "src/index.ts",
     providers: [provider],
-    triggers: [{ type: "http", method: "GET", path: "/integration" }]
+    triggers: [{ type: TriggerEnum.Http, method: "GET", path: "/integration" }]
   };
 }
 

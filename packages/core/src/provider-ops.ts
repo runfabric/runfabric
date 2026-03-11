@@ -5,8 +5,13 @@ import { join, resolve } from "node:path";
 import type {
   InvokeInput,
   InvokeResult,
+  MetricsInput,
+  MetricsResult,
   LogsInput,
-  LogsResult
+  LogsResult,
+  TraceRecord,
+  TracesInput,
+  TracesResult
 } from "./provider";
 import type { ProviderCredentialSchema } from "./credentials";
 
@@ -25,6 +30,12 @@ export interface DeploymentReceipt {
   resource?: Record<string, unknown>;
   rawResponse?: unknown;
   createdAt: string;
+  correlation?: {
+    deploymentId: string;
+    deployTraceId: string;
+    latestInvokeId?: string;
+    latestInvokeAt?: string;
+  };
 }
 
 export interface ProviderDeployPaths {
@@ -91,7 +102,16 @@ export async function writeDeploymentReceipt(
 ): Promise<void> {
   const paths = providerDeployPaths(projectDir, provider);
   await mkdir(paths.deployDir, { recursive: true });
-  await writeFile(paths.receiptPath, JSON.stringify(receipt, null, 2), "utf8");
+  const normalized: DeploymentReceipt = {
+    ...receipt,
+    correlation: {
+      deploymentId: receipt.deploymentId,
+      deployTraceId: receipt.correlation?.deployTraceId || `deploy-${receipt.deploymentId}`,
+      latestInvokeId: receipt.correlation?.latestInvokeId,
+      latestInvokeAt: receipt.correlation?.latestInvokeAt
+    }
+  };
+  await writeFile(paths.receiptPath, JSON.stringify(normalized, null, 2), "utf8");
 }
 
 export async function readDeploymentReceipt(
@@ -119,6 +139,25 @@ export async function appendProviderLog(
   const paths = providerDeployPaths(projectDir, provider);
   await mkdir(paths.deployDir, { recursive: true });
   await appendFile(paths.logPath, `${new Date().toISOString()} ${message}\n`, "utf8");
+}
+
+function parseLogLineToTrace(provider: string, line: string): TraceRecord {
+  const firstSpace = line.indexOf(" ");
+  const timestamp = firstSpace > 0 ? line.slice(0, firstSpace) : new Date().toISOString();
+  const message = firstSpace > 0 ? line.slice(firstSpace + 1) : line;
+
+  const deploymentMatch = message.match(/deploymentId=([^\s]+)/);
+  const invokeMatch = message.match(/invokeId=([^\s]+)/);
+  const correlationMatch = message.match(/correlationId=([^\s]+)/);
+
+  return {
+    timestamp,
+    provider,
+    message,
+    deploymentId: deploymentMatch?.[1],
+    invokeId: invokeMatch?.[1],
+    correlationId: correlationMatch?.[1]
+  };
 }
 
 export async function readProviderLogLines(
@@ -188,6 +227,81 @@ export async function buildProviderLogsFromLocalArtifacts(
   };
 }
 
+export async function buildProviderTracesFromLocalArtifacts(
+  projectDir: string,
+  provider: string,
+  input: TracesInput
+): Promise<TracesResult> {
+  const logs = await readProviderLogLines(projectDir, provider, input.since);
+  let traces = logs.map((line) => parseLogLineToTrace(provider, line));
+
+  if (input.correlationId) {
+    traces = traces.filter((trace) =>
+      trace.message.includes(input.correlationId || "")
+    );
+  }
+
+  if (typeof input.limit === "number" && Number.isFinite(input.limit) && input.limit > 0) {
+    traces = traces.slice(-Math.floor(input.limit));
+  }
+
+  if (traces.length > 0) {
+    return { traces };
+  }
+
+  const receipt = await readDeploymentReceipt(projectDir, provider);
+  if (!receipt) {
+    return { traces: [] };
+  }
+
+  return {
+    traces: [
+      {
+        timestamp: receipt.createdAt,
+        provider,
+        message: `deploy receipt deploymentId=${receipt.deploymentId} mode=${receipt.mode}`,
+        deploymentId: receipt.deploymentId,
+        correlationId: receipt.correlation?.deployTraceId
+      }
+    ]
+  };
+}
+
+export async function buildProviderMetricsFromLocalArtifacts(
+  projectDir: string,
+  provider: string,
+  input: MetricsInput
+): Promise<MetricsResult> {
+  const logs = await readProviderLogLines(projectDir, provider, input.since);
+  const invokeLines = logs.filter((line) => line.includes(" invoke "));
+  const invokeFailures = logs.filter((line) => line.includes("invoke failed")).length;
+  const deployLines = logs.filter((line) => line.includes("deploy deploymentId=")).length;
+
+  const receipt = await readDeploymentReceipt(projectDir, provider);
+  const now = Date.now();
+  const deployAgeSeconds =
+    receipt && !Number.isNaN(Date.parse(receipt.createdAt))
+      ? Math.max(0, Math.floor((now - Date.parse(receipt.createdAt)) / 1000))
+      : NaN;
+
+  const metrics: MetricsResult["metrics"] = [
+    { name: "log_lines_total", value: logs.length, unit: "count" },
+    { name: "invoke_total", value: invokeLines.length, unit: "count" },
+    { name: "invoke_failures_total", value: invokeFailures, unit: "count" },
+    { name: "deploy_total", value: deployLines, unit: "count" }
+  ];
+
+  if (!Number.isNaN(deployAgeSeconds)) {
+    metrics.push({
+      name: "seconds_since_last_deploy",
+      value: deployAgeSeconds,
+      unit: "seconds"
+    });
+  }
+
+  return { metrics };
+}
+
 function resolvePayload(input: InvokeInput): { method: string; body?: string; contentType?: string } {
   if (!input.payload) {
     return { method: "GET" };
@@ -231,9 +345,14 @@ export async function invokeProviderViaDeployedEndpoint(
   }
 
   const payload = resolvePayload(input);
+  const invokeId = randomUUID();
+  const correlationId = `invoke-${invokeId}`;
   const headers: Record<string, string> = {
     "x-runfabric-provider": provider
   };
+  headers["x-runfabric-deployment-id"] = receipt.deploymentId;
+  headers["x-runfabric-invoke-id"] = invokeId;
+  headers["x-runfabric-correlation-id"] = correlationId;
   if (payload.contentType) {
     headers["content-type"] = payload.contentType;
   }
@@ -249,21 +368,51 @@ export async function invokeProviderViaDeployedEndpoint(
     await appendProviderLog(
       projectDir,
       provider,
-      `invoke endpoint=${receipt.endpoint} status=${response.status}`
+      `invoke deploymentId=${receipt.deploymentId} invokeId=${invokeId} correlationId=${correlationId} endpoint=${receipt.endpoint} status=${response.status}`
     );
+    await writeDeploymentReceipt(projectDir, provider, {
+      ...receipt,
+      correlation: {
+        deploymentId: receipt.deploymentId,
+        deployTraceId: receipt.correlation?.deployTraceId || `deploy-${receipt.deploymentId}`,
+        latestInvokeId: invokeId,
+        latestInvokeAt: new Date().toISOString()
+      }
+    });
     return {
       statusCode: response.status,
-      body: bodyText
+      body: bodyText,
+      correlation: {
+        deploymentId: receipt.deploymentId,
+        invokeId
+      }
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await appendProviderLog(projectDir, provider, `invoke failed error=${message}`);
+    await appendProviderLog(
+      projectDir,
+      provider,
+      `invoke failed deploymentId=${receipt.deploymentId} invokeId=${invokeId} correlationId=${correlationId} error=${message}`
+    );
+    await writeDeploymentReceipt(projectDir, provider, {
+      ...receipt,
+      correlation: {
+        deploymentId: receipt.deploymentId,
+        deployTraceId: receipt.correlation?.deployTraceId || `deploy-${receipt.deploymentId}`,
+        latestInvokeId: invokeId,
+        latestInvokeAt: new Date().toISOString()
+      }
+    });
     return {
       statusCode: 502,
       body: JSON.stringify({
         error: "invoke failed",
         message
-      })
+      }),
+      correlation: {
+        deploymentId: receipt.deploymentId,
+        invokeId
+      }
     };
   }
 }
@@ -332,4 +481,122 @@ export async function runJsonCommand(
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`command output is not valid JSON: ${message}`);
   }
+}
+
+function normalizeTraceRecord(raw: unknown, provider: string): TraceRecord | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const entry = raw as Record<string, unknown>;
+  const timestamp =
+    typeof entry.timestamp === "string" && entry.timestamp.trim().length > 0
+      ? entry.timestamp
+      : new Date().toISOString();
+  const message =
+    typeof entry.message === "string" && entry.message.trim().length > 0
+      ? entry.message
+      : JSON.stringify(entry);
+  const deploymentId =
+    typeof entry.deploymentId === "string" && entry.deploymentId.trim().length > 0
+      ? entry.deploymentId
+      : undefined;
+  const invokeId =
+    typeof entry.invokeId === "string" && entry.invokeId.trim().length > 0 ? entry.invokeId : undefined;
+  const correlationId =
+    typeof entry.correlationId === "string" && entry.correlationId.trim().length > 0
+      ? entry.correlationId
+      : undefined;
+
+  return {
+    timestamp,
+    provider,
+    message,
+    deploymentId,
+    invokeId,
+    correlationId
+  };
+}
+
+function normalizeMetricRecord(
+  raw: unknown
+): { name: string; value: number; unit?: string } | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const entry = raw as Record<string, unknown>;
+  if (typeof entry.name !== "string" || entry.name.trim().length === 0) {
+    return null;
+  }
+  if (typeof entry.value !== "number" || !Number.isFinite(entry.value)) {
+    return null;
+  }
+
+  return {
+    name: entry.name,
+    value: entry.value,
+    unit:
+      typeof entry.unit === "string" && entry.unit.trim().length > 0
+        ? entry.unit
+        : undefined
+  };
+}
+
+export function parseProviderTracesPayload(raw: unknown, provider: string): TracesResult {
+  if (Array.isArray(raw)) {
+    const traces = raw
+      .map((entry) => normalizeTraceRecord(entry, provider))
+      .filter((entry): entry is TraceRecord => entry !== null);
+    return { traces };
+  }
+
+  if (raw && typeof raw === "object") {
+    const payload = raw as Record<string, unknown>;
+    if (Array.isArray(payload.traces)) {
+      const traces = payload.traces
+        .map((entry) => normalizeTraceRecord(entry, provider))
+        .filter((entry): entry is TraceRecord => entry !== null);
+      return { traces };
+    }
+  }
+
+  throw new Error("trace command output must be { traces: [...] } or an array");
+}
+
+export function parseProviderMetricsPayload(raw: unknown): MetricsResult {
+  if (Array.isArray(raw)) {
+    const metrics = raw
+      .map((entry) => normalizeMetricRecord(entry))
+      .filter((entry): entry is { name: string; value: number; unit?: string } => entry !== null);
+    return { metrics };
+  }
+
+  if (raw && typeof raw === "object") {
+    const payload = raw as Record<string, unknown>;
+    if (Array.isArray(payload.metrics)) {
+      const metrics = payload.metrics
+        .map((entry) => normalizeMetricRecord(entry))
+        .filter((entry): entry is { name: string; value: number; unit?: string } => entry !== null);
+      return { metrics };
+    }
+  }
+
+  throw new Error("metrics command output must be { metrics: [...] } or an array");
+}
+
+export async function runProviderTracesCommand(
+  command: string,
+  provider: string,
+  options?: { cwd?: string; env?: Record<string, string | undefined> }
+): Promise<TracesResult> {
+  const raw = await runJsonCommand(command, options);
+  return parseProviderTracesPayload(raw, provider);
+}
+
+export async function runProviderMetricsCommand(
+  command: string,
+  options?: { cwd?: string; env?: Record<string, string | undefined> }
+): Promise<MetricsResult> {
+  const raw = await runJsonCommand(command, options);
+  return parseProviderMetricsPayload(raw);
 }

@@ -1,4 +1,5 @@
 export * from './types';
+export * from './enums';
 export * from "./capabilities";
 export * from "./credentials";
 export * from "./hooks";
