@@ -177,6 +177,5 @@ secrets:
 
 ## Related Docs
 
-- `docs/RUNFABRIC_YML_SCHEMA_PROPOSAL.md`
 - `docs/QUICKSTART.md`
 - `docs/HANDLER_SCENARIOS.md`
