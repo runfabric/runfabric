@@ -1,3 +1,19 @@
+import { readdir, readFile } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, relative, resolve } from "node:path";
+import {
+  AddPermissionCommand,
+  CreateFunctionCommand,
+  CreateFunctionUrlConfigCommand,
+  DeleteFunctionCommand,
+  DeleteFunctionUrlConfigCommand,
+  GetFunctionCommand,
+  GetFunctionUrlConfigCommand,
+  LambdaClient,
+  UpdateFunctionCodeCommand,
+  UpdateFunctionConfigurationCommand,
+  type Runtime
+} from "@aws-sdk/client-lambda";
+import JSZip from "jszip";
 import type {
   BuildArtifact,
   BuildPlan,
@@ -306,6 +322,324 @@ function createAwsDeployMetadata(project: ProjectConfig, region: string, stage: 
   };
 }
 
+interface AwsLambdaExtensionConfig {
+  stage?: string;
+  region?: string;
+  functionName?: string;
+  roleArn?: string;
+  runtime?: string;
+  timeout?: number;
+  memory?: number;
+  [key: string]: unknown;
+}
+
+function awsExtension(project: ProjectConfig): AwsLambdaExtensionConfig {
+  const extension = project.extensions?.["aws-lambda"];
+  return isRecord(extension) ? (extension as AwsLambdaExtensionConfig) : {};
+}
+
+function resolveStage(project: ProjectConfig): string {
+  const extension = awsExtension(project);
+  return readString(extension.stage) || project.stage || "default";
+}
+
+function resolveRegion(project: ProjectConfig): string {
+  const extension = awsExtension(project);
+  return readString(extension.region) || process.env.AWS_REGION || "us-east-1";
+}
+
+function sanitizeLambdaFunctionName(value: string): string {
+  const sanitized = value.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/--+/g, "-").replace(/^-+/, "").replace(/-+$/, "");
+  if (!sanitized) {
+    return "runfabric-fn";
+  }
+  return sanitized.slice(0, 64);
+}
+
+function resolveFunctionName(project: ProjectConfig, stage: string): string {
+  const extension = awsExtension(project);
+  const configured = readString(extension.functionName);
+  if (configured) {
+    return sanitizeLambdaFunctionName(configured);
+  }
+  return sanitizeLambdaFunctionName(`${project.service}-${stage}`);
+}
+
+function resolveRoleArn(project: ProjectConfig): string | undefined {
+  const extension = awsExtension(project);
+  return readString(extension.roleArn) || readString(process.env.RUNFABRIC_AWS_LAMBDA_ROLE_ARN);
+}
+
+function resolveLambdaRuntime(project: ProjectConfig): Runtime {
+  const extension = awsExtension(project);
+  const runtime = readString(extension.runtime) || readString(process.env.RUNFABRIC_AWS_LAMBDA_RUNTIME) || "nodejs20.x";
+  return runtime as Runtime;
+}
+
+function resolveLambdaTimeout(project: ProjectConfig): number | undefined {
+  const extension = awsExtension(project);
+  const timeout = readNumber(extension.timeout) || readNumber(project.resources?.timeout);
+  if (typeof timeout !== "number") {
+    return undefined;
+  }
+  return Math.max(1, Math.floor(timeout));
+}
+
+function resolveLambdaMemory(project: ProjectConfig): number | undefined {
+  const extension = awsExtension(project);
+  const memory = readNumber(extension.memory) || readNumber(project.resources?.memory);
+  if (typeof memory !== "number") {
+    return undefined;
+  }
+  return Math.max(128, Math.floor(memory));
+}
+
+function resolveProjectPath(projectDir: string, filePath: string | undefined): string | undefined {
+  if (!filePath || filePath.trim().length === 0) {
+    return undefined;
+  }
+  return isAbsolute(filePath) ? filePath : resolve(projectDir, filePath);
+}
+
+async function collectFilesRecursively(rootDir: string): Promise<string[]> {
+  const out: string[] = [];
+  const entries = await readdir(rootDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const absolutePath = resolve(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      const nested = await collectFilesRecursively(absolutePath);
+      out.push(...nested);
+      continue;
+    }
+    if (entry.isFile()) {
+      out.push(absolutePath);
+    }
+  }
+  return out;
+}
+
+async function createZipFromArtifact(projectDir: string, plan: DeployPlan): Promise<Buffer> {
+  const artifactManifestPath = resolveProjectPath(projectDir, plan.artifactManifestPath);
+  if (!artifactManifestPath) {
+    throw new Error("aws-lambda internal deploy requires artifactManifestPath");
+  }
+
+  const artifactRoot = dirname(artifactManifestPath);
+  const files = await collectFilesRecursively(artifactRoot);
+  if (files.length === 0) {
+    throw new Error(`aws-lambda internal deploy could not find artifact files under ${artifactRoot}`);
+  }
+
+  const zip = new JSZip();
+  for (const absolutePath of files) {
+    const relativePath = relative(artifactRoot, absolutePath).replace(/\\/g, "/");
+    if (!relativePath) {
+      continue;
+    }
+    const content = await readFile(absolutePath);
+    zip.file(relativePath, content);
+  }
+
+  return zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+    compressionOptions: { level: 9 }
+  });
+}
+
+function resolveLambdaHandler(projectDir: string, plan: DeployPlan): string {
+  const artifactPath = resolveProjectPath(projectDir, plan.artifactPath);
+  if (!artifactPath) {
+    throw new Error("aws-lambda internal deploy requires artifactPath");
+  }
+  const extension = extname(artifactPath);
+  const baseName = basename(artifactPath, extension);
+  if (!baseName) {
+    throw new Error(`cannot resolve lambda handler from artifactPath: ${artifactPath}`);
+  }
+  return `${baseName}.handler`;
+}
+
+function isAwsErrorNamed(error: unknown, ...names: string[]): boolean {
+  return isRecord(error) && typeof error.name === "string" && names.includes(error.name);
+}
+
+async function ensureFunctionUrl(
+  client: LambdaClient,
+  functionName: string,
+  stage: string
+): Promise<string> {
+  try {
+    const existing = await client.send(new GetFunctionUrlConfigCommand({ FunctionName: functionName }));
+    const existingUrl = readString(existing.FunctionUrl);
+    if (existingUrl) {
+      return existingUrl;
+    }
+  } catch (error) {
+    if (!isAwsErrorNamed(error, "ResourceNotFoundException")) {
+      throw error;
+    }
+  }
+
+  const created = await client.send(
+    new CreateFunctionUrlConfigCommand({
+      FunctionName: functionName,
+      AuthType: "NONE"
+    })
+  );
+  const createdUrl = readString(created.FunctionUrl);
+  if (!createdUrl) {
+    throw new Error("aws-lambda internal deploy did not return a function URL");
+  }
+
+  const statementId = sanitizeIdentifier(`runfabric-url-${stage}`).slice(0, 100);
+  try {
+    await client.send(
+      new AddPermissionCommand({
+        FunctionName: functionName,
+        StatementId: statementId || "runfabric-url",
+        Action: "lambda:InvokeFunctionUrl",
+        Principal: "*",
+        FunctionUrlAuthType: "NONE"
+      })
+    );
+  } catch (error) {
+    if (!isAwsErrorNamed(error, "ResourceConflictException")) {
+      throw error;
+    }
+  }
+
+  return createdUrl;
+}
+
+async function deployWithAwsSdk(
+  project: ProjectConfig,
+  plan: DeployPlan,
+  projectDir: string,
+  stage: string,
+  region: string,
+  deployMetadata: ReturnType<typeof createAwsDeployMetadata>
+): Promise<{ endpoint: string; rawResponse: Record<string, unknown>; resource: Record<string, unknown> }> {
+  const roleArn = resolveRoleArn(project);
+  if (!roleArn) {
+    throw new Error(
+      "aws-lambda internal deploy requires a role ARN. Set extensions.aws-lambda.roleArn or RUNFABRIC_AWS_LAMBDA_ROLE_ARN."
+    );
+  }
+
+  const functionName = resolveFunctionName(project, stage);
+  const runtime = resolveLambdaRuntime(project);
+  const handler = resolveLambdaHandler(projectDir, plan);
+  const zipBuffer = await createZipFromArtifact(projectDir, plan);
+  const timeout = resolveLambdaTimeout(project);
+  const memory = resolveLambdaMemory(project);
+  const client = new LambdaClient({ region });
+
+  const environmentVariables = Object.keys(deployMetadata.functionEnv).length > 0
+    ? deployMetadata.functionEnv
+    : undefined;
+
+  let functionArn: string | undefined;
+  let existingFunction = false;
+
+  try {
+    const existing = await client.send(new GetFunctionCommand({ FunctionName: functionName }));
+    existingFunction = true;
+    functionArn = readString(existing.Configuration?.FunctionArn);
+  } catch (error) {
+    if (!isAwsErrorNamed(error, "ResourceNotFoundException")) {
+      throw error;
+    }
+  }
+
+  if (existingFunction) {
+    const codeResult = await client.send(
+      new UpdateFunctionCodeCommand({
+        FunctionName: functionName,
+        ZipFile: zipBuffer,
+        Publish: true
+      })
+    );
+    functionArn = readString(codeResult.FunctionArn) || functionArn;
+
+    await client.send(
+      new UpdateFunctionConfigurationCommand({
+        FunctionName: functionName,
+        Runtime: runtime,
+        Handler: handler,
+        ...(environmentVariables ? { Environment: { Variables: environmentVariables } } : {}),
+        ...(typeof timeout === "number" ? { Timeout: timeout } : {}),
+        ...(typeof memory === "number" ? { MemorySize: memory } : {})
+      })
+    );
+  } else {
+    const createResult = await client.send(
+      new CreateFunctionCommand({
+        FunctionName: functionName,
+        Runtime: runtime,
+        Role: roleArn,
+        Handler: handler,
+        Code: {
+          ZipFile: zipBuffer
+        },
+        Publish: true,
+        ...(environmentVariables ? { Environment: { Variables: environmentVariables } } : {}),
+        ...(typeof timeout === "number" ? { Timeout: timeout } : {}),
+        ...(typeof memory === "number" ? { MemorySize: memory } : {})
+      })
+    );
+    functionArn = readString(createResult.FunctionArn) || functionArn;
+  }
+
+  const functionUrl = await ensureFunctionUrl(client, functionName, stage);
+  const rawResponse: Record<string, unknown> = {
+    FunctionName: functionName,
+    FunctionArn: functionArn,
+    FunctionUrl: functionUrl,
+    Runtime: runtime,
+    Handler: handler,
+    deployment: "internal-api",
+    region
+  };
+
+  return {
+    endpoint: functionUrl,
+    rawResponse,
+    resource: {
+      FunctionName: functionName,
+      FunctionArn: functionArn,
+      Runtime: runtime,
+      Handler: handler,
+      Region: region
+    }
+  };
+}
+
+async function destroyWithAwsSdk(
+  project: ProjectConfig,
+  stage: string,
+  region: string
+): Promise<void> {
+  const functionName = resolveFunctionName(project, stage);
+  const client = new LambdaClient({ region });
+
+  try {
+    await client.send(new DeleteFunctionUrlConfigCommand({ FunctionName: functionName }));
+  } catch (error) {
+    if (!isAwsErrorNamed(error, "ResourceNotFoundException")) {
+      throw error;
+    }
+  }
+
+  try {
+    await client.send(new DeleteFunctionCommand({ FunctionName: functionName }));
+  } catch (error) {
+    if (!isAwsErrorNamed(error, "ResourceNotFoundException")) {
+      throw error;
+    }
+  }
+}
+
 export function createAwsLambdaProvider(options: AwsProviderOptions): ProviderAdapter {
   return {
     name: "aws-lambda",
@@ -347,37 +681,22 @@ export function createAwsLambdaProvider(options: AwsProviderOptions): ProviderAd
       };
     },
     async provisionResources(project: ProjectConfig) {
-      const stageExtension = project.extensions?.["aws-lambda"];
-      const region =
-        (typeof stageExtension?.region === "string" && stageExtension.region.trim().length > 0
-          ? stageExtension.region
-          : process.env.AWS_REGION) || "us-east-1";
+      const region = resolveRegion(project);
       return {
         provider: "aws-lambda",
         resourceAddresses: collectResourceAddresses(project, region)
       };
     },
     async deployWorkflows(project: ProjectConfig) {
-      const stageExtension = project.extensions?.["aws-lambda"];
-      const stage =
-        typeof stageExtension?.stage === "string" && stageExtension.stage.trim().length > 0
-          ? stageExtension.stage
-          : project.stage || "default";
-      const region =
-        (typeof stageExtension?.region === "string" && stageExtension.region.trim().length > 0
-          ? stageExtension.region
-          : process.env.AWS_REGION) || "us-east-1";
+      const stage = resolveStage(project);
+      const region = resolveRegion(project);
       return {
         provider: "aws-lambda",
         workflowAddresses: collectWorkflowAddresses(project, region, stage)
       };
     },
     async materializeSecrets(project: ProjectConfig) {
-      const stageExtension = project.extensions?.["aws-lambda"];
-      const region =
-        (typeof stageExtension?.region === "string" && stageExtension.region.trim().length > 0
-          ? stageExtension.region
-          : process.env.AWS_REGION) || "us-east-1";
+      const region = resolveRegion(project);
       return {
         provider: "aws-lambda",
         secretReferences: collectSecretReferences(project, region)
@@ -407,55 +726,57 @@ export function createAwsLambdaProvider(options: AwsProviderOptions): ProviderAd
       };
     },
     async deploy(project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> {
-      const stageExtension = project.extensions?.["aws-lambda"];
-      const stage =
-        typeof stageExtension?.stage === "string" && stageExtension.stage.trim().length > 0
-          ? stageExtension.stage
-          : project.stage || "default";
-      const region =
-        (typeof stageExtension?.region === "string" && stageExtension.region.trim().length > 0
-          ? stageExtension.region
-          : process.env.AWS_REGION) || "us-east-1";
+      const stage = resolveStage(project);
+      const region = resolveRegion(project);
 
       const deploymentId = createDeploymentId("aws-lambda", project.service, stage);
       let endpoint = `https://${project.service}.execute-api.${region}.amazonaws.com/${stage}`;
-      let mode: "simulated" | "cli" = "simulated";
+      let mode: "simulated" | "cli" | "api" = "simulated";
       let rawResponse: unknown;
       let resource: Record<string, unknown> | undefined;
       const deployMetadata = createAwsDeployMetadata(project, region, stage);
 
       if (isRealDeployModeEnabled("RUNFABRIC_AWS_REAL_DEPLOY")) {
         const deployCommand = process.env.RUNFABRIC_AWS_DEPLOY_CMD;
-        if (!deployCommand) {
-          throw new Error(
-            "aws-lambda real deploy mode requires RUNFABRIC_AWS_DEPLOY_CMD returning JSON output"
-          );
-        }
-
-        rawResponse = await runJsonCommand(deployCommand, {
-          cwd: options.projectDir,
-          env: {
-            RUNFABRIC_SERVICE: project.service,
-            RUNFABRIC_STAGE: stage,
-            RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
-            RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath,
-            RUNFABRIC_AWS_QUEUE_EVENT_SOURCES_JSON: JSON.stringify(deployMetadata.queueEventSources),
-            RUNFABRIC_AWS_STORAGE_EVENTS_JSON: JSON.stringify(deployMetadata.storageEvents),
-            RUNFABRIC_AWS_EVENTBRIDGE_RULES_JSON: JSON.stringify(deployMetadata.eventBridgeRules),
-            RUNFABRIC_AWS_IAM_ROLE_STATEMENTS_JSON: JSON.stringify(deployMetadata.iamRoleStatements),
-            RUNFABRIC_FUNCTION_ENV_JSON: JSON.stringify(deployMetadata.functionEnv),
-            RUNFABRIC_AWS_RESOURCE_ADDRESSES_JSON: JSON.stringify(deployMetadata.resourceAddresses),
-            RUNFABRIC_AWS_WORKFLOW_ADDRESSES_JSON: JSON.stringify(deployMetadata.workflowAddresses),
-            RUNFABRIC_AWS_SECRET_REFERENCES_JSON: JSON.stringify(deployMetadata.secretReferences)
+        if (deployCommand) {
+          rawResponse = await runJsonCommand(deployCommand, {
+            cwd: options.projectDir,
+            env: {
+              RUNFABRIC_SERVICE: project.service,
+              RUNFABRIC_STAGE: stage,
+              RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
+              RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath,
+              RUNFABRIC_AWS_QUEUE_EVENT_SOURCES_JSON: JSON.stringify(deployMetadata.queueEventSources),
+              RUNFABRIC_AWS_STORAGE_EVENTS_JSON: JSON.stringify(deployMetadata.storageEvents),
+              RUNFABRIC_AWS_EVENTBRIDGE_RULES_JSON: JSON.stringify(deployMetadata.eventBridgeRules),
+              RUNFABRIC_AWS_IAM_ROLE_STATEMENTS_JSON: JSON.stringify(deployMetadata.iamRoleStatements),
+              RUNFABRIC_FUNCTION_ENV_JSON: JSON.stringify(deployMetadata.functionEnv),
+              RUNFABRIC_AWS_RESOURCE_ADDRESSES_JSON: JSON.stringify(deployMetadata.resourceAddresses),
+              RUNFABRIC_AWS_WORKFLOW_ADDRESSES_JSON: JSON.stringify(deployMetadata.workflowAddresses),
+              RUNFABRIC_AWS_SECRET_REFERENCES_JSON: JSON.stringify(deployMetadata.secretReferences)
+            }
+          });
+          const parsedEndpoint = endpointFromAwsResponse(rawResponse);
+          if (!parsedEndpoint) {
+            throw new Error("aws-lambda deploy response does not include an endpoint/function URL");
           }
-        });
-        const parsedEndpoint = endpointFromAwsResponse(rawResponse);
-        if (!parsedEndpoint) {
-          throw new Error("aws-lambda deploy response does not include an endpoint/function URL");
+          endpoint = parsedEndpoint;
+          resource = awsResourceMetadata(rawResponse);
+          mode = "cli";
+        } else {
+          const internalDeploy = await deployWithAwsSdk(
+            project,
+            plan,
+            options.projectDir,
+            stage,
+            region,
+            deployMetadata
+          );
+          endpoint = internalDeploy.endpoint;
+          rawResponse = internalDeploy.rawResponse;
+          resource = internalDeploy.resource;
+          mode = "api";
         }
-        endpoint = parsedEndpoint;
-        resource = awsResourceMetadata(rawResponse);
-        mode = "cli";
       }
 
       resource = {
@@ -505,17 +826,22 @@ export function createAwsLambdaProvider(options: AwsProviderOptions): ProviderAd
       return buildProviderLogsFromLocalArtifacts(options.projectDir, "aws-lambda", input);
     },
     async destroy(project: ProjectConfig) {
-      const stage = project.stage || "default";
-      if (isRealDeployModeEnabled("RUNFABRIC_AWS_REAL_DEPLOY") && process.env.RUNFABRIC_AWS_DESTROY_CMD) {
-        const result = await runShellCommand(process.env.RUNFABRIC_AWS_DESTROY_CMD, {
-          cwd: options.projectDir,
-          env: {
-            RUNFABRIC_SERVICE: project.service,
-            RUNFABRIC_STAGE: stage
+      const stage = resolveStage(project);
+      const region = resolveRegion(project);
+      if (isRealDeployModeEnabled("RUNFABRIC_AWS_REAL_DEPLOY")) {
+        if (process.env.RUNFABRIC_AWS_DESTROY_CMD) {
+          const result = await runShellCommand(process.env.RUNFABRIC_AWS_DESTROY_CMD, {
+            cwd: options.projectDir,
+            env: {
+              RUNFABRIC_SERVICE: project.service,
+              RUNFABRIC_STAGE: stage
+            }
+          });
+          if (result.code !== 0) {
+            throw new Error(result.stderr || result.stdout || "aws-lambda destroy command failed");
           }
-        });
-        if (result.code !== 0) {
-          throw new Error(result.stderr || result.stdout || "aws-lambda destroy command failed");
+        } else {
+          await destroyWithAwsSdk(project, stage, region);
         }
       }
 

@@ -183,3 +183,40 @@ test("aws provider wires queue/storage/iam/env payloads into deploy command and 
     }
   );
 });
+
+test("aws internal real deploy requires role arn when command override is not provided", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-aws-internal-role-"));
+  const provider = createAwsLambdaProvider({ projectDir });
+  const project: ProjectConfig = {
+    service: "aws-internal-role-check",
+    runtime: "nodejs",
+    entry: "src/index.ts",
+    providers: ["aws-lambda"],
+    stage: "dev",
+    triggers: [{ type: TriggerEnum.Http, method: "GET", path: "/hello" }]
+  };
+
+  await withEnv(
+    {
+      AWS_ACCESS_KEY_ID: "test",
+      AWS_SECRET_ACCESS_KEY: "test",
+      AWS_REGION: "us-east-1",
+      RUNFABRIC_AWS_REAL_DEPLOY: "1",
+      RUNFABRIC_AWS_DEPLOY_CMD: "",
+      RUNFABRIC_AWS_LAMBDA_ROLE_ARN: ""
+    },
+    async () => {
+      const deployPlan = await provider.planDeploy(project, {
+        provider: "aws-lambda",
+        entry: "src/index.ts",
+        outputPath: "artifact.json"
+      });
+
+      await assert.rejects(
+        provider.deploy(project, deployPlan),
+        /requires a role ARN/,
+        "internal aws deploy should fail fast with actionable role arn guidance"
+      );
+    }
+  );
+});

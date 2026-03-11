@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@runfabric/core": "workspace:*",
-    "@runfabric/planner": "workspace:*"
+    "@runfabric/planner": "workspace:*",
+    "typescript": "^5.9.2"
   },
   "description": "Artifact packaging pipeline for runfabric providers",
   "license": "MIT",

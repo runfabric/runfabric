@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, extname, join, resolve } from "node:path";
 import type { BuildArtifact, BuildResult, ProjectConfig } from "@runfabric/core";
 import type { PlanningResult } from "@runfabric/planner";
 
@@ -17,6 +18,8 @@ interface GeneratedFile {
   sha256: string;
   role: "entry-source" | "runtime-wrapper" | "manifest";
 }
+
+const requireModule = createRequire(__filename);
 
 function toProviderSlug(provider: string): string {
   return provider.replace(/[^a-z0-9]/gi, "_");
@@ -127,6 +130,59 @@ async function readFileAsUtf8(filePath: string): Promise<string> {
   return readFile(filePath, "utf8");
 }
 
+function transpileTypeScriptSource(source: string, fileName: string): string {
+  type TypeScriptModule = {
+    ModuleKind: {
+      ES2022: number;
+    };
+    ScriptTarget: {
+      ES2022: number;
+    };
+    transpileModule: (
+      input: string,
+      options: {
+        compilerOptions: {
+          target: number;
+          module: number;
+          sourceMap: boolean;
+          declaration: boolean;
+          removeComments: boolean;
+          esModuleInterop: boolean;
+        };
+        fileName: string;
+        reportDiagnostics: boolean;
+      }
+    ) => { outputText: string };
+  };
+
+  let ts: TypeScriptModule;
+  try {
+    ts = requireModule("typescript") as TypeScriptModule;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "MODULE_NOT_FOUND") {
+      throw new Error(
+        "typescript dependency is required to transpile TypeScript entries in build artifacts. Install it with: pnpm add -w --filter @runfabric/builder typescript"
+      );
+    }
+    throw error;
+  }
+
+  const result = ts.transpileModule(source, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ES2022,
+      sourceMap: false,
+      declaration: false,
+      removeComments: false,
+      esModuleInterop: true
+    },
+    fileName,
+    reportDiagnostics: false
+  });
+
+  return result.outputText;
+}
+
 async function buildProviderArtifact(
   provider: string,
   project: ProjectConfig,
@@ -140,12 +196,26 @@ async function buildProviderArtifact(
 
   const sourceEntryPath = resolve(projectDir, project.entry);
   const sourceEntryName = basename(project.entry);
-  const copiedEntryPath = join(sourceDir, sourceEntryName);
+  const sourceEntryExt = extname(sourceEntryName).toLowerCase();
+  const isTypeScriptSource = sourceEntryExt === ".ts" || sourceEntryExt === ".tsx";
+  const copiedEntryName =
+    isNodeLikeRuntime(project.runtime) && isTypeScriptSource
+      ? sourceEntryName.replace(/\.(ts|tsx)$/i, ".js")
+      : sourceEntryName;
+  const copiedEntryPath = join(sourceDir, copiedEntryName);
 
   await mkdir(sourceDir, { recursive: true });
-  await copyFile(sourceEntryPath, copiedEntryPath);
 
-  const copiedEntryContent = await readFileAsUtf8(copiedEntryPath);
+  let copiedEntryContent: string;
+  if (isNodeLikeRuntime(project.runtime) && isTypeScriptSource) {
+    const sourceContent = await readFileAsUtf8(sourceEntryPath);
+    copiedEntryContent = transpileTypeScriptSource(sourceContent, sourceEntryName);
+    await writeFile(copiedEntryPath, copiedEntryContent, "utf8");
+  } else {
+    await copyFile(sourceEntryPath, copiedEntryPath);
+    copiedEntryContent = await readFileAsUtf8(copiedEntryPath);
+  }
+
   const generatedFiles: GeneratedFile[] = [
     {
       path: copiedEntryPath,
@@ -160,7 +230,7 @@ async function buildProviderArtifact(
     await mkdir(runtimeDir, { recursive: true });
     const runtimeFileName = runtimeWrapperFilename(provider);
     const runtimeFilePath = join(runtimeDir, runtimeFileName);
-    const relativeSourceFromRuntime = `../src/${sourceEntryName}`;
+    const relativeSourceFromRuntime = `../src/${copiedEntryName}`;
     const wrapperContent = createRuntimeWrapperContent(provider, relativeSourceFromRuntime, project.service);
     await writeFile(runtimeFilePath, wrapperContent, "utf8");
     generatedFiles.push({
