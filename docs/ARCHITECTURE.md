@@ -45,6 +45,7 @@ Controls:
 - `RUNFABRIC_REAL_DEPLOY=1` global
 - `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1` provider-specific
 - `RUNFABRIC_<PROVIDER>_DEPLOY_CMD` for command-driven real deploy
+- `aws-lambda` also supports internal SDK-based real deploy without command envs (requires role ARN configuration)
 
 ## Recovery Semantics
 

@@ -152,14 +152,19 @@ pnpm run runfabric -- state force-unlock -c ./my-api/runfabric.yml --provider aw
 pnpm run runfabric -- state migrate -c ./my-api/runfabric.yml --from local --to postgres --json
 ```
 
-## Real Deploy Mode For Other Providers
+## Real Deploy Mode
 
 Default deploy is simulated. To enable real mode:
 
 - `RUNFABRIC_REAL_DEPLOY=1` globally, or
 - `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1` per provider
 
-Then set provider deploy command env var returning JSON, e.g.:
+AWS has a built-in internal deployer in real mode. Set:
+
+- `RUNFABRIC_AWS_REAL_DEPLOY=1`
+- `RUNFABRIC_AWS_LAMBDA_ROLE_ARN=<iam-role-arn>`
+
+For command-driven provider flows (or custom AWS override), set deploy command env vars returning JSON, e.g.:
 
 - `RUNFABRIC_AWS_DEPLOY_CMD`
 - `RUNFABRIC_GCP_DEPLOY_CMD`
@@ -196,6 +201,7 @@ triggers:
 extensions:
   aws-lambda:
     region: us-east-1
+    roleArn: arn:aws:iam::123456789012:role/runfabric-lambda-role
     iam:
       role:
         statements:
@@ -213,7 +219,7 @@ functions:
       BUCKET: media-uploads
 ```
 
-When `RUNFABRIC_AWS_REAL_DEPLOY=1`, deploy passes these JSON payload env vars to `RUNFABRIC_AWS_DEPLOY_CMD`:
+When `RUNFABRIC_AWS_REAL_DEPLOY=1` and `RUNFABRIC_AWS_DEPLOY_CMD` is set, deploy passes these JSON payload env vars to that command:
 
 - `RUNFABRIC_AWS_QUEUE_EVENT_SOURCES_JSON`
 - `RUNFABRIC_AWS_STORAGE_EVENTS_JSON`

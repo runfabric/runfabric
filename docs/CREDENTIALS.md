@@ -68,7 +68,7 @@ When real mode is enabled, set command envs that output JSON:
 
 | Provider | Real Deploy Command Env | Destroy Command Env |
 | --- | --- | --- |
-| `aws-lambda` | `RUNFABRIC_AWS_DEPLOY_CMD` | `RUNFABRIC_AWS_DESTROY_CMD` |
+| `aws-lambda` | optional override: `RUNFABRIC_AWS_DEPLOY_CMD` | optional override: `RUNFABRIC_AWS_DESTROY_CMD` |
 | `gcp-functions` | `RUNFABRIC_GCP_DEPLOY_CMD` | `RUNFABRIC_GCP_DESTROY_CMD` |
 | `azure-functions` | `RUNFABRIC_AZURE_DEPLOY_CMD` | `RUNFABRIC_AZURE_DESTROY_CMD` |
 | `cloudflare-workers` | `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1` (API path) | `RUNFABRIC_CLOUDFLARE_DESTROY_CMD` |
@@ -113,10 +113,16 @@ Example output contract:
 
 ```bash
 export RUNFABRIC_AWS_REAL_DEPLOY=1
-export RUNFABRIC_AWS_DEPLOY_CMD='aws lambda create-function-url-config --function-name my-fn --output json'
-export RUNFABRIC_AWS_DESTROY_CMD='aws lambda delete-function-url-config --function-name my-fn'
+export RUNFABRIC_AWS_LAMBDA_ROLE_ARN='arn:aws:iam::123456789012:role/runfabric-lambda-role'
 
 runfabric deploy -c runfabric.yml
+```
+
+Optional command overrides for custom AWS workflows:
+
+```bash
+export RUNFABRIC_AWS_DEPLOY_CMD='aws lambda create-function-url-config --function-name my-fn --output json'
+export RUNFABRIC_AWS_DESTROY_CMD='aws lambda delete-function-url-config --function-name my-fn'
 ```
 
 ### Vercel real deploy mode

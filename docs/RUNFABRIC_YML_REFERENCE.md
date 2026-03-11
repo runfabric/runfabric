@@ -125,6 +125,9 @@ extensions:
   aws-lambda:
     region: us-east-1
     stage: dev
+    roleArn: arn:aws:iam::123456789012:role/runfabric-lambda-role # required for internal AWS real deploy
+    functionName: my-service-dev # optional override
+    runtime: nodejs20.x # optional runtime override for internal AWS real deploy
     iam:
       role:
         statements:

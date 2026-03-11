@@ -33,17 +33,20 @@ Migration notes:
 2. Export required provider credentials.
 3. Enable real mode:
    - `RUNFABRIC_REAL_DEPLOY=1` or `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1`
-4. Set provider deploy command env that returns JSON.
+4. Configure real deploy execution:
+   - AWS: set `RUNFABRIC_AWS_LAMBDA_ROLE_ARN` (built-in internal deployer), or
+   - any provider (including AWS): set provider deploy command env that returns JSON.
 5. Run `runfabric doctor`, `plan`, `build`, `deploy`.
 6. Validate endpoint and receipt output.
-7. Add destroy command env for cleanup and rollback.
+7. Configure cleanup:
+   - AWS: built-in destroy uses AWS SDK in real mode, or
+   - set destroy command env for command-driven cleanup and rollback.
 
 ## Example (AWS)
 
 ```bash
 export RUNFABRIC_AWS_REAL_DEPLOY=1
-export RUNFABRIC_AWS_DEPLOY_CMD='aws lambda create-function-url-config --function-name my-fn --output json'
-export RUNFABRIC_AWS_DESTROY_CMD='aws lambda delete-function-url-config --function-name my-fn'
+export RUNFABRIC_AWS_LAMBDA_ROLE_ARN='arn:aws:iam::123456789012:role/runfabric-lambda-role'
 
 runfabric deploy -c runfabric.aws-lambda.yml
 ```

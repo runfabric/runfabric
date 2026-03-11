@@ -26,8 +26,10 @@ Required env:
 Optional real mode:
 
 - `RUNFABRIC_AWS_REAL_DEPLOY=1`
-- `RUNFABRIC_AWS_DEPLOY_CMD` (JSON output)
-- `RUNFABRIC_AWS_DESTROY_CMD`
+- `RUNFABRIC_AWS_LAMBDA_ROLE_ARN` (required for built-in internal deployer)
+- optional command overrides:
+  - `RUNFABRIC_AWS_DEPLOY_CMD` (JSON output)
+  - `RUNFABRIC_AWS_DESTROY_CMD`
 
 ## GCP Functions
 

@@ -20,9 +20,9 @@ Global and per-provider flags:
 - `RUNFABRIC_REAL_DEPLOY=1` to enable real mode globally
 - `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1` to enable per provider
 
-Per-provider real deploy command env (must return JSON):
+Per-provider real deploy command env (for command-driven mode, must return JSON):
 
-- `RUNFABRIC_AWS_DEPLOY_CMD`
+- `RUNFABRIC_AWS_DEPLOY_CMD` (optional override; AWS has built-in internal deployer when `RUNFABRIC_AWS_REAL_DEPLOY=1`)
 - `RUNFABRIC_GCP_DEPLOY_CMD`
 - `RUNFABRIC_AZURE_DEPLOY_CMD`
 - `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1` (direct API mode)
