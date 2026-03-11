@@ -139,5 +139,11 @@ runfabric state migrate -c runfabric.yml --from local --to postgres --json
 ## Notes On Current Runtime Behavior
 
 - `local` uses `.runfabric/state/<service>/<stage>/<provider>.state.json`.
-- Non-local backends currently use backend-specific directories under `.runfabric/state-remote/<backend>/...` for deterministic local/dev + CI behavior.
+- `postgres` uses a real table backend (`state.postgres.schema`.`state.postgres.table`) keyed by `<keyPrefix>/<service>/<stage>/<provider>.state.json`.
+- `s3`, `gcs`, and `azblob` use real object storage backends keyed by `<prefix>/<service>/<stage>/<provider>.state.json`.
 - Locking is token-based with timeout, stale-lock recovery, and heartbeat renewal.
+
+## Test Coverage Notes
+
+- Remote backend integration tests are opt-in and gated by `RUNFABRIC_TEST_REMOTE_STATE=1`.
+- Default test runs always cover local backend behavior; remote tests are skipped unless explicitly enabled with valid credentials.

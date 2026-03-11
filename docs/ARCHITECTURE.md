@@ -20,7 +20,8 @@ runfabric is a CLI/serverless deployment framework with provider adapters. It is
 4. Provider deploy writes receipt in `.runfabric/deploy/<provider>/deployment.json`.
 5. CLI writes provider state through the selected state backend:
   - `local` -> `.runfabric/state/<service>/<stage>/<provider>.state.json`
-  - `postgres|s3|gcs|azblob` -> `.runfabric/state-remote/<backend>/...` (local simulation path for tests/dev)
+  - `postgres` -> real Postgres table storage (`state.postgres.schema` / `state.postgres.table`)
+  - `s3|gcs|azblob` -> real object storage keys under configured prefix (`<prefix>/<service>/<stage>/<provider>.state.json`)
 6. `invoke` and `logs` operate from receipt/state/log artifacts.
 7. `remove` triggers provider destroy + local cleanup (+ recovery notes on failure).
 8. `traces` and `metrics` use provider-native command overrides when configured, otherwise derive data from receipts + provider event logs.

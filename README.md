@@ -145,7 +145,8 @@ Full command reference: `docs/site/command-reference.md`
 ## State And Receipts
 
 - Deploy receipt: `.runfabric/deploy/<provider>/deployment.json`
-- State file: `.runfabric/state/<service>/<stage>/<provider>.state.json`
+- Local backend state file: `.runfabric/state/<service>/<stage>/<provider>.state.json`
+- Remote backends (`postgres|s3|gcs|azblob`) store state in the configured external backend.
 
 ## Docs
 

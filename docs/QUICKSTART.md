@@ -120,7 +120,8 @@ After deploy:
 
 - receipt: `.runfabric/deploy/<provider>/deployment.json`
 - state (`local` backend): `.runfabric/state/<service>/<stage>/<provider>.state.json`
-- state (`postgres|s3|gcs|azblob` backends): `.runfabric/state-remote/<backend>/...` (local simulation path in tests/dev)
+- state (`postgres` backend): persisted in configured Postgres table
+- state (`s3|gcs|azblob` backends): persisted as objects under configured prefix
 
 Example state config in `runfabric.yml`:
 
