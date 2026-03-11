@@ -62,6 +62,91 @@ test("parseProjectConfig validates schema and parses extensions scalars", () => 
   assert.equal(project.extensions?.["aws-lambda"]?.region, "ap-southeast-1");
 });
 
+test("parseProjectConfig resolves env bindings with optional default values", () => {
+  const previousService = process.env.RUNFABRIC_TEST_SERVICE_NAME;
+  const previousBucket = process.env.RUNFABRIC_TEST_BUCKET_NAME;
+  process.env.RUNFABRIC_TEST_SERVICE_NAME = "env-bound-service";
+  process.env.RUNFABRIC_TEST_BUCKET_NAME = "env-state-bucket";
+
+  const config = [
+    "service: ${env:RUNFABRIC_TEST_SERVICE_NAME}",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "state:",
+    "  backend: s3",
+    "  s3:",
+    "    bucket: ${env:RUNFABRIC_TEST_BUCKET_NAME}",
+    "    region: ${env:RUNFABRIC_TEST_AWS_REGION,us-east-1}",
+    "",
+    "env:",
+    "  REGION_NAME: ${env:RUNFABRIC_TEST_AWS_REGION,us-east-1}",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /env",
+    ""
+  ].join("\n");
+
+  try {
+    const project = parseProjectConfig(config);
+    assert.equal(project.service, "env-bound-service");
+    assert.equal(project.state?.backend, "s3");
+    assert.equal(project.state?.s3?.bucket, "env-state-bucket");
+    assert.equal(project.state?.s3?.region, "us-east-1");
+    assert.equal(project.env?.REGION_NAME, "us-east-1");
+  } finally {
+    if (previousService === undefined) {
+      delete process.env.RUNFABRIC_TEST_SERVICE_NAME;
+    } else {
+      process.env.RUNFABRIC_TEST_SERVICE_NAME = previousService;
+    }
+    if (previousBucket === undefined) {
+      delete process.env.RUNFABRIC_TEST_BUCKET_NAME;
+    } else {
+      process.env.RUNFABRIC_TEST_BUCKET_NAME = previousBucket;
+    }
+  }
+});
+
+test("parseProjectConfig reports missing env bindings without defaults", () => {
+  const previousMissing = process.env.RUNFABRIC_TEST_MISSING_ENV;
+  delete process.env.RUNFABRIC_TEST_MISSING_ENV;
+
+  const config = [
+    "service: missing-env",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "env:",
+    "  REQUIRED: ${env:RUNFABRIC_TEST_MISSING_ENV}",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /missing-env",
+    ""
+  ].join("\n");
+
+  try {
+    assert.throws(
+      () => parseProjectConfig(config),
+      /root\.env\.REQUIRED references missing environment variable RUNFABRIC_TEST_MISSING_ENV/
+    );
+  } finally {
+    if (previousMissing !== undefined) {
+      process.env.RUNFABRIC_TEST_MISSING_ENV = previousMissing;
+    }
+  }
+});
+
 test("parseProjectConfig rejects invalid providers schema", () => {
   const invalidConfig = [
     "service: invalid-providers",

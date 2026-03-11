@@ -10,6 +10,8 @@ This document defines how runfabric state storage works, how to wire backend cre
 - `gcs`
 - `azblob`
 
+`runfabric init` prompts for state backend selection and defaults to `local`.
+
 ## Schema
 
 ```yaml
@@ -39,6 +41,11 @@ state:
     container: runfabric-state
     prefix: runfabric/state
 ```
+
+You can use dynamic env bindings in these values:
+
+- `${env:VAR_NAME}`
+- `${env:VAR_NAME,default-value}`
 
 ## Credential Wiring
 

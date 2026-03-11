@@ -17,7 +17,7 @@ pnpm install
 2. Pick a starter template:
 
 ```bash
-pnpm run runfabric -- init --template api --dir ./my-service
+pnpm run runfabric -- init --template api --provider aws-lambda --state-backend local --dir ./my-service
 ```
 
 Available templates:
@@ -27,8 +27,13 @@ Available templates:
 - `queue`
 - `cron`
 
+`init` supports interactive prompts for template, provider, state backend, and language.
+
+State backend defaults to `local` unless explicitly set with `--state-backend`.
+
 3. Set provider credentials (see `docs/CREDENTIALS.md`).
-4. Run lifecycle commands:
+4. If using non-local state backend, set backend credentials too (see `docs/STATE_BACKENDS.md`).
+5. Run lifecycle commands:
 
 ```bash
 pnpm run runfabric -- doctor -c ./my-service/runfabric.yml

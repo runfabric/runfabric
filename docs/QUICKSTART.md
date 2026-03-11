@@ -58,11 +58,12 @@ Interactive `init` prompts for:
 
 - template (`api`, `worker`, `queue`, `cron`)
 - provider
+- state backend (`local`, `postgres`, `s3`, `gcs`, `azblob`) with default `local`
 - language (`ts` or `js`)
 
 It also creates:
 
-- `package.json` with `@runfabric/core`
+- `package.json` with `@runfabric/core` and the selected provider adapter dependency
 - `call:local` script that runs `runfabric call-local -c runfabric.yml --serve --watch`
 
 Provider adapters are loaded dynamically. Install only providers used by the project
@@ -72,6 +73,12 @@ Non-interactive example:
 
 ```bash
 pnpm run runfabric -- init --dir ./my-api --template api --provider aws-lambda --lang ts --skip-install
+```
+
+Non-interactive with explicit state backend:
+
+```bash
+pnpm run runfabric -- init --dir ./my-api --template api --provider aws-lambda --state-backend s3 --lang ts --skip-install
 ```
 
 If you used `--skip-install`, install project dependencies manually:
@@ -149,6 +156,17 @@ state:
     bucket: my-runfabric-state
     region: us-east-1
     keyPrefix: runfabric/state
+```
+
+Dynamic environment bindings in `runfabric.yml` are supported:
+
+```yaml
+service: ${env:RUNFABRIC_SERVICE_NAME,my-api}
+state:
+  backend: s3
+  s3:
+    bucket: ${env:RUNFABRIC_STATE_S3_BUCKET}
+    region: ${env:AWS_REGION,us-east-1}
 ```
 
 State operations:

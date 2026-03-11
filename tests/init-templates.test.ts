@@ -55,9 +55,12 @@ test("init supports api/worker/queue/cron templates", async () => {
       config.includes(check.expected),
       `template ${check.template} should include "${check.expected}" in runfabric.yml`
     );
+    assert.ok(config.includes("state:"));
+    assert.ok(config.includes("backend: local"));
 
     const packageJson = JSON.parse(await readFile(join(projectDir, "package.json"), "utf8"));
     assert.equal(packageJson.dependencies?.["@runfabric/core"], "^0.1.0");
+    assert.equal(packageJson.dependencies?.["@runfabric/provider-aws-lambda"], "^0.1.0");
     assert.equal(packageJson.dependencies?.["@runfabric/runtime-node"], undefined);
     assert.equal(
       packageJson.scripts?.["call:local"],
@@ -93,12 +96,14 @@ test("init supports js language scaffold", async () => {
 
   const config = await readFile(join(projectDir, "runfabric.yml"), "utf8");
   assert.ok(config.includes("entry: src/index.js"));
+  assert.ok(config.includes("backend: local"));
   assert.equal(existsSync(join(projectDir, "src", "index.js")), true);
   assert.equal(existsSync(join(projectDir, "tsconfig.json")), false);
   assert.equal(existsSync(join(projectDir, "scripts", "call-local.mjs")), false);
 
   const packageJson = JSON.parse(await readFile(join(projectDir, "package.json"), "utf8"));
   assert.equal(packageJson.dependencies?.["@runfabric/core"], "^0.1.0");
+  assert.equal(packageJson.dependencies?.["@runfabric/provider-cloudflare-workers"], "^0.1.0");
   assert.equal(packageJson.dependencies?.["@runfabric/runtime-node"], undefined);
   assert.equal(packageJson.scripts?.["call:local"], "runfabric call-local -c runfabric.yml --serve --watch");
 
@@ -106,4 +111,32 @@ test("init supports js language scaffold", async () => {
   assert.ok(readme.includes("src/index.js"));
   assert.ok(readme.includes("call:local"));
   assert.ok(readme.includes("export CLOUDFLARE_API_TOKEN"));
+});
+
+test("init supports explicit state backend selection", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-init-state-"));
+  const result = runCli([
+    "init",
+    "--dir",
+    projectDir,
+    "--template",
+    "api",
+    "--provider",
+    "aws-lambda",
+    "--lang",
+    "ts",
+    "--state-backend",
+    "s3",
+    "--skip-install"
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+
+  const config = await readFile(join(projectDir, "runfabric.yml"), "utf8");
+  assert.ok(config.includes("backend: s3"));
+  assert.ok(config.includes("bucket: ${env:RUNFABRIC_STATE_S3_BUCKET}"));
+  assert.ok(config.includes("region: ${env:AWS_REGION,us-east-1}"));
+
+  const readme = await readFile(join(projectDir, "README.md"), "utf8");
+  assert.ok(readme.includes("Configured state backend in `runfabric.yml`: `s3`"));
+  assert.ok(readme.includes("RUNFABRIC_STATE_S3_BUCKET"));
 });

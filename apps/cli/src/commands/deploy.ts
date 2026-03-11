@@ -28,6 +28,7 @@ export interface DeployWorkflowInput {
   stage?: string;
   outputRoot?: string;
   functionName?: string;
+  emitProgress?: boolean;
 }
 
 export interface DeployWorkflowResult {
@@ -106,6 +107,13 @@ function rollbackEnabled(): boolean {
   return ["1", "true", "yes", "on"].includes(normalized);
 }
 
+function logProgress(enabled: boolean | undefined, message: string): void {
+  if (!enabled) {
+    return;
+  }
+  info(message);
+}
+
 function startLockHeartbeat(
   stateBackend: StateBackend,
   address: StateAddress,
@@ -149,6 +157,7 @@ function startLockHeartbeat(
 export async function executeDeployWorkflow(
   input: DeployWorkflowInput
 ): Promise<DeployWorkflowResult> {
+  logProgress(input.emitProgress, "deploy: loading project and planning");
   const context = await loadPlanningContext(input.projectDir, input.configPath, input.stage);
   const baseProject = resolveFunctionProject(context.project, input.functionName);
   const planning = baseProject === context.project ? context.planning : createPlan(baseProject);
@@ -177,6 +186,7 @@ export async function executeDeployWorkflow(
   });
   const hooks = await loadLifecycleHooks(baseProject, input.projectDir);
 
+  logProgress(input.emitProgress, "deploy: running beforeBuild hooks");
   for (const hook of hooks) {
     await hook.beforeBuild?.({
       project: baseProject,
@@ -191,7 +201,12 @@ export async function executeDeployWorkflow(
     projectDir: input.projectDir,
     outputRoot: input.outputRoot
   });
+  logProgress(
+    input.emitProgress,
+    `deploy: build complete (${buildResult.artifacts.length} provider artifact(s))`
+  );
 
+  logProgress(input.emitProgress, "deploy: running afterBuild hooks");
   for (const hook of hooks) {
     await hook.afterBuild?.({
       project: baseProject,
@@ -207,6 +222,8 @@ export async function executeDeployWorkflow(
   const successfulDeployments: SuccessfulProviderDeployment[] = [];
   const stage = baseProject.stage || "default";
 
+  logProgress(input.emitProgress, `deploy: stage=${stage} backend=${stateBackend.config.backend}`);
+  logProgress(input.emitProgress, "deploy: running beforeDeploy hooks");
   for (const hook of hooks) {
     await hook.beforeDeploy?.({
       project: baseProject,
@@ -230,6 +247,7 @@ export async function executeDeployWorkflow(
       });
       continue;
     }
+    logProgress(input.emitProgress, `${provider.name}: adapter loaded`);
 
     const validation = await provider.validate(baseProject);
     if (!validation.ok) {
@@ -242,6 +260,7 @@ export async function executeDeployWorkflow(
       }
       continue;
     }
+    logProgress(input.emitProgress, `${provider.name}: validation passed`);
 
     const stateAddress: StateAddress = {
       service: baseProject.service,
@@ -255,6 +274,7 @@ export async function executeDeployWorkflow(
     const deploymentStartedAt = new Date().toISOString();
 
     try {
+      logProgress(input.emitProgress, `${provider.name}: reading current state`);
       const existing = await stateBackend.read(stateAddress);
       if (existing?.lifecycle === "in_progress") {
         warn(
@@ -266,6 +286,7 @@ export async function executeDeployWorkflow(
         stateAddress,
         `deploy:${process.pid}:${provider.name}:${baseProject.service}:${stage}`
       );
+      logProgress(input.emitProgress, `${provider.name}: state lock acquired`);
       heartbeat = startLockHeartbeat(stateBackend, stateAddress, stateLock);
 
       await stateBackend.write(
@@ -287,7 +308,9 @@ export async function executeDeployWorkflow(
         },
         heartbeat.latestLock()
       );
+      logProgress(input.emitProgress, `${provider.name}: state -> in_progress`);
 
+      logProgress(input.emitProgress, `${provider.name}: provisioning resources/workflows/secrets`);
       const provisionedResources = provider.provisionResources
         ? await provider.provisionResources(baseProject)
         : undefined;
@@ -299,9 +322,11 @@ export async function executeDeployWorkflow(
         : undefined;
 
       const providerBuildPlan = await provider.planBuild(baseProject);
+      logProgress(input.emitProgress, `${provider.name}: provider build`);
       await provider.build(baseProject, providerBuildPlan);
       const deployPlan = await provider.planDeploy(baseProject, artifact);
       failurePhase = "deploy";
+      logProgress(input.emitProgress, `${provider.name}: deploying artifact`);
       const deployResult = await provider.deploy(baseProject, deployPlan);
       const resourceAddresses = compactStringMap({
         ...(provisionedResources?.resourceAddresses || {}),
@@ -353,8 +378,11 @@ export async function executeDeployWorkflow(
         },
         heartbeat.latestLock()
       );
+      logProgress(input.emitProgress, `${provider.name}: state -> applied`);
+      logProgress(input.emitProgress, `${provider.name}: deploy completed`);
     } catch (deployError) {
       const message = stringifyError(deployError);
+      logProgress(input.emitProgress, `${provider.name}: deploy failed (${message})`);
       failures.push({
         provider: provider.name,
         phase: failurePhase,
@@ -382,6 +410,7 @@ export async function executeDeployWorkflow(
             },
             heartbeat ? heartbeat.latestLock() : stateLock
           );
+          logProgress(input.emitProgress, `${provider.name}: state -> failed`);
         } catch (stateError) {
           failures.push({
             provider: provider.name,
@@ -412,6 +441,7 @@ export async function executeDeployWorkflow(
   }
 
   if (failures.length > 0 && successfulDeployments.length > 0 && rollbackEnabled()) {
+    logProgress(input.emitProgress, "deploy: rollback enabled, reverting successful providers");
     for (const deployedProvider of [...successfulDeployments].reverse()) {
       const stateAddress: StateAddress = {
         service: baseProject.service,
@@ -441,6 +471,7 @@ export async function executeDeployWorkflow(
           provider: deployedProvider.provider,
           ok: true
         });
+        logProgress(input.emitProgress, `${deployedProvider.provider}: rollback succeeded`);
       } catch (rollbackError) {
         const message = stringifyError(rollbackError);
         rollbacks.push({
@@ -453,6 +484,7 @@ export async function executeDeployWorkflow(
           phase: "rollback",
           message
         });
+        logProgress(input.emitProgress, `${deployedProvider.provider}: rollback failed (${message})`);
       }
     }
   }
@@ -471,6 +503,7 @@ export async function executeDeployWorkflow(
       exitCode: summary.exitCode
     });
   }
+  logProgress(input.emitProgress, "deploy: finished");
 
   return {
     stage,
@@ -536,7 +569,8 @@ export const registerDeployCommand: CommandRegistrar = (program) => {
       configPath,
       stage: options.stage,
       outputRoot: options.out,
-      functionName
+      functionName,
+      emitProgress: !options.json
     });
 
     if (result.summary.exitCode !== 0) {

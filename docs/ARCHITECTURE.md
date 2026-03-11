@@ -86,6 +86,7 @@ Controls:
 
 - Syntax: `npm run check:syntax`
 - Capability sync check: `npm run check:capabilities`
+- Docs/code sync checks: `npm run check:docs-sync`
 - Tests: `npm test`
 - Workspace type checks: `pnpm -r --if-present run typecheck`
 - Compatibility checks:

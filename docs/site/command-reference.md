@@ -2,7 +2,7 @@
 
 ## Core
 
-- `runfabric init [--template <api|worker|queue|cron>] [--provider <name>] [--lang <ts|js>] [--service <name>] [--pm <npm|pnpm|yarn|bun>] [--skip-install] [--call-local] [--no-interactive]`
+- `runfabric init [--dir <path>] [--template <api|worker|queue|cron>] [--provider <name>] [--state-backend <local|postgres|s3|gcs|azblob>] [--lang <ts|js>] [--service <name>] [--pm <npm|pnpm|yarn|bun>] [--skip-install] [--call-local] [--no-interactive]`
 - `runfabric doctor -c <config> [--stage <name>]`
 - `runfabric plan -c <config> [--stage <name>] [--json]`
 - `runfabric build -c <config> [--stage <name>] [--out <dir>] [--json]`
@@ -14,8 +14,8 @@
 - `runfabric remove -c <config> [--stage <name>] [--provider <name>] [--json]`
 - `runfabric migrate --input <serverless.yml> [--output <runfabric.yml>] [--provider <id>] [--dry-run] [--force] [--json]`
 - `runfabric call-local -c <config> [--serve] [--watch] [--host <host>] [--port <number>] [--provider <name>] [--method <GET|POST|...>] [--path </route>] [--query <k=v&k2=v2>] [--header <k:v>] [--body <text>] [--event <file>] [--entry <path>]`
-- `runfabric dev -c <config> [--preset <http|queue|storage>] [--watch|--no-watch] [--once] [--host <host>] [--port <number>] [--method <GET|POST|...>] [--path </route>] [--query <k=v>] [--header <k:v>] [--interval-seconds <n>]`
-- `runfabric invoke --provider <name> [--payload <json>]`
+- `runfabric dev -c <config> [--stage <name>] [--provider <name>] [--preset <http|queue|storage>] [--watch|--no-watch] [--once] [--host <host>] [--port <number>] [--method <GET|POST|...>] [--path </route>] [--query <k=v>] [--body <text>] [--header <k:v>] [--entry <path>] [--out <dir>] [--interval-seconds <n>]`
+- `runfabric invoke --provider <name> [--payload <text-or-json>]`
 - `runfabric logs --provider <name>`
 - `runfabric traces [--config <path>] --provider <name> [--since <iso>] [--correlation-id <id>] [--limit <count>] [--json]`
 - `runfabric metrics [--config <path>] --provider <name> [--since <iso>] [--json]`
@@ -46,4 +46,5 @@
   - `2` partial failures
   - `1` full failure
 - Optional deploy rollback: `RUNFABRIC_ROLLBACK_ON_FAILURE=1`
+- Deploy progress/state logs are shown in standard output; use `--json` for machine-readable output without progress logs.
 - Remove recovery notes: `.runfabric/recovery/remove/*.json`

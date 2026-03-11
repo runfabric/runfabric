@@ -110,6 +110,55 @@ function parseScalar(value: string): unknown {
   return unquote(trimmed);
 }
 
+function resolveEnvBindingInString(
+  value: string,
+  path: string,
+  errors: string[]
+): string {
+  const envPattern = /\$\{env:([A-Za-z_][A-Za-z0-9_]*)(?:,\s*([^}]*))?\}/g;
+
+  return value.replace(envPattern, (_match, envNameRaw, defaultValueRaw) => {
+    const envName = String(envNameRaw || "").trim();
+    const envValue = process.env[envName];
+    if (envValue !== undefined) {
+      return envValue;
+    }
+
+    if (typeof defaultValueRaw === "string") {
+      return unquote(defaultValueRaw.trim());
+    }
+
+    errors.push(`${path} references missing environment variable ${envName}`);
+    return "";
+  });
+}
+
+function resolveDynamicBindingsAtPath(
+  value: unknown,
+  path: string,
+  errors: string[]
+): unknown {
+  if (typeof value === "string") {
+    return resolveEnvBindingInString(value, path, errors);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item, index) =>
+      resolveDynamicBindingsAtPath(item, `${path}[${index}]`, errors)
+    );
+  }
+
+  if (isRecord(value)) {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      out[key] = resolveDynamicBindingsAtPath(item, `${path}.${key}`, errors);
+    }
+    return out;
+  }
+
+  return value;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -1509,21 +1558,27 @@ function validateProjectConfigShape(
   }
 
   const errors: string[] = [];
-  const service = readRequiredString(raw, "service", errors);
-  const runtime = readRequiredString(raw, "runtime", errors);
-  const entry = readRequiredString(raw, "entry", errors);
-  const providers = readStringArray(raw, "providers", errors, 1);
-  const triggers = readTriggerArray(raw, errors);
-  const functions = readFunctions(raw, errors);
-  const hooks = "hooks" in raw ? readStringArrayAtPath(raw.hooks, "hooks", errors) : undefined;
-  const resources = readResourcesAtPath(raw.resources, "resources", errors);
-  const env = readStringRecord(raw, "env", errors);
-  const secrets = readSecretsAtPath(raw.secrets, "secrets", errors);
-  const workflows = readWorkflowsAtPath(raw.workflows, "workflows", errors);
-  const params = readStringRecord(raw, "params", errors);
-  const extensions = readExtensions(raw, errors);
-  const state = readStateConfigAtPath(raw.state, "state", errors);
-  const stageOverrides = readStageOverrides(raw, errors);
+  const sourceCandidate = resolveDynamicBindingsAtPath(raw, "root", errors);
+  if (!isRecord(sourceCandidate)) {
+    throw new Error("Invalid runfabric.yml: root document must be an object");
+  }
+  const source = sourceCandidate;
+
+  const service = readRequiredString(source, "service", errors);
+  const runtime = readRequiredString(source, "runtime", errors);
+  const entry = readRequiredString(source, "entry", errors);
+  const providers = readStringArray(source, "providers", errors, 1);
+  const triggers = readTriggerArray(source, errors);
+  const functions = readFunctions(source, errors);
+  const hooks = "hooks" in source ? readStringArrayAtPath(source.hooks, "hooks", errors) : undefined;
+  const resources = readResourcesAtPath(source.resources, "resources", errors);
+  const env = readStringRecord(source, "env", errors);
+  const secrets = readSecretsAtPath(source.secrets, "secrets", errors);
+  const workflows = readWorkflowsAtPath(source.workflows, "workflows", errors);
+  const params = readStringRecord(source, "params", errors);
+  const extensions = readExtensions(source, errors);
+  const state = readStateConfigAtPath(source.state, "state", errors);
+  const stageOverrides = readStageOverrides(source, errors);
 
   const selectedStage = (
     options.stage ||

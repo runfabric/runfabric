@@ -27,6 +27,7 @@ Project scope (current):
 - Trace and metric queries from local artifacts: `runfabric traces`, `runfabric metrics`
 - Compose deploy orchestration with dependency ordering
 - Stage-aware local state and deployment receipts
+- Dynamic env interpolation in config values (`${env:VAR}` and `${env:VAR,default}`)
 - Node-first runtime guardrails for current beta (`runtime: nodejs` production-ready path)
 - Extended trigger model: `http`, `cron`, `queue`, `storage`, `eventbridge`, `pubsub`, `kafka`, `rabbitmq`
 - Workflow/resources/secrets schema support in `runfabric.yml`
@@ -77,6 +78,12 @@ Create a new project:
 
 ```bash
 runfabric init --dir ./my-api
+```
+
+Explicit state backend selection:
+
+```bash
+runfabric init --dir ./my-api --provider aws-lambda --state-backend s3
 ```
 
 Migrate an existing Serverless Framework config (best-effort bootstrap):

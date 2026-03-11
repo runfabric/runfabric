@@ -12,6 +12,7 @@ import { error, info, success, warn } from "../utils/logger";
 type InitTemplateName = "api" | "worker" | "queue" | "cron";
 type InitLanguage = "ts" | "js";
 type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
+type StateBackend = "local" | "postgres" | "s3" | "gcs" | "azblob";
 
 interface InitTemplateDefinition {
   name: InitTemplateName;
@@ -83,6 +84,7 @@ const templateDefinitions: Record<InitTemplateName, InitTemplateDefinition> = {
 };
 
 const initLanguages: InitLanguage[] = ["ts", "js"];
+const initStateBackends: StateBackend[] = ["local", "postgres", "s3", "gcs", "azblob"];
 
 function isTemplateName(value: string): value is InitTemplateName {
   return value === "api" || value === "worker" || value === "queue" || value === "cron";
@@ -94,6 +96,16 @@ function isLanguage(value: string): value is InitLanguage {
 
 function isPackageManager(value: string): value is PackageManager {
   return value === "npm" || value === "pnpm" || value === "yarn" || value === "bun";
+}
+
+function isStateBackend(value: string): value is StateBackend {
+  return (
+    value === "local" ||
+    value === "postgres" ||
+    value === "s3" ||
+    value === "gcs" ||
+    value === "azblob"
+  );
 }
 
 function canPromptInteractively(): boolean {
@@ -233,9 +245,58 @@ function buildConfigContent(
   template: InitTemplateDefinition,
   service: string,
   provider: string,
-  language: InitLanguage
+  language: InitLanguage,
+  stateBackend: StateBackend
 ): string {
   const extension = language === "ts" ? "ts" : "js";
+  const stateLines = (() => {
+    if (stateBackend === "local") {
+      return [
+        "state:",
+        "  backend: local",
+        "  local:",
+        "    dir: ./.runfabric/state"
+      ];
+    }
+    if (stateBackend === "postgres") {
+      return [
+        "state:",
+        "  backend: postgres",
+        "  postgres:",
+        "    connectionStringEnv: RUNFABRIC_STATE_POSTGRES_URL",
+        "    schema: public",
+        "    table: runfabric_state"
+      ];
+    }
+    if (stateBackend === "s3") {
+      return [
+        "state:",
+        "  backend: s3",
+        "  s3:",
+        "    bucket: ${env:RUNFABRIC_STATE_S3_BUCKET}",
+        "    region: ${env:AWS_REGION,us-east-1}",
+        "    keyPrefix: runfabric/state",
+        "    useLockfile: true"
+      ];
+    }
+    if (stateBackend === "gcs") {
+      return [
+        "state:",
+        "  backend: gcs",
+        "  gcs:",
+        "    bucket: ${env:RUNFABRIC_STATE_GCS_BUCKET}",
+        "    prefix: runfabric/state"
+      ];
+    }
+    return [
+      "state:",
+      "  backend: azblob",
+      "  azblob:",
+      "    container: ${env:RUNFABRIC_STATE_AZBLOB_CONTAINER}",
+      "    prefix: runfabric/state"
+    ];
+  })();
+
   return [
     `service: ${service}`,
     "runtime: nodejs",
@@ -243,6 +304,8 @@ function buildConfigContent(
     "",
     "providers:",
     `  - ${provider}`,
+    "",
+    ...stateLines,
     "",
     ...template.triggerBlock,
     ""
@@ -275,7 +338,11 @@ function buildHandlerContent(template: InitTemplateDefinition, language: InitLan
   ].join("\n");
 }
 
-function buildPackageJsonContent(service: string, language: InitLanguage): string {
+function buildPackageJsonContent(
+  service: string,
+  language: InitLanguage,
+  provider: string
+): string {
   const scripts: Record<string, string> = {
     doctor: "runfabric doctor",
     plan: "runfabric plan",
@@ -291,15 +358,21 @@ function buildPackageJsonContent(service: string, language: InitLanguage): strin
     scripts.typecheck = "tsc --noEmit -p tsconfig.json";
   }
 
+  const providerPackage = getProviderPackageName(provider);
+  const dependencies: Record<string, string> = {
+    "@runfabric/core": "^0.1.0"
+  };
+  if (providerPackage) {
+    dependencies[providerPackage] = "^0.1.0";
+  }
+
   const packageJson: Record<string, unknown> = {
     name: normalizePackageName(service),
     private: true,
     version: "0.1.0",
     type: "module",
     scripts,
-    dependencies: {
-      "@runfabric/core": "^0.1.0"
-    }
+    dependencies
   };
 
   if (language === "ts") {
@@ -359,6 +432,7 @@ function buildProjectReadmeContent(params: {
   provider: string;
   language: InitLanguage;
   template: InitTemplateDefinition;
+  stateBackend: StateBackend;
   packageManager: PackageManager;
   credentialEnvVars: string[];
   skippedInstall: boolean;
@@ -373,6 +447,32 @@ function buildProjectReadmeContent(params: {
     params.credentialEnvVars.length > 0
       ? params.credentialEnvVars.map((envName) => `${envName}=your-value`)
       : ["# credentials"];
+  const stateBackendEnvHints = (() => {
+    if (params.stateBackend === "local") {
+      return ["# local backend selected; no additional state credentials required"];
+    }
+    if (params.stateBackend === "postgres") {
+      return ['RUNFABRIC_STATE_POSTGRES_URL="postgres://user:pass@host:5432/dbname?sslmode=require"'];
+    }
+    if (params.stateBackend === "s3") {
+      return [
+        'RUNFABRIC_STATE_S3_BUCKET="your-state-bucket"',
+        'AWS_REGION="us-east-1"',
+        'AWS_ACCESS_KEY_ID="your-key"',
+        'AWS_SECRET_ACCESS_KEY="your-secret"'
+      ];
+    }
+    if (params.stateBackend === "gcs") {
+      return [
+        'RUNFABRIC_STATE_GCS_BUCKET="your-state-bucket"',
+        'GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"'
+      ];
+    }
+    return [
+      'RUNFABRIC_STATE_AZBLOB_CONTAINER="runfabric-state"',
+      'AZURE_STORAGE_CONNECTION_STRING="your-connection-string"'
+    ];
+  })();
 
   return [
     `# ${params.service}`,
@@ -453,6 +553,16 @@ function buildProjectReadmeContent(params: {
     "source .env",
     "set +a",
     `${commandPrefix} deploy`,
+    "```",
+    "",
+    "## State Backend",
+    "",
+    `Configured state backend in \`runfabric.yml\`: \`${params.stateBackend}\`.`,
+    "",
+    "Typical environment variables for this backend:",
+    "",
+    "```bash",
+    ...stateBackendEnvHints,
     "```",
     "",
     "## Generated Files",
@@ -560,6 +670,7 @@ export const registerInitCommand: CommandRegistrar = (program) => {
     .option("--dir <path>", "Directory to initialize", ".")
     .option("--template <name>", "Template: api, worker, queue, cron")
     .option("--provider <name>", "Primary provider for generated config")
+    .option("--state-backend <name>", "State backend: local, postgres, s3, gcs, azblob")
     .option("--lang <name>", "Source language: ts or js")
     .option("--pm <name>", "Package manager: npm, pnpm, yarn, bun")
     .option("--service <name>", "Service name override")
@@ -571,6 +682,7 @@ export const registerInitCommand: CommandRegistrar = (program) => {
         dir: string;
         template?: string;
         provider?: string;
+        stateBackend?: string;
         lang?: string;
         pm?: string;
         service?: string;
@@ -616,6 +728,18 @@ export const registerInitCommand: CommandRegistrar = (program) => {
           return;
         }
 
+        const stateBackendRaw = options.stateBackend
+          ? options.stateBackend
+          : interactiveMode
+            ? await promptSelection("Select state backend", [...initStateBackends], "local")
+            : "local";
+        if (!isStateBackend(stateBackendRaw)) {
+          error(`unknown state backend: ${stateBackendRaw}`);
+          error(`supported state backends: ${initStateBackends.join(", ")}`);
+          process.exitCode = 1;
+          return;
+        }
+
         const packageManagerRaw = options.pm || detectPackageManager();
         if (!isPackageManager(packageManagerRaw)) {
           error(`unknown package manager: ${packageManagerRaw}`);
@@ -646,9 +770,13 @@ export const registerInitCommand: CommandRegistrar = (program) => {
         const credentialEnvVars =
           credentialSchema?.fields.map((field) => field.env).filter((value) => value.trim().length > 0) || [];
 
-        await writeFile(configPath, buildConfigContent(template, service, providerRaw, language), "utf8");
+        await writeFile(
+          configPath,
+          buildConfigContent(template, service, providerRaw, language, stateBackendRaw),
+          "utf8"
+        );
         await writeFile(handlerPath, buildHandlerContent(template, language), "utf8");
-        await writeFile(packageJsonPath, buildPackageJsonContent(service, language), "utf8");
+        await writeFile(packageJsonPath, buildPackageJsonContent(service, language, providerRaw), "utf8");
         await writeFile(gitIgnorePath, buildGitIgnoreContent(), "utf8");
         await writeFile(
           readmePath,
@@ -657,6 +785,7 @@ export const registerInitCommand: CommandRegistrar = (program) => {
             provider: providerRaw,
             language,
             template,
+            stateBackend: stateBackendRaw,
             packageManager: packageManagerRaw,
             credentialEnvVars,
             skippedInstall: Boolean(options.skipInstall)

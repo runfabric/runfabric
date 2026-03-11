@@ -36,6 +36,37 @@ triggers:
 - `state` (`object`, optional)
 - `stages` (`Record<string, override>`, optional)
 
+## Dynamic Env Bindings
+
+String values can resolve environment variables using:
+
+- `${env:VAR_NAME}`
+- `${env:VAR_NAME,default-value}`
+
+Example:
+
+```yaml
+service: ${env:RUNFABRIC_SERVICE_NAME,my-service}
+runtime: nodejs
+entry: src/index.ts
+
+providers:
+  - aws-lambda
+
+state:
+  backend: s3
+  s3:
+    bucket: ${env:RUNFABRIC_STATE_S3_BUCKET}
+    region: ${env:AWS_REGION,us-east-1}
+
+triggers:
+  - type: http
+    method: GET
+    path: /hello
+```
+
+If `${env:VAR_NAME}` is used without a default and the variable is missing, config parsing fails with an explicit error.
+
 ## Trigger Types
 
 ### HTTP

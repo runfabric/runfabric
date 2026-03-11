@@ -31,6 +31,17 @@ runfabric --help
 
 `link:cli` builds only the CLI runtime graph (`core`, `planner`, `builder`, `runtime-node`, `cli`) and does not build provider adapters.
 
+Expected warning with `pnpm link --global`:
+
+- pnpm may warn that `@runfabric/cli` has optional provider peer dependencies not resolved in the linked target project.
+- This is expected for runfabric's modular provider model.
+- Install only the provider adapters used by the target project, for example:
+
+```bash
+cd /path/to/your-service
+pnpm add -D @runfabric/provider-aws-lambda
+```
+
 Remove global local link:
 
 ```bash
@@ -48,6 +59,7 @@ export PATH="$PNPM_HOME:$PATH"
 
 - `npm run check:syntax`
 - `npm run check:capabilities`
+- `npm run check:docs-sync`
 - `npm run check:compatibility`
 - `npm test`
 - `pnpm -r --if-present run build`
