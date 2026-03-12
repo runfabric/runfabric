@@ -11,21 +11,28 @@ on:
 
 jobs:
   snyk:
-    if: ${{ secrets.SNYK_TOKEN != '' }}
     runs-on: ubuntu-latest
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
+      - name: Skip when SNYK_TOKEN is not configured
+        if: env.SNYK_TOKEN == ''
+        run: echo "SNYK_TOKEN is not configured; skipping Snyk scan."
       - uses: actions/checkout@v4
+        if: env.SNYK_TOKEN != ''
       - uses: actions/setup-node@v4
+        if: env.SNYK_TOKEN != ''
         with:
           node-version: "24"
       - name: Enable Corepack
+        if: env.SNYK_TOKEN != ''
         run: corepack enable
       - name: Install dependencies
+        if: env.SNYK_TOKEN != ''
         run: pnpm install --frozen-lockfile
       - name: Snyk test
+        if: env.SNYK_TOKEN != ''
         run: pnpm run security:snyk:test
       - name: Snyk monitor
-        if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+        if: env.SNYK_TOKEN != '' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: pnpm run security:snyk:monitor
