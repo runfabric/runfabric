@@ -51,5 +51,9 @@
     "*": [
       "npm run check:syntax"
     ]
+  },
+  "homepage": "https://github.com/runfabric/runfabric#readme",
+  "bugs": {
+    "url": "https://github.com/runfabric/runfabric/issues"
   }
 }

@@ -37,5 +37,9 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "homepage": "https://github.com/runfabric/runfabric/tree/main/packages/provider-cloudflare-workers#readme",
+  "bugs": {
+    "url": "https://github.com/runfabric/runfabric/issues"
   }
 }

@@ -99,5 +99,9 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "homepage": "https://github.com/runfabric/runfabric/tree/main/apps/cli#readme",
+  "bugs": {
+    "url": "https://github.com/runfabric/runfabric/issues"
   }
 }

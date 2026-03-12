@@ -37,5 +37,9 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "homepage": "https://github.com/runfabric/runfabric/tree/main/packages/planner#readme",
+  "bugs": {
+    "url": "https://github.com/runfabric/runfabric/issues"
   }
 }

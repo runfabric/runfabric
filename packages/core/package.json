@@ -40,5 +40,9 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "homepage": "https://github.com/runfabric/runfabric/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/runfabric/runfabric/issues"
   }
 }
