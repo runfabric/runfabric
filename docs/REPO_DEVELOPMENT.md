@@ -64,6 +64,7 @@ export PATH="$PNPM_HOME:$PATH"
 - `npm test`
 - `pnpm -r --if-present run build`
 - `pnpm -r --if-present run typecheck`
+- `pnpm run security:snyk:test` (requires `SNYK_TOKEN`)
 - `npm run release:check`
 
 ## Repository Structure

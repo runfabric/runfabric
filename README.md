@@ -149,6 +149,11 @@ export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);
 - `runfabric compose plan|deploy`
 - `runfabric state pull|list|backup|restore|force-unlock|migrate|reconcile`
 
+## Security Scanning
+
+- Snyk workflow: `.github/workflows/snyk.yml`
+- Local command: `pnpm run security:snyk:test` (requires `SNYK_TOKEN`)
+
 `invoke` and `logs` resolve project context from the current working directory; run them from the target project root.
 
 Full command reference: `docs/site/command-reference.md`

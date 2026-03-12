@@ -19,6 +19,8 @@
     "check:schema": "node scripts/check-schema-compat.mjs",
     "check:provider-contracts": "node scripts/check-provider-contracts.mjs",
     "check:compatibility": "npm run check:schema && npm run check:provider-contracts",
+    "security:snyk:test": "npx --yes snyk test --all-projects --detection-depth=4 --severity-threshold=high",
+    "security:snyk:monitor": "npx --yes snyk monitor --all-projects --detection-depth=4",
     "runfabric": "node --import ./tests/register-loader.mjs apps/cli/src/index.ts",
     "test": "tsx --tsconfig tsconfig.runtime.json --test tests/*.test.ts",
     "release:check": "npm run check:syntax && npm run check:capabilities && npm run check:docs-sync && npm run check:compatibility && npm test && pnpm -r --if-present run build && pnpm -r --if-present run typecheck",
@@ -51,6 +53,11 @@
     "*": [
       "npm run check:syntax"
     ]
+  },
+  "pnpm": {
+    "overrides": {
+      "@tootallnate/once": "3.0.1"
+    }
   },
   "homepage": "https://github.com/runfabric/runfabric#readme",
   "bugs": {

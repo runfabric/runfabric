@@ -86,3 +86,23 @@ pnpm run runfabric -- metrics --provider aws-lambda --json
 ```
 
 The trace/metric outputs are derived from local provider receipts and event logs written under `.runfabric/deploy/<provider>/`.
+
+## 5) Security Scanning (Snyk)
+
+Active workflow: `.github/workflows/snyk.yml`
+
+Required secret:
+
+- `SNYK_TOKEN`
+
+Checks run:
+
+- `pnpm run security:snyk:test` on PRs and pushes
+- `pnpm run security:snyk:monitor` on `main` pushes (and scheduled runs)
+
+Local run:
+
+```bash
+export SNYK_TOKEN="your-token"
+pnpm run security:snyk:test
+```
