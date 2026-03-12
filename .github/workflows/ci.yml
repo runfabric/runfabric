@@ -25,6 +25,8 @@ jobs:
         run: pnpm run check:capabilities
       - name: Compatibility checks
         run: pnpm run check:compatibility
+      - name: Workspace build
+        run: pnpm -r --if-present run build
       - name: Workspace lint
         run: pnpm -r --if-present run lint
       - name: Test
