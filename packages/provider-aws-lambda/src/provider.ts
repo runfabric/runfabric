@@ -38,6 +38,7 @@ import {
   invokeProviderViaDeployedEndpoint,
   isRealDeployModeEnabled,
   missingRequiredCredentialErrors,
+  readDeploymentReceipt,
   runJsonCommand,
   runShellCommand,
   TriggerEnum,
@@ -943,7 +944,8 @@ export function createAwsLambdaProvider(options: AwsProviderOptions): ProviderAd
     async destroy(project: ProjectConfig) {
       const stage = resolveStage(project);
       const region = resolveRegion(project);
-      if (isRealDeployModeEnabled("RUNFABRIC_AWS_REAL_DEPLOY")) {
+      const realDeployModeEnabled = isRealDeployModeEnabled("RUNFABRIC_AWS_REAL_DEPLOY");
+      if (realDeployModeEnabled) {
         if (process.env.RUNFABRIC_AWS_DESTROY_CMD) {
           const result = await runShellCommand(process.env.RUNFABRIC_AWS_DESTROY_CMD, {
             cwd: options.projectDir,
@@ -957,6 +959,13 @@ export function createAwsLambdaProvider(options: AwsProviderOptions): ProviderAd
           }
         } else {
           await destroyWithAwsSdk(project, stage, region);
+        }
+      } else {
+        const receipt = await readDeploymentReceipt(options.projectDir, "aws-lambda");
+        if (receipt && receipt.mode !== "simulated") {
+          throw new Error(
+            `aws-lambda destroy skipped cloud deletion because real deploy mode is disabled. Last deployment mode=${receipt.mode}. Set RUNFABRIC_AWS_REAL_DEPLOY=1 and rerun runfabric remove.`
+          );
         }
       }
 

@@ -7,7 +7,8 @@ import type { ProjectConfig } from "@runfabric/core";
 import {
   AwsIamEffectEnum,
   AwsQueueFunctionResponseTypeEnum,
-  TriggerEnum
+  TriggerEnum,
+  writeDeploymentReceipt
 } from "@runfabric/core";
 import { createAwsLambdaProvider } from "../packages/provider-aws-lambda/src/index.ts";
 
@@ -216,6 +217,44 @@ test("aws internal real deploy requires role arn when command override is not pr
         provider.deploy(project, deployPlan),
         /requires a role ARN/,
         "internal aws deploy should fail fast with actionable role arn guidance"
+      );
+    }
+  );
+});
+
+test("aws destroy fails fast when last deployment was real but real mode is disabled", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-aws-destroy-mode-"));
+  const provider = createAwsLambdaProvider({ projectDir });
+  const project: ProjectConfig = {
+    service: "aws-destroy-mode",
+    runtime: "nodejs",
+    entry: "src/index.ts",
+    providers: ["aws-lambda"],
+    stage: "dev",
+    triggers: [{ type: TriggerEnum.Http, method: "GET", path: "/hello" }]
+  };
+
+  await writeDeploymentReceipt(projectDir, "aws-lambda", {
+    provider: "aws-lambda",
+    service: project.service,
+    stage: project.stage || "default",
+    deploymentId: "aws-lambda-aws-destroy-mode-dev-test",
+    mode: "api",
+    executedSteps: [],
+    createdAt: new Date().toISOString(),
+    endpoint: "https://example.lambda-url.us-east-1.on.aws/"
+  });
+
+  await withEnv(
+    {
+      RUNFABRIC_AWS_REAL_DEPLOY: "0",
+      RUNFABRIC_REAL_DEPLOY: "0",
+      RUNFABRIC_AWS_DESTROY_CMD: ""
+    },
+    async () => {
+      await assert.rejects(
+        provider.destroy?.(project),
+        /real deploy mode is disabled.*RUNFABRIC_AWS_REAL_DEPLOY=1/i
       );
     }
   );
