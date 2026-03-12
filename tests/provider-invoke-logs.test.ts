@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { ProjectConfig } from "@runfabric/core";
+import type { ProjectConfig } from "../packages/core/src/index.ts";
 import {
   buildProviderMetricsFromLocalArtifacts,
   buildProviderTracesFromLocalArtifacts,
   readDeploymentReceipt,
   TriggerEnum
-} from "@runfabric/core";
+} from "../packages/core/src/index.ts";
 import { createAwsLambdaProvider } from "../packages/provider-aws-lambda/src/index.ts";
 
 function createProject(): ProjectConfig {

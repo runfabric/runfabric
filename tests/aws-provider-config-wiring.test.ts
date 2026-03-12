@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { ProjectConfig } from "@runfabric/core";
+import type { ProjectConfig } from "../packages/core/src/index.ts";
 import {
   AwsIamEffectEnum,
   AwsQueueFunctionResponseTypeEnum,
   TriggerEnum,
   writeDeploymentReceipt
-} from "@runfabric/core";
+} from "../packages/core/src/index.ts";
 import { createAwsLambdaProvider } from "../packages/provider-aws-lambda/src/index.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { ProjectConfig } from "@runfabric/core";
-import { TriggerEnum } from "@runfabric/core";
+import type { ProjectConfig } from "../packages/core/src/index.ts";
+import { TriggerEnum } from "../packages/core/src/index.ts";
 import { resolveFunctionProject } from "../apps/cli/src/utils/project-functions.ts";
 
 test("resolveFunctionProject merges root env with function env override", () => {
