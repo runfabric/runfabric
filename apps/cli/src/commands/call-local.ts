@@ -604,7 +604,7 @@ async function serveLocalCalls(projectDir: string, options: LocalCallOptions): P
   const port = options.port ?? 8787;
   const extraHeaders = parseHeaders(options.header || []);
   const watchMode = Boolean(options.watch);
-  const tscWatch = watchMode && entry.endsWith(".ts") ? startTypeScriptWatch(projectDir) : undefined;
+  let tscWatch: ChildProcess | undefined;
 
   const server = createServer(async (request, response) => {
     try {
@@ -649,6 +649,7 @@ async function serveLocalCalls(projectDir: string, options: LocalCallOptions): P
 
   const serverAddress = server.address();
   const resolvedPort = serverAddress && typeof serverAddress === "object" ? serverAddress.port : port;
+  tscWatch = watchMode && entry.endsWith(".ts") ? startTypeScriptWatch(projectDir) : undefined;
   info(`local call server listening on http://${host}:${resolvedPort}`);
   info(`provider: ${provider}`);
   info(`entry: ${entry}`);
@@ -661,6 +662,7 @@ async function serveLocalCalls(projectDir: string, options: LocalCallOptions): P
 
   await new Promise<void>((resolvePromise) => {
     let shuttingDown = false;
+    let stdinListenerAttached = false;
 
     const shutdown = async (): Promise<void> => {
       if (shuttingDown) {
@@ -671,7 +673,12 @@ async function serveLocalCalls(projectDir: string, options: LocalCallOptions): P
       process.off("SIGINT", shutdown);
       process.off("SIGTERM", shutdown);
       process.off("SIGQUIT", shutdown);
-      process.stdin.off("data", onStdinData);
+      if (stdinListenerAttached) {
+        process.stdin.off("data", onStdinData);
+        if (typeof process.stdin.pause === "function") {
+          process.stdin.pause();
+        }
+      }
       server.close(async () => {
         if (tscWatch) {
           await stopChildProcess(tscWatch);
@@ -690,8 +697,11 @@ async function serveLocalCalls(projectDir: string, options: LocalCallOptions): P
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
     process.on("SIGQUIT", shutdown);
-    process.stdin.on("data", onStdinData);
-    process.stdin.resume();
+    if (process.stdin.isTTY) {
+      process.stdin.on("data", onStdinData);
+      process.stdin.resume();
+      stdinListenerAttached = true;
+    }
   });
 }
 

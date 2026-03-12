@@ -20,10 +20,13 @@ import { registerTracesCommand } from "./commands/traces";
 import { registerDevCommand } from "./commands/dev";
 
 const program = new Command();
+const packageJson = require("../package.json") as { version?: string };
+const cliVersion = typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
 
 program
   .name("runfabric")
-  .description("Multi-provider serverless deployment framework");
+  .description("Multi-provider serverless deployment framework")
+  .version(cliVersion);
 
 registerInitCommand(program);
 registerDoctorCommand(program);

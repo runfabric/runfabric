@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -12,6 +13,7 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const cliEntry = join(repoRoot, "apps", "cli", "src", "index.ts");
 const runtimeTsConfig = join(repoRoot, "tsconfig.runtime.json");
 const tsxBin = join(repoRoot, "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
+const cliPackageVersion = JSON.parse(readFileSync(join(repoRoot, "apps", "cli", "package.json"), "utf8")).version;
 
 function runCli(args: string[], env: Record<string, string>): { status: number | null; stdout: string; stderr: string } {
   const result = spawnSync(tsxBin, ["--tsconfig", runtimeTsConfig, cliEntry, ...args], {
@@ -29,6 +31,12 @@ function runCli(args: string[], env: Record<string, string>): { status: number |
     stderr: result.stderr || ""
   };
 }
+
+test("cli supports --version", () => {
+  const result = runCli(["--version"], {});
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), cliPackageVersion);
+});
 
 test("cli smoke: doctor/plan/build/deploy complete for cloudflare fixture", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "runfabric-cli-smoke-"));
@@ -281,6 +289,96 @@ test("call-local prefers built js artifact over ts source entry when available",
   const output = JSON.parse(result.stdout);
   assert.equal(output.response.statusCode, 200);
   assert.ok(output.response.body.includes("\"source\":\"dist-src-js\""));
+});
+
+test("call-local --serve --watch does not start tsc watch when port bind fails", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-call-local-watch-bind-fail-"));
+  await mkdir(join(projectDir, "src"), { recursive: true });
+  await writeFile(
+    join(projectDir, "src", "index.ts"),
+    [
+      "export const handler = async () => ({",
+      "  status: 200,",
+      "  headers: { \"content-type\": \"application/json\" },",
+      "  body: JSON.stringify({ ok: true })",
+      "});",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    join(projectDir, "tsconfig.json"),
+    [
+      "{",
+      "  \"compilerOptions\": {",
+      "    \"target\": \"ES2022\",",
+      "    \"module\": \"NodeNext\",",
+      "    \"moduleResolution\": \"NodeNext\",",
+      "    \"strict\": true,",
+      "    \"types\": [\"node\"],",
+      "    \"skipLibCheck\": true,",
+      "    \"outDir\": \"dist\"",
+      "  },",
+      "  \"include\": [\"src/**/*.ts\"]",
+      "}",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    join(projectDir, "runfabric.yml"),
+    [
+      "service: watch-bind-fail",
+      "runtime: nodejs",
+      "entry: src/index.ts",
+      "",
+      "providers:",
+      "  - aws-lambda",
+      "",
+      "triggers:",
+      "  - type: http",
+      "    method: GET",
+      "    path: /hello",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const blocker = createServer();
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    blocker.once("error", rejectPromise);
+    blocker.listen(0, "127.0.0.1", () => resolvePromise());
+  });
+  const blockedAddress = blocker.address();
+  const blockedPort = blockedAddress && typeof blockedAddress === "object" ? blockedAddress.port : 0;
+
+  try {
+    const result = runCli(
+      [
+        "call-local",
+        "-c",
+        join(projectDir, "runfabric.yml"),
+        "--provider",
+        "aws-lambda",
+        "--serve",
+        "--watch",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        String(blockedPort)
+      ],
+      {}
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /EADDRINUSE|already in use|listen/i);
+    assert.equal(
+      result.stdout.includes("watch mode: starting TypeScript compiler"),
+      false,
+      "tsc watch should not start when server listen fails"
+    );
+  } finally {
+    await new Promise<void>((resolvePromise) => blocker.close(() => resolvePromise()));
+  }
 });
 
 test("dev preset queue --once runs one local simulation and exits cleanly", async () => {
