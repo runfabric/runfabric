@@ -328,6 +328,84 @@ function resolvePayload(input: InvokeInput): { method: string; body?: string; co
   }
 }
 
+function missingEndpointInvokeResult(provider: string): InvokeResult {
+  return {
+    statusCode: 404,
+    body: JSON.stringify({
+      error: `${provider} deployment endpoint is not available`,
+      hint: "run deploy first"
+    })
+  };
+}
+
+function buildInvokeHeaders(
+  provider: string,
+  deploymentId: string,
+  invokeId: string,
+  correlationId: string,
+  contentType?: string
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    "x-runfabric-provider": provider,
+    "x-runfabric-deployment-id": deploymentId,
+    "x-runfabric-invoke-id": invokeId,
+    "x-runfabric-correlation-id": correlationId
+  };
+  if (contentType) {
+    headers["content-type"] = contentType;
+  }
+  return headers;
+}
+
+function invokeCorrelation(receipt: DeploymentReceipt, invokeId: string): NonNullable<InvokeResult["correlation"]> {
+  return {
+    deploymentId: receipt.deploymentId,
+    invokeId
+  };
+}
+
+async function persistInvokeCorrelation(
+  projectDir: string,
+  provider: string,
+  receipt: DeploymentReceipt,
+  invokeId: string
+): Promise<void> {
+  await writeDeploymentReceipt(projectDir, provider, {
+    ...receipt,
+    correlation: {
+      deploymentId: receipt.deploymentId,
+      deployTraceId: receipt.correlation?.deployTraceId || `deploy-${receipt.deploymentId}`,
+      latestInvokeId: invokeId,
+      latestInvokeAt: new Date().toISOString()
+    }
+  });
+}
+
+async function invokeEndpoint(
+  endpoint: string,
+  payload: { method: string; body?: string; contentType?: string },
+  headers: Record<string, string>
+): Promise<{ ok: true; statusCode: number; body: string } | { ok: false; message: string }> {
+  try {
+    const response = await fetch(endpoint, {
+      method: payload.method,
+      headers,
+      body: payload.body,
+      signal: AbortSignal.timeout(10_000)
+    });
+    return {
+      ok: true,
+      statusCode: response.status,
+      body: await response.text()
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
 export async function invokeProviderViaDeployedEndpoint(
   projectDir: string,
   provider: string,
@@ -335,86 +413,47 @@ export async function invokeProviderViaDeployedEndpoint(
 ): Promise<InvokeResult> {
   const receipt = await readDeploymentReceipt(projectDir, provider);
   if (!receipt?.endpoint) {
-    return {
-      statusCode: 404,
-      body: JSON.stringify({
-        error: `${provider} deployment endpoint is not available`,
-        hint: "run deploy first"
-      })
-    };
+    return missingEndpointInvokeResult(provider);
   }
 
   const payload = resolvePayload(input);
   const invokeId = randomUUID();
   const correlationId = `invoke-${invokeId}`;
-  const headers: Record<string, string> = {
-    "x-runfabric-provider": provider
+  const headers = buildInvokeHeaders(
+    provider,
+    receipt.deploymentId,
+    invokeId,
+    correlationId,
+    payload.contentType
+  );
+  const invokeResult = await invokeEndpoint(receipt.endpoint, payload, headers);
+  if (invokeResult.ok) {
+    await appendProviderLog(
+      projectDir,
+      provider,
+      `invoke deploymentId=${receipt.deploymentId} invokeId=${invokeId} correlationId=${correlationId} endpoint=${receipt.endpoint} status=${invokeResult.statusCode}`
+    );
+    await persistInvokeCorrelation(projectDir, provider, receipt, invokeId);
+    return {
+      statusCode: invokeResult.statusCode,
+      body: invokeResult.body,
+      correlation: invokeCorrelation(receipt, invokeId)
+    };
+  }
+  await appendProviderLog(
+    projectDir,
+    provider,
+    `invoke failed deploymentId=${receipt.deploymentId} invokeId=${invokeId} correlationId=${correlationId} error=${invokeResult.message}`
+  );
+  await persistInvokeCorrelation(projectDir, provider, receipt, invokeId);
+  return {
+    statusCode: 502,
+    body: JSON.stringify({
+      error: "invoke failed",
+      message: invokeResult.message
+    }),
+    correlation: invokeCorrelation(receipt, invokeId)
   };
-  headers["x-runfabric-deployment-id"] = receipt.deploymentId;
-  headers["x-runfabric-invoke-id"] = invokeId;
-  headers["x-runfabric-correlation-id"] = correlationId;
-  if (payload.contentType) {
-    headers["content-type"] = payload.contentType;
-  }
-
-  try {
-    const response = await fetch(receipt.endpoint, {
-      method: payload.method,
-      headers,
-      body: payload.body,
-      signal: AbortSignal.timeout(10_000)
-    });
-    const bodyText = await response.text();
-    await appendProviderLog(
-      projectDir,
-      provider,
-      `invoke deploymentId=${receipt.deploymentId} invokeId=${invokeId} correlationId=${correlationId} endpoint=${receipt.endpoint} status=${response.status}`
-    );
-    await writeDeploymentReceipt(projectDir, provider, {
-      ...receipt,
-      correlation: {
-        deploymentId: receipt.deploymentId,
-        deployTraceId: receipt.correlation?.deployTraceId || `deploy-${receipt.deploymentId}`,
-        latestInvokeId: invokeId,
-        latestInvokeAt: new Date().toISOString()
-      }
-    });
-    return {
-      statusCode: response.status,
-      body: bodyText,
-      correlation: {
-        deploymentId: receipt.deploymentId,
-        invokeId
-      }
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await appendProviderLog(
-      projectDir,
-      provider,
-      `invoke failed deploymentId=${receipt.deploymentId} invokeId=${invokeId} correlationId=${correlationId} error=${message}`
-    );
-    await writeDeploymentReceipt(projectDir, provider, {
-      ...receipt,
-      correlation: {
-        deploymentId: receipt.deploymentId,
-        deployTraceId: receipt.correlation?.deployTraceId || `deploy-${receipt.deploymentId}`,
-        latestInvokeId: invokeId,
-        latestInvokeAt: new Date().toISOString()
-      }
-    });
-    return {
-      statusCode: 502,
-      body: JSON.stringify({
-        error: "invoke failed",
-        message
-      }),
-      correlation: {
-        deploymentId: receipt.deploymentId,
-        invokeId
-      }
-    };
-  }
 }
 
 export async function destroyProviderArtifacts(projectDir: string, provider: string): Promise<void> {
@@ -483,120 +522,9 @@ export async function runJsonCommand(
   }
 }
 
-function normalizeTraceRecord(raw: unknown, provider: string): TraceRecord | null {
-  if (!raw || typeof raw !== "object") {
-    return null;
-  }
-
-  const entry = raw as Record<string, unknown>;
-  const timestamp =
-    typeof entry.timestamp === "string" && entry.timestamp.trim().length > 0
-      ? entry.timestamp
-      : new Date().toISOString();
-  const message =
-    typeof entry.message === "string" && entry.message.trim().length > 0
-      ? entry.message
-      : JSON.stringify(entry);
-  const deploymentId =
-    typeof entry.deploymentId === "string" && entry.deploymentId.trim().length > 0
-      ? entry.deploymentId
-      : undefined;
-  const invokeId =
-    typeof entry.invokeId === "string" && entry.invokeId.trim().length > 0 ? entry.invokeId : undefined;
-  const correlationId =
-    typeof entry.correlationId === "string" && entry.correlationId.trim().length > 0
-      ? entry.correlationId
-      : undefined;
-
-  return {
-    timestamp,
-    provider,
-    message,
-    deploymentId,
-    invokeId,
-    correlationId
-  };
-}
-
-function normalizeMetricRecord(
-  raw: unknown
-): { name: string; value: number; unit?: string } | null {
-  if (!raw || typeof raw !== "object") {
-    return null;
-  }
-  const entry = raw as Record<string, unknown>;
-  if (typeof entry.name !== "string" || entry.name.trim().length === 0) {
-    return null;
-  }
-  if (typeof entry.value !== "number" || !Number.isFinite(entry.value)) {
-    return null;
-  }
-
-  return {
-    name: entry.name,
-    value: entry.value,
-    unit:
-      typeof entry.unit === "string" && entry.unit.trim().length > 0
-        ? entry.unit
-        : undefined
-  };
-}
-
-export function parseProviderTracesPayload(raw: unknown, provider: string): TracesResult {
-  if (Array.isArray(raw)) {
-    const traces = raw
-      .map((entry) => normalizeTraceRecord(entry, provider))
-      .filter((entry): entry is TraceRecord => entry !== null);
-    return { traces };
-  }
-
-  if (raw && typeof raw === "object") {
-    const payload = raw as Record<string, unknown>;
-    if (Array.isArray(payload.traces)) {
-      const traces = payload.traces
-        .map((entry) => normalizeTraceRecord(entry, provider))
-        .filter((entry): entry is TraceRecord => entry !== null);
-      return { traces };
-    }
-  }
-
-  throw new Error("trace command output must be { traces: [...] } or an array");
-}
-
-export function parseProviderMetricsPayload(raw: unknown): MetricsResult {
-  if (Array.isArray(raw)) {
-    const metrics = raw
-      .map((entry) => normalizeMetricRecord(entry))
-      .filter((entry): entry is { name: string; value: number; unit?: string } => entry !== null);
-    return { metrics };
-  }
-
-  if (raw && typeof raw === "object") {
-    const payload = raw as Record<string, unknown>;
-    if (Array.isArray(payload.metrics)) {
-      const metrics = payload.metrics
-        .map((entry) => normalizeMetricRecord(entry))
-        .filter((entry): entry is { name: string; value: number; unit?: string } => entry !== null);
-      return { metrics };
-    }
-  }
-
-  throw new Error("metrics command output must be { metrics: [...] } or an array");
-}
-
-export async function runProviderTracesCommand(
-  command: string,
-  provider: string,
-  options?: { cwd?: string; env?: Record<string, string | undefined> }
-): Promise<TracesResult> {
-  const raw = await runJsonCommand(command, options);
-  return parseProviderTracesPayload(raw, provider);
-}
-
-export async function runProviderMetricsCommand(
-  command: string,
-  options?: { cwd?: string; env?: Record<string, string | undefined> }
-): Promise<MetricsResult> {
-  const raw = await runJsonCommand(command, options);
-  return parseProviderMetricsPayload(raw);
-}
+export {
+  parseProviderMetricsPayload,
+  parseProviderTracesPayload,
+  runProviderMetricsCommand,
+  runProviderTracesCommand
+} from "./provider-ops/payload";

@@ -18,6 +18,280 @@ interface RemoveRecoveryArtifact {
   path: string;
 }
 
+interface RemoveOptions {
+  config?: string;
+  stage?: string;
+  provider?: string;
+  json?: boolean;
+}
+
+interface RemoveCollections {
+  removedPaths: string[];
+  destroyedProviders: string[];
+  failures: RemoveFailure[];
+  recoveryArtifacts: RemoveRecoveryArtifact[];
+}
+
+function createCollections(): RemoveCollections {
+  return {
+    removedPaths: [],
+    destroyedProviders: [],
+    failures: [],
+    recoveryArtifacts: []
+  };
+}
+
+function toErrorMessage(errorValue: unknown): string {
+  return errorValue instanceof Error ? errorValue.message : String(errorValue);
+}
+
+async function writeRecoveryArtifact(
+  recoveryDir: string,
+  providerName: string,
+  payload: Record<string, unknown>,
+  collections: RemoveCollections
+): Promise<void> {
+  const recoveryPath = resolve(
+    recoveryDir,
+    `${providerName}.${new Date().toISOString().replace(/[:.]/g, "-")}.json`
+  );
+
+  await writeFile(recoveryPath, JSON.stringify(payload, null, 2), "utf8");
+  collections.recoveryArtifacts.push({ provider: providerName, path: recoveryPath });
+}
+
+function resolveProviderTargets(projectProviders: string[], providerOption?: string): string[] {
+  return providerOption ? [providerOption] : projectProviders;
+}
+
+function recordMissingProviderFailure(providerName: string, collections: RemoveCollections): void {
+  const packageName = getProviderPackageName(providerName);
+  collections.failures.push({
+    provider: providerName,
+    message: packageName
+      ? `provider adapter is not installed (${packageName})`
+      : "provider adapter is not installed"
+  });
+}
+
+async function runProviderDestroy(
+  providerName: string,
+  provider: NonNullable<ReturnType<typeof createProviderRegistry>[string]>,
+  project: Awaited<ReturnType<typeof loadPlanningContext>>["project"],
+  collections: RemoveCollections,
+  recoveryDir: string,
+  stage: string
+): Promise<boolean> {
+  if (!provider.destroy) {
+    return true;
+  }
+
+  try {
+    await provider.destroy(project);
+    collections.destroyedProviders.push(providerName);
+    return true;
+  } catch (destroyError) {
+    const message = `provider destroy failed: ${toErrorMessage(destroyError)}`;
+    collections.failures.push({ provider: providerName, message });
+
+    await writeRecoveryArtifact(
+      recoveryDir,
+      providerName,
+      {
+        provider: providerName,
+        service: project.service,
+        stage,
+        message,
+        createdAt: new Date().toISOString(),
+        suggestion: "re-run runfabric remove after fixing provider credentials/permissions"
+      },
+      collections
+    );
+
+    return false;
+  }
+}
+
+async function cleanupProviderState(
+  projectService: string,
+  stage: string,
+  providerName: string,
+  stateBackend: ReturnType<typeof createStateBackend>,
+  collections: RemoveCollections
+): Promise<void> {
+  const stateAddress: StateAddress = {
+    service: projectService,
+    stage,
+    provider: providerName
+  };
+
+  try {
+    await stateBackend.delete(stateAddress);
+    await stateBackend.forceUnlock(stateAddress);
+  } catch (stateError) {
+    collections.failures.push({
+      provider: providerName,
+      message: `state cleanup failed: ${toErrorMessage(stateError)}`
+    });
+  }
+}
+
+function providerCleanupPaths(projectDir: string, providerName: string, service: string): string[] {
+  return [
+    resolve(projectDir, ".runfabric", "deploy", providerName),
+    resolve(projectDir, ".runfabric", "build", providerName, service)
+  ];
+}
+
+async function cleanupProviderPaths(
+  paths: string[],
+  providerName: string,
+  projectService: string,
+  stage: string,
+  recoveryDir: string,
+  collections: RemoveCollections
+): Promise<void> {
+  for (const targetPath of paths) {
+    try {
+      await rm(targetPath, { recursive: true, force: true });
+      collections.removedPaths.push(targetPath);
+    } catch (removeError) {
+      collections.failures.push({
+        provider: providerName,
+        message: `failed to remove ${targetPath}: ${toErrorMessage(removeError)}`
+      });
+
+      await writeRecoveryArtifact(
+        recoveryDir,
+        providerName,
+        {
+          provider: providerName,
+          service: projectService,
+          stage,
+          failedPath: targetPath,
+          createdAt: new Date().toISOString(),
+          suggestion: "remove the path manually or re-run runfabric remove"
+        },
+        collections
+      );
+    }
+  }
+}
+
+function printRemoveResult(
+  payload: {
+    service: string;
+    stage: string;
+    providers: string[];
+    destroyedProviders: string[];
+    removedPaths: string[];
+    failures: RemoveFailure[];
+    recoveryArtifacts: RemoveRecoveryArtifact[];
+  },
+  json: boolean | undefined
+): void {
+  if (json) {
+    printJson(payload);
+    return;
+  }
+
+  info(`remove completed for service ${payload.service} (${payload.stage})`);
+  if (payload.destroyedProviders.length > 0) {
+    info(`provider destroy executed: ${payload.destroyedProviders.join(", ")}`);
+  }
+  info(`removed paths: ${payload.removedPaths.length}`);
+  info(`recovery artifacts: ${payload.recoveryArtifacts.length}`);
+  if (payload.failures.length > 0) {
+    warn(`failures: ${payload.failures.length}`);
+    for (const failure of payload.failures) {
+      error(`${failure.provider}: ${failure.message}`);
+    }
+  }
+}
+
+async function executeRemoveCommand(options: RemoveOptions): Promise<void> {
+  const configPath = options.config ? resolve(process.cwd(), options.config) : undefined;
+  const projectDir = await resolveProjectDir(process.cwd(), options.config);
+  const context = await loadPlanningContext(projectDir, configPath, options.stage);
+  const stage = context.project.stage || "default";
+  const providers = resolveProviderTargets(context.project.providers, options.provider);
+  const registry = createProviderRegistry(projectDir, providers);
+  const stateBackend = createStateBackend({ projectDir, state: context.project.state });
+
+  const collections = createCollections();
+  const recoveryDir = resolve(projectDir, ".runfabric", "recovery", "remove");
+  await mkdir(recoveryDir, { recursive: true });
+
+  await processProviderRemovals({
+    providers,
+    registry,
+    context,
+    stage,
+    projectDir,
+    stateBackend,
+    recoveryDir,
+    collections
+  });
+
+  const payload = {
+    service: context.project.service,
+    stage,
+    providers,
+    destroyedProviders: collections.destroyedProviders,
+    removedPaths: collections.removedPaths,
+    failures: collections.failures,
+    recoveryArtifacts: collections.recoveryArtifacts
+  };
+
+  if (collections.failures.length > 0) {
+    process.exitCode = 1;
+  }
+
+  printRemoveResult(payload, options.json);
+}
+
+async function processProviderRemovals(input: {
+  providers: string[];
+  registry: ReturnType<typeof createProviderRegistry>;
+  context: Awaited<ReturnType<typeof loadPlanningContext>>;
+  stage: string;
+  projectDir: string;
+  stateBackend: ReturnType<typeof createStateBackend>;
+  recoveryDir: string;
+  collections: RemoveCollections;
+}): Promise<void> {
+  const { providers, registry, context, stage, projectDir, stateBackend, recoveryDir, collections } = input;
+  for (const providerName of providers) {
+    const provider = registry[providerName];
+    if (!provider) {
+      recordMissingProviderFailure(providerName, collections);
+      continue;
+    }
+
+    const destroyOk = await runProviderDestroy(
+      providerName,
+      provider,
+      context.project,
+      collections,
+      recoveryDir,
+      stage
+    );
+    if (!destroyOk) {
+      continue;
+    }
+
+    await cleanupProviderState(context.project.service, stage, providerName, stateBackend, collections);
+    await cleanupProviderPaths(
+      providerCleanupPaths(projectDir, providerName, context.project.service),
+      providerName,
+      context.project.service,
+      stage,
+      recoveryDir,
+      collections
+    );
+  }
+}
+
 export const registerRemoveCommand: CommandRegistrar = (program) => {
   program
     .command("remove")
@@ -26,171 +300,5 @@ export const registerRemoveCommand: CommandRegistrar = (program) => {
     .option("-s, --stage <name>", "Stage name override")
     .option("-p, --provider <name>", "Limit removal to a single provider")
     .option("--json", "Emit JSON output")
-    .action(
-      async (options: { config?: string; stage?: string; provider?: string; json?: boolean }) => {
-        const configPath = options.config ? resolve(process.cwd(), options.config) : undefined;
-        const projectDir = await resolveProjectDir(process.cwd(), options.config);
-        const context = await loadPlanningContext(projectDir, configPath, options.stage);
-        const stage = context.project.stage || "default";
-        const providers = options.provider ? [options.provider] : context.project.providers;
-        const registry = createProviderRegistry(projectDir, providers);
-        const stateBackend = createStateBackend({
-          projectDir,
-          state: context.project.state
-        });
-        const removedPaths: string[] = [];
-        const destroyedProviders: string[] = [];
-        const failures: RemoveFailure[] = [];
-        const recoveryArtifacts: RemoveRecoveryArtifact[] = [];
-        const recoveryDir = resolve(projectDir, ".runfabric", "recovery", "remove");
-        await mkdir(recoveryDir, { recursive: true });
-
-        for (const providerName of providers) {
-          const provider = registry[providerName];
-          if (!provider) {
-            const packageName = getProviderPackageName(providerName);
-            failures.push({
-              provider: providerName,
-              message: packageName
-                ? `provider adapter is not installed (${packageName})`
-                : "provider adapter is not installed"
-            });
-            continue;
-          }
-
-          if (provider.destroy) {
-            try {
-              await provider.destroy(context.project);
-              destroyedProviders.push(providerName);
-            } catch (destroyError) {
-              const message = `provider destroy failed: ${
-                destroyError instanceof Error ? destroyError.message : String(destroyError)
-              }`;
-              failures.push({
-                provider: providerName,
-                message
-              });
-
-              const recoveryPath = resolve(
-                recoveryDir,
-                `${providerName}.${new Date().toISOString().replace(/[:.]/g, "-")}.json`
-              );
-              await writeFile(
-                recoveryPath,
-                JSON.stringify(
-                  {
-                    provider: providerName,
-                    service: context.project.service,
-                    stage,
-                    message,
-                    createdAt: new Date().toISOString(),
-                    suggestion: "re-run runfabric remove after fixing provider credentials/permissions"
-                  },
-                  null,
-                  2
-                ),
-                "utf8"
-              );
-              recoveryArtifacts.push({
-                provider: providerName,
-                path: recoveryPath
-              });
-              continue;
-            }
-          }
-
-          const stateAddress: StateAddress = {
-            service: context.project.service,
-            stage,
-            provider: providerName
-          };
-
-          try {
-            await stateBackend.delete(stateAddress);
-            await stateBackend.forceUnlock(stateAddress);
-          } catch (stateError) {
-            failures.push({
-              provider: providerName,
-              message: `state cleanup failed: ${
-                stateError instanceof Error ? stateError.message : String(stateError)
-              }`
-            });
-          }
-
-          const providerPaths = [
-            resolve(projectDir, ".runfabric", "deploy", providerName),
-            resolve(projectDir, ".runfabric", "build", providerName, context.project.service)
-          ];
-
-          for (const targetPath of providerPaths) {
-            try {
-              await rm(targetPath, { recursive: true, force: true });
-              removedPaths.push(targetPath);
-            } catch (removeError) {
-              failures.push({
-                provider: providerName,
-                message: `failed to remove ${targetPath}: ${
-                  removeError instanceof Error ? removeError.message : String(removeError)
-                }`
-              });
-              const recoveryPath = resolve(
-                recoveryDir,
-                `${providerName}.${new Date().toISOString().replace(/[:.]/g, "-")}.json`
-              );
-              await writeFile(
-                recoveryPath,
-                JSON.stringify(
-                  {
-                    provider: providerName,
-                    service: context.project.service,
-                    stage,
-                    failedPath: targetPath,
-                    createdAt: new Date().toISOString(),
-                    suggestion: "remove the path manually or re-run runfabric remove"
-                  },
-                  null,
-                  2
-                ),
-                "utf8"
-              );
-              recoveryArtifacts.push({
-                provider: providerName,
-                path: recoveryPath
-              });
-            }
-          }
-        }
-
-        const payload = {
-          service: context.project.service,
-          stage,
-          providers,
-          destroyedProviders,
-          removedPaths,
-          failures,
-          recoveryArtifacts
-        };
-
-        if (failures.length > 0) {
-          process.exitCode = 1;
-        }
-
-        if (options.json) {
-          printJson(payload);
-        } else {
-          info(`remove completed for service ${context.project.service} (${stage})`);
-          if (destroyedProviders.length > 0) {
-            info(`provider destroy executed: ${destroyedProviders.join(", ")}`);
-          }
-          info(`removed paths: ${removedPaths.length}`);
-          info(`recovery artifacts: ${recoveryArtifacts.length}`);
-          if (failures.length > 0) {
-            warn(`failures: ${failures.length}`);
-            for (const failure of failures) {
-              error(`${failure.provider}: ${failure.message}`);
-            }
-          }
-        }
-      }
-    );
+    .action(async (options: RemoveOptions) => executeRemoveCommand(options));
 };

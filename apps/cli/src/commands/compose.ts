@@ -6,6 +6,169 @@ import { loadComposeConfig, sortComposeServices, toComposeOutputEnvKey } from ".
 import { printJson } from "../utils/output";
 import { error, info } from "../utils/logger";
 
+interface ComposeOptions {
+  file: string;
+  stage?: string;
+  json?: boolean;
+}
+
+function printComposePlan(
+  payload: {
+    compose: string;
+    stage: string;
+    order: string[];
+    services: Array<{ name: string; config: string; ok: boolean; errors: string[] }>;
+  },
+  json: boolean | undefined
+): void {
+  if (json) {
+    printJson(payload);
+    return;
+  }
+
+  info(`compose plan order: ${payload.order.join(" -> ")}`);
+  for (const service of payload.services) {
+    info(`${service.name}: ${service.ok ? "ok" : "failed"}`);
+    for (const planningError of service.errors) {
+      error(`  ${planningError}`);
+    }
+  }
+}
+
+function printComposeDeploy(
+  payload: {
+    compose: string;
+    stage: string;
+    order: string[];
+    services: Array<{
+      name: string;
+      config: string;
+      summary: { exitCode: number; deployedProviders: number; failedProviders: number };
+    }>;
+    sharedOutputs: Record<string, string>;
+  },
+  json: boolean | undefined
+): void {
+  if (json) {
+    printJson(payload);
+    return;
+  }
+
+  info(`compose deploy order: ${payload.order.join(" -> ")}`);
+  for (const service of payload.services) {
+    info(
+      `${service.name}: deployed=${service.summary.deployedProviders} failed=${service.summary.failedProviders} exit=${service.summary.exitCode}`
+    );
+  }
+  info(`shared outputs exported: ${Object.keys(payload.sharedOutputs).length}`);
+}
+
+async function executeComposePlan(options: ComposeOptions): Promise<void> {
+  const composePath = resolve(process.cwd(), options.file);
+  const compose = await loadComposeConfig(composePath);
+  const order = sortComposeServices(compose);
+  const services: Array<{ name: string; config: string; ok: boolean; errors: string[] }> = [];
+
+  for (const service of order) {
+    const projectDir = dirname(service.config);
+    const planning = await loadPlanningContext(projectDir, service.config, options.stage);
+    services.push({
+      name: service.name,
+      config: service.config,
+      ok: planning.planning.ok,
+      errors: planning.planning.errors
+    });
+  }
+
+  const payload = {
+    compose: composePath,
+    stage: options.stage || "default",
+    order: order.map((service) => service.name),
+    services
+  };
+
+  if (!services.every((service) => service.ok)) {
+    process.exitCode = 1;
+  }
+
+  printComposePlan(payload, options.json);
+}
+
+async function executeComposeDeploy(options: ComposeOptions): Promise<void> {
+  const composePath = resolve(process.cwd(), options.file);
+  const compose = await loadComposeConfig(composePath);
+  const order = sortComposeServices(compose);
+
+  const serviceResults: Array<{
+    name: string;
+    config: string;
+    summary: { exitCode: number; deployedProviders: number; failedProviders: number };
+  }> = [];
+  const sharedOutputs: Record<string, string> = {};
+
+  await deployComposeServices({
+    order,
+    stage: options.stage,
+    serviceResults,
+    sharedOutputs
+  });
+
+  const payload = {
+    compose: composePath,
+    stage: options.stage || "default",
+    order: order.map((service) => service.name),
+    services: serviceResults,
+    sharedOutputs
+  };
+
+  printComposeDeploy(payload, options.json);
+}
+
+async function deployComposeServices(input: {
+  order: ReturnType<typeof sortComposeServices>;
+  stage?: string;
+  serviceResults: Array<{
+    name: string;
+    config: string;
+    summary: { exitCode: number; deployedProviders: number; failedProviders: number };
+  }>;
+  sharedOutputs: Record<string, string>;
+}): Promise<void> {
+  const { order, stage, serviceResults, sharedOutputs } = input;
+  for (const service of order) {
+    const projectDir = dirname(service.config);
+    const result = await executeDeployWorkflow({
+      projectDir,
+      configPath: service.config,
+      stage
+    });
+
+    serviceResults.push({
+      name: service.name,
+      config: service.config,
+      summary: {
+        exitCode: result.summary.exitCode,
+        deployedProviders: result.summary.deployedProviders,
+        failedProviders: result.summary.failedProviders
+      }
+    });
+
+    for (const deployment of result.deployments) {
+      if (!deployment.endpoint) {
+        continue;
+      }
+      const key = toComposeOutputEnvKey(service.name, deployment.provider);
+      process.env[key] = deployment.endpoint;
+      sharedOutputs[key] = deployment.endpoint;
+    }
+
+    if (result.summary.exitCode !== 0) {
+      process.exitCode = result.summary.exitCode;
+      break;
+    }
+  }
+}
+
 export const registerComposeCommand: CommandRegistrar = (program) => {
   const composeCommand = program
     .command("compose")
@@ -17,46 +180,7 @@ export const registerComposeCommand: CommandRegistrar = (program) => {
     .option("-f, --file <path>", "Path to compose config", "runfabric.compose.yml")
     .option("-s, --stage <name>", "Stage name override")
     .option("--json", "Emit JSON output")
-    .action(async (options: { file: string; stage?: string; json?: boolean }) => {
-      const composePath = resolve(process.cwd(), options.file);
-      const compose = await loadComposeConfig(composePath);
-      const order = sortComposeServices(compose);
-      const services: Array<{ name: string; config: string; ok: boolean; errors: string[] }> = [];
-
-      for (const service of order) {
-        const projectDir = dirname(service.config);
-        const planning = await loadPlanningContext(projectDir, service.config, options.stage);
-        services.push({
-          name: service.name,
-          config: service.config,
-          ok: planning.planning.ok,
-          errors: planning.planning.errors
-        });
-      }
-
-      const payload = {
-        compose: composePath,
-        stage: options.stage || "default",
-        order: order.map((service) => service.name),
-        services
-      };
-
-      if (!services.every((service) => service.ok)) {
-        process.exitCode = 1;
-      }
-
-      if (options.json) {
-        printJson(payload);
-      } else {
-        info(`compose plan order: ${payload.order.join(" -> ")}`);
-        for (const service of services) {
-          info(`${service.name}: ${service.ok ? "ok" : "failed"}`);
-          for (const planningError of service.errors) {
-            error(`  ${planningError}`);
-          }
-        }
-      }
-    });
+    .action(async (options: ComposeOptions) => executeComposePlan(options));
 
   composeCommand
     .command("deploy")
@@ -64,69 +188,5 @@ export const registerComposeCommand: CommandRegistrar = (program) => {
     .option("-f, --file <path>", "Path to compose config", "runfabric.compose.yml")
     .option("-s, --stage <name>", "Stage name override")
     .option("--json", "Emit JSON output")
-    .action(async (options: { file: string; stage?: string; json?: boolean }) => {
-      const composePath = resolve(process.cwd(), options.file);
-      const compose = await loadComposeConfig(composePath);
-      const order = sortComposeServices(compose);
-      const serviceResults: Array<{
-        name: string;
-        config: string;
-        summary: { exitCode: number; deployedProviders: number; failedProviders: number };
-      }> = [];
-      const sharedOutputs: Record<string, string> = {};
-
-      for (const service of order) {
-        const projectDir = dirname(service.config);
-        const result = await executeDeployWorkflow({
-          projectDir,
-          configPath: service.config,
-          stage: options.stage
-        });
-
-        serviceResults.push({
-          name: service.name,
-          config: service.config,
-          summary: {
-            exitCode: result.summary.exitCode,
-            deployedProviders: result.summary.deployedProviders,
-            failedProviders: result.summary.failedProviders
-          }
-        });
-
-        for (const deployment of result.deployments) {
-          if (!deployment.endpoint) {
-            continue;
-          }
-          const key = toComposeOutputEnvKey(service.name, deployment.provider);
-          process.env[key] = deployment.endpoint;
-          sharedOutputs[key] = deployment.endpoint;
-        }
-
-        if (result.summary.exitCode !== 0) {
-          process.exitCode = result.summary.exitCode;
-          break;
-        }
-      }
-
-      const payload = {
-        compose: composePath,
-        stage: options.stage || "default",
-        order: order.map((service) => service.name),
-        services: serviceResults,
-        sharedOutputs
-      };
-
-      if (options.json) {
-        printJson(payload);
-      } else {
-        info(`compose deploy order: ${payload.order.join(" -> ")}`);
-        for (const service of serviceResults) {
-          info(
-            `${service.name}: deployed=${service.summary.deployedProviders} failed=${service.summary.failedProviders} exit=${service.summary.exitCode}`
-          );
-        }
-        info(`shared outputs exported: ${Object.keys(sharedOutputs).length}`);
-      }
-    });
+    .action(async (options: ComposeOptions) => executeComposeDeploy(options));
 };
-

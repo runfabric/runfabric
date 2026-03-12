@@ -210,93 +210,132 @@ async function runBuildCycle(
   return true;
 }
 
+interface BuildWatcherRuntime {
+  watchers: FSWatcher[];
+  timer: NodeJS.Timeout | undefined;
+  running: boolean;
+  queued: boolean;
+  active: boolean;
+}
+
+function createBuildWatcherRuntime(): BuildWatcherRuntime {
+  return {
+    watchers: [],
+    timer: undefined,
+    running: false,
+    queued: false,
+    active: true
+  };
+}
+
+async function runWatcherBuild(
+  runtime: BuildWatcherRuntime,
+  projectDir: string,
+  options: Pick<DevCommandOptions, "config" | "stage" | "out" | "watch">,
+  reason: string,
+  onBuilt?: () => Promise<void>
+): Promise<void> {
+  if (!runtime.active) {
+    return;
+  }
+  if (runtime.running) {
+    runtime.queued = true;
+    return;
+  }
+
+  runtime.running = true;
+  try {
+    const ok = await runBuildCycle(projectDir, options, reason);
+    if (ok && onBuilt) {
+      await onBuilt();
+    }
+  } catch (buildError) {
+    const message = buildError instanceof Error ? buildError.message : String(buildError);
+    warn(`[dev] build failed (${reason}): ${message}`);
+  } finally {
+    runtime.running = false;
+    if (runtime.queued) {
+      runtime.queued = false;
+      await runWatcherBuild(runtime, projectDir, options, "queued", onBuilt);
+    }
+  }
+}
+
+function scheduleWatcherBuild(
+  runtime: BuildWatcherRuntime,
+  projectDir: string,
+  options: Pick<DevCommandOptions, "config" | "stage" | "out" | "watch">,
+  reason: string,
+  onBuilt?: () => Promise<void>
+): void {
+  if (runtime.timer) {
+    clearTimeout(runtime.timer);
+  }
+  runtime.timer = setTimeout(() => {
+    void runWatcherBuild(runtime, projectDir, options, reason, onBuilt);
+  }, 250);
+}
+
+function registerBuildWatch(
+  runtime: BuildWatcherRuntime,
+  projectDir: string,
+  options: Pick<DevCommandOptions, "config" | "stage" | "out" | "watch">,
+  path: string,
+  onBuilt?: () => Promise<void>,
+  recursive = false
+): void {
+  if (!existsSync(path)) {
+    return;
+  }
+
+  const onChange = (): void => {
+    scheduleWatcherBuild(runtime, projectDir, options, `watch:${path}`, onBuilt);
+  };
+
+  try {
+    runtime.watchers.push(watch(path, { recursive }, onChange));
+  } catch {
+    if (!recursive) {
+      warn(`[dev] watcher unavailable for ${path}`);
+      return;
+    }
+    try {
+      runtime.watchers.push(watch(path, {}, onChange));
+    } catch {
+      warn(`[dev] watcher unavailable for ${path}`);
+    }
+  }
+}
+
+async function stopBuildWatcher(runtime: BuildWatcherRuntime): Promise<void> {
+  runtime.active = false;
+  if (runtime.timer) {
+    clearTimeout(runtime.timer);
+  }
+  for (const watcher of runtime.watchers) {
+    watcher.close();
+  }
+}
+
 function startBuildWatcher(
   projectDir: string,
   options: Pick<DevCommandOptions, "config" | "stage" | "out" | "watch">,
   onBuilt?: () => Promise<void>
 ): { stop: () => Promise<void> } {
-  const watchers: FSWatcher[] = [];
-  let timer: NodeJS.Timeout | undefined;
-  let running = false;
-  let queued = false;
-  let active = true;
-
-  const run = async (reason: string): Promise<void> => {
-    if (!active) {
-      return;
-    }
-    if (running) {
-      queued = true;
-      return;
-    }
-    running = true;
-    try {
-      const ok = await runBuildCycle(projectDir, options, reason);
-      if (ok && onBuilt) {
-        await onBuilt();
-      }
-    } catch (buildError) {
-      const message = buildError instanceof Error ? buildError.message : String(buildError);
-      warn(`[dev] build failed (${reason}): ${message}`);
-    } finally {
-      running = false;
-      if (queued) {
-        queued = false;
-        await run("queued");
-      }
-    }
-  };
-
-  const schedule = (reason: string): void => {
-    if (timer) {
-      clearTimeout(timer);
-    }
-    timer = setTimeout(() => {
-      void run(reason);
-    }, 250);
-  };
-
-  const registerWatch = (path: string, recursive = false): void => {
-    if (!existsSync(path)) {
-      return;
-    }
-
-    try {
-      const watcher = watch(path, { recursive }, () => schedule(`watch:${path}`));
-      watchers.push(watcher);
-    } catch {
-      if (!recursive) {
-        warn(`[dev] watcher unavailable for ${path}`);
-        return;
-      }
-      try {
-        const watcher = watch(path, {}, () => schedule(`watch:${path}`));
-        watchers.push(watcher);
-      } catch {
-        warn(`[dev] watcher unavailable for ${path}`);
-      }
-    }
-  };
-
-  void run("initial");
+  const runtime = createBuildWatcherRuntime();
+  void runWatcherBuild(runtime, projectDir, options, "initial", onBuilt);
 
   if (options.watch) {
-    registerWatch(resolve(projectDir, "src"), true);
-    registerWatch(resolve(projectDir, "runfabric.yml"));
+    registerBuildWatch(runtime, projectDir, options, resolve(projectDir, "src"), onBuilt, true);
+    registerBuildWatch(runtime, projectDir, options, resolve(projectDir, "runfabric.yml"), onBuilt);
     if (options.config) {
-      registerWatch(resolve(projectDir, options.config));
+      registerBuildWatch(runtime, projectDir, options, resolve(projectDir, options.config), onBuilt);
     }
   }
 
   return {
     async stop(): Promise<void> {
-      active = false;
-      if (timer) {
-        clearTimeout(timer);
-      }
-      for (const watcher of watchers) {
-        watcher.close();
-      }
+      await stopBuildWatcher(runtime);
     }
   };
 }
@@ -364,35 +403,79 @@ async function simulateEventPreset(
   }
 }
 
+async function readIncomingBody(request: AsyncIterable<string | Buffer>): Promise<string | undefined> {
+  const bodyChunks: Buffer[] = [];
+  for await (const chunk of request) {
+    bodyChunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+  }
+  return bodyChunks.length > 0 ? Buffer.concat(bodyChunks).toString("utf8") : undefined;
+}
+
+function writeHttpDevError(response: { statusCode: number; setHeader: (name: string, value: string) => void; end: (payload: string) => void }, errorValue: unknown): void {
+  const message = errorValue instanceof Error ? errorValue.message : String(errorValue);
+  response.statusCode = 500;
+  response.setHeader("content-type", "application/json");
+  response.end(JSON.stringify({ error: message }));
+}
+
+async function forwardHttpRequestToLocalCall(
+  projectDir: string,
+  provider: string,
+  options: DevCommandOptions,
+  request: {
+    method?: string;
+    url?: string;
+    headers: Record<string, string | string[] | undefined>;
+    [Symbol.asyncIterator](): AsyncIterator<string | Buffer>;
+  }
+) {
+  const requestBody = await readIncomingBody(request);
+  const url = new URL(request.url || options.path || "/", `http://${options.host}:${options.port || 8787}`);
+
+  return executeLocalCall(projectDir, {
+    config: options.config,
+    provider,
+    method: (request.method || options.method || "GET").toUpperCase(),
+    path: url.pathname,
+    query: url.search.startsWith("?") ? url.search.slice(1) : url.search,
+    body: requestBody,
+    header: normalizeRequestHeaders(request.headers, options.header || []),
+    entry: options.entry,
+    serve: false,
+    watch: options.watch,
+    host: options.host,
+    port: options.port
+  });
+}
+
+async function listenHttpServer(
+  server: ReturnType<typeof createServer>,
+  host: string,
+  port: number
+): Promise<void> {
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    const onError = (listenError: Error & { code?: string }): void => {
+      if (listenError.code === "EADDRINUSE") {
+        rejectPromise(new Error(`port ${port} is already in use on ${host}. choose another port with --port.`));
+        return;
+      }
+      rejectPromise(listenError);
+    };
+
+    server.once("error", onError);
+    server.listen(port, host, () => {
+      server.off("error", onError);
+      resolvePromise();
+    });
+  });
+}
+
 async function runHttpDevServer(projectDir: string, options: DevCommandOptions): Promise<void> {
   const context = await loadPlanningContext(projectDir, options.config, options.stage);
   const provider = defaultProvider(context.project, options.provider);
   const server = createServer(async (request, response) => {
     try {
-      const bodyChunks: Buffer[] = [];
-      for await (const chunk of request) {
-        bodyChunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-      }
-      const requestBody = bodyChunks.length > 0 ? Buffer.concat(bodyChunks).toString("utf8") : undefined;
-      const url = new URL(
-        request.url || options.path || "/",
-        `http://${options.host}:${options.port || 8787}`
-      );
-
-      const local = await executeLocalCall(projectDir, {
-        config: options.config,
-        provider,
-        method: (request.method || options.method || "GET").toUpperCase(),
-        path: url.pathname,
-        query: url.search.startsWith("?") ? url.search.slice(1) : url.search,
-        body: requestBody,
-        header: normalizeRequestHeaders(request.headers, options.header || []),
-        entry: options.entry,
-        serve: false,
-        watch: options.watch,
-        host: options.host,
-        port: options.port
-      });
+      const local = await forwardHttpRequestToLocalCall(projectDir, provider, options, request);
 
       response.statusCode = local.response.statusCode;
       for (const [key, value] of Object.entries(local.response.headers || {})) {
@@ -400,32 +483,11 @@ async function runHttpDevServer(projectDir: string, options: DevCommandOptions):
       }
       response.end(local.response.body || "");
     } catch (serverError) {
-      const message = serverError instanceof Error ? serverError.message : String(serverError);
-      response.statusCode = 500;
-      response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({ error: message }));
+      writeHttpDevError(response, serverError);
     }
   });
 
-  await new Promise<void>((resolvePromise, rejectPromise) => {
-    const onError = (listenError: Error & { code?: string }): void => {
-      if (listenError.code === "EADDRINUSE") {
-        rejectPromise(
-          new Error(
-            `port ${options.port} is already in use on ${options.host}. choose another port with --port.`
-          )
-        );
-        return;
-      }
-      rejectPromise(listenError);
-    };
-
-    server.once("error", onError);
-    server.listen(options.port, options.host, () => {
-      server.off("error", onError);
-      resolvePromise();
-    });
-  });
+  await listenHttpServer(server, options.host, options.port);
 
   const address = server.address();
   const resolvedPort = address && typeof address === "object" ? address.port : options.port;
@@ -437,8 +499,64 @@ async function runHttpDevServer(projectDir: string, options: DevCommandOptions):
   });
 }
 
+async function runHttpPreset(projectDir: string, options: DevCommandOptions): Promise<void> {
+  const watcher = startBuildWatcher(projectDir, options);
+  try {
+    await runHttpDevServer(projectDir, options);
+  } finally {
+    await watcher.stop();
+  }
+}
+
+function startPresetInterval(
+  projectDir: string,
+  options: DevCommandOptions,
+  preset: Exclude<DevPreset, "http">
+): NodeJS.Timeout | undefined {
+  if (options.intervalSeconds <= 0) {
+    return undefined;
+  }
+
+  const interval = setInterval(() => {
+    void simulateEventPreset(projectDir, options, preset).catch((simulateError) => {
+      warn(`[dev] ${preset} interval simulation failed: ${String(simulateError)}`);
+    });
+  }, options.intervalSeconds * 1000);
+  interval.unref();
+  return interval;
+}
+
+async function runEventPreset(projectDir: string, options: DevCommandOptions, preset: Exclude<DevPreset, "http">): Promise<void> {
+  const watcher = startBuildWatcher(projectDir, options, async () => simulateEventPreset(projectDir, options, preset));
+  const interval = startPresetInterval(projectDir, options, preset);
+
+  try {
+    if (!options.watch || options.once) {
+      return;
+    }
+    info(`[dev] ${preset} preset watch mode enabled. press Ctrl+C to stop`);
+    await waitForShutdown(async () => undefined);
+  } finally {
+    if (interval) {
+      clearInterval(interval);
+    }
+    await watcher.stop();
+  }
+}
+
+async function runDevCommand(options: DevCommandOptions): Promise<void> {
+  const projectDir = await resolveProjectDir(process.cwd(), options.config);
+  const context = await loadPlanningContext(projectDir, options.config, options.stage);
+  const preset = parsePreset(options.preset, context.project);
+  if (preset === "http") {
+    await runHttpPreset(projectDir, options);
+    return;
+  }
+  await runEventPreset(projectDir, options, preset);
+}
+
 export const registerDevCommand: CommandRegistrar = (program) => {
-  program
+  const command = program
     .command("dev")
     .description("Local dev loop with watch rebuild and event simulation presets")
     .option("-c, --config <path>", "Path to runfabric config")
@@ -462,56 +580,15 @@ export const registerDevCommand: CommandRegistrar = (program) => {
       "For queue/storage presets, auto-simulate on interval (0 disables)",
       parseIntervalSeconds,
       0
-    )
-    .action(async (options: DevCommandOptions) => {
-      try {
-        const projectDir = await resolveProjectDir(process.cwd(), options.config);
-        const context = await loadPlanningContext(projectDir, options.config, options.stage);
-        const preset = parsePreset(options.preset, context.project);
+    );
 
-        if (preset === "http") {
-          const watcher = startBuildWatcher(projectDir, options);
-          try {
-            await runHttpDevServer(projectDir, options);
-          } finally {
-            await watcher.stop();
-          }
-          return;
-        }
-
-        let interval: NodeJS.Timeout | undefined;
-        const watcher = startBuildWatcher(projectDir, options, async () => {
-          await simulateEventPreset(projectDir, options, preset);
-        });
-
-        try {
-          if (options.intervalSeconds > 0) {
-            interval = setInterval(() => {
-              void simulateEventPreset(projectDir, options, preset).catch((simulateError) => {
-                warn(`[dev] ${preset} interval simulation failed: ${String(simulateError)}`);
-              });
-            }, options.intervalSeconds * 1000);
-            interval.unref();
-          }
-
-          if (!options.watch || options.once) {
-            return;
-          }
-
-          info(`[dev] ${preset} preset watch mode enabled. press Ctrl+C to stop`);
-          await waitForShutdown(async () => {
-            return undefined;
-          });
-        } finally {
-          if (interval) {
-            clearInterval(interval);
-          }
-          await watcher.stop();
-        }
-      } catch (devError) {
-        const message = devError instanceof Error ? devError.message : String(devError);
-        error(message);
-        process.exitCode = 1;
-      }
-    });
+  command.action(async (options: DevCommandOptions) => {
+    try {
+      await runDevCommand(options);
+    } catch (devError) {
+      const message = devError instanceof Error ? devError.message : String(devError);
+      error(message);
+      process.exitCode = 1;
+    }
+  });
 };

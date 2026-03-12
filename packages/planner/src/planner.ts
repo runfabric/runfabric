@@ -121,11 +121,8 @@ function validateTriggerSupport(trigger: TriggerConfig, capabilities: ProviderCa
   return null;
 }
 
-export function createPlan(project: ProjectConfig): PlanningResult {
-  const providerPlans: ProviderPlan[] = [];
+function collectRuntimeWarnings(project: ProjectConfig): string[] {
   const warnings: string[] = [];
-  const errors: string[] = [];
-
   if (!isNodeRuntime(project.runtime)) {
     warnings.push(
       `runtime ${project.runtime} is not production-ready in this release train; use runtime: nodejs for beta deployments`
@@ -138,58 +135,130 @@ export function createPlan(project: ProjectConfig): PlanningResult {
       );
     }
   }
+  return warnings;
+}
+
+function pushProviderError(
+  providerPlan: ProviderPlan,
+  provider: string,
+  detail: string,
+  errors: string[]
+): void {
+  const message = `${provider}: ${detail}`;
+  providerPlan.errors.push(message);
+  errors.push(message);
+}
+
+function evaluateProviderTriggers(
+  project: ProjectConfig,
+  provider: string,
+  capabilities: ProviderCapabilities,
+  providerPlan: ProviderPlan,
+  errors: string[]
+): void {
+  for (const trigger of project.triggers) {
+    const triggerShapeError = validateTriggerShape(trigger);
+    if (triggerShapeError) {
+      pushProviderError(providerPlan, provider, triggerShapeError, errors);
+    }
+
+    const triggerError = validateTriggerSupport(trigger, capabilities);
+    if (triggerError) {
+      pushProviderError(providerPlan, provider, triggerError, errors);
+    }
+  }
+}
+
+function evaluateProviderResources(
+  project: ProjectConfig,
+  provider: string,
+  capabilities: ProviderCapabilities,
+  providerPlan: ProviderPlan,
+  errors: string[]
+): void {
+  if (project.resources?.timeout && capabilities.maxTimeoutSeconds && project.resources.timeout > capabilities.maxTimeoutSeconds) {
+    pushProviderError(
+      providerPlan,
+      provider,
+      `timeout ${project.resources.timeout}s exceeds max ${capabilities.maxTimeoutSeconds}s`,
+      errors
+    );
+  }
+
+  if (project.resources?.memory && capabilities.maxMemoryMB && project.resources.memory > capabilities.maxMemoryMB) {
+    pushProviderError(
+      providerPlan,
+      provider,
+      `memory ${project.resources.memory}MB exceeds max ${capabilities.maxMemoryMB}MB`,
+      errors
+    );
+  }
+}
+
+function evaluateProviderRuntimeWarnings(
+  project: ProjectConfig,
+  provider: string,
+  providerPlan: ProviderPlan,
+  warnings: string[]
+): void {
+  if (!isNodeRuntime(project.runtime)) {
+    const message = `${provider}: runtime ${project.runtime} is not production-ready in this release train`;
+    providerPlan.warnings.push(message);
+    warnings.push(message);
+  }
+}
+
+function createProviderPlanEntry(
+  project: ProjectConfig,
+  provider: string,
+  warnings: string[],
+  errors: string[]
+): ProviderPlan {
+  const capabilities = capabilityMatrix[provider];
+  const providerPlan: ProviderPlan = {
+    provider,
+    capabilities,
+    warnings: [],
+    errors: []
+  };
+
+  if (!capabilities) {
+    const unsupported = `unsupported provider: ${provider}`;
+    providerPlan.errors.push(unsupported);
+    errors.push(unsupported);
+    return providerPlan;
+  }
+
+  evaluateProviderTriggers(project, provider, capabilities, providerPlan, errors);
+  evaluateProviderResources(project, provider, capabilities, providerPlan, errors);
+  evaluateProviderRuntimeWarnings(project, provider, providerPlan, warnings);
+  return providerPlan;
+}
+
+function appendPortabilityWarnings(
+  portability: PortabilityDiagnostics,
+  primitiveCompatibility: PrimitiveCompatibilityReport,
+  warnings: string[]
+): void {
+  if (portability.partiallySupportedTriggerTypes.length > 0) {
+    warnings.push(
+      `partial portability for triggers: ${portability.partiallySupportedTriggerTypes.join(", ")}`
+    );
+  }
+  if (primitiveCompatibility.partiallySupported.length > 0) {
+    warnings.push(
+      `partial primitive support: ${primitiveCompatibility.partiallySupported.join(", ")}`
+    );
+  }
+}
+
+export function createPlan(project: ProjectConfig): PlanningResult {
+  const providerPlans: ProviderPlan[] = [];
+  const warnings: string[] = collectRuntimeWarnings(project);
+  const errors: string[] = [];
 
   for (const provider of project.providers) {
-    const capabilities = capabilityMatrix[provider];
-    const providerPlan: ProviderPlan = {
-      provider,
-      capabilities,
-      warnings: [],
-      errors: []
-    };
-
-    if (!capabilities) {
-      providerPlan.errors.push(`unsupported provider: ${provider}`);
-      errors.push(`unsupported provider: ${provider}`);
-      providerPlans.push(providerPlan);
-      continue;
-    }
-
-    for (const trigger of project.triggers) {
-      const triggerShapeError = validateTriggerShape(trigger);
-      if (triggerShapeError) {
-        const message = `${provider}: ${triggerShapeError}`;
-        providerPlan.errors.push(message);
-        errors.push(message);
-      }
-
-      const triggerError = validateTriggerSupport(trigger, capabilities);
-      if (triggerError) {
-        const message = `${provider}: ${triggerError}`;
-        providerPlan.errors.push(message);
-        errors.push(message);
-      }
-    }
-
-    if (project.resources?.timeout && capabilities.maxTimeoutSeconds && project.resources.timeout > capabilities.maxTimeoutSeconds) {
-      const message = `${provider}: timeout ${project.resources.timeout}s exceeds max ${capabilities.maxTimeoutSeconds}s`;
-      providerPlan.errors.push(message);
-      errors.push(message);
-    }
-
-    if (project.resources?.memory && capabilities.maxMemoryMB && project.resources.memory > capabilities.maxMemoryMB) {
-      const message = `${provider}: memory ${project.resources.memory}MB exceeds max ${capabilities.maxMemoryMB}MB`;
-      providerPlan.errors.push(message);
-      errors.push(message);
-    }
-
-    if (!isNodeRuntime(project.runtime)) {
-      const message = `${provider}: runtime ${project.runtime} is not production-ready in this release train`;
-      providerPlan.warnings.push(message);
-      warnings.push(message);
-    }
-
-    providerPlans.push(providerPlan);
+    providerPlans.push(createProviderPlanEntry(project, provider, warnings, errors));
   }
 
   const portability = createPortabilityDiagnostics(
@@ -201,16 +270,7 @@ export function createPlan(project: ProjectConfig): PlanningResult {
     Object.fromEntries(project.providers.map((provider) => [provider, primitiveProfiles[provider]]))
   );
 
-  if (portability.partiallySupportedTriggerTypes.length > 0) {
-    warnings.push(
-      `partial portability for triggers: ${portability.partiallySupportedTriggerTypes.join(", ")}`
-    );
-  }
-  if (primitiveCompatibility.partiallySupported.length > 0) {
-    warnings.push(
-      `partial primitive support: ${primitiveCompatibility.partiallySupported.join(", ")}`
-    );
-  }
+  appendPortabilityWarnings(portability, primitiveCompatibility, warnings);
 
   return {
     ok: errors.length === 0,

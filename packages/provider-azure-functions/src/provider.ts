@@ -46,36 +46,32 @@ function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
+function normalizeHttpEndpoint(endpoint: string): string {
+  if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
+    return endpoint;
+  }
+  return `https://${endpoint}`;
+}
+
 function endpointFromAzureResponse(response: unknown): string | undefined {
   if (!isRecord(response)) {
     return undefined;
   }
 
-  const candidates = [response.endpoint, response.url, response.defaultHostName];
-  for (const candidate of candidates) {
-    const endpoint = readString(candidate);
-    if (endpoint) {
-      if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
-        return endpoint;
-      }
-      return `https://${endpoint}`;
-    }
+  const direct = readString(response.endpoint) || readString(response.url) || readString(response.defaultHostName);
+  if (direct) {
+    return normalizeHttpEndpoint(direct);
   }
 
-  if (isRecord(response.properties)) {
-    const endpoint =
-      readString(response.properties.defaultHostName) ||
-      readString(response.properties.url) ||
-      readString(response.properties.invokeUrlTemplate);
-    if (endpoint) {
-      if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
-        return endpoint;
-      }
-      return `https://${endpoint}`;
-    }
+  if (!isRecord(response.properties)) {
+    return undefined;
   }
 
-  return undefined;
+  const nested =
+    readString(response.properties.defaultHostName) ||
+    readString(response.properties.url) ||
+    readString(response.properties.invokeUrlTemplate);
+  return nested ? normalizeHttpEndpoint(nested) : undefined;
 }
 
 function azureResourceMetadata(response: unknown): Record<string, unknown> | undefined {
@@ -110,130 +106,150 @@ function defaultAzureDestroyCommand(functionAppName: string): string {
   ].join(" ");
 }
 
+function resolveFunctionAppName(project: ProjectConfig): string {
+  const extension = project.extensions?.["azure-functions"];
+  if (typeof extension?.functionAppName === "string" && extension.functionAppName.trim().length > 0) {
+    return extension.functionAppName;
+  }
+  return process.env.AZURE_FUNCTION_APP_NAME || project.service;
+}
+
+async function runRealDeployIfEnabled(
+  options: ProviderOptions,
+  project: ProjectConfig,
+  plan: DeployPlan,
+  functionAppName: string,
+  stage: string
+): Promise<{
+  endpoint: string;
+  mode: "simulated" | "cli";
+  rawResponse?: unknown;
+  resource?: Record<string, unknown>;
+}> {
+  const defaultEndpoint = `https://${functionAppName}.azurewebsites.net/api`;
+  if (!isRealDeployModeEnabled("RUNFABRIC_AZURE_REAL_DEPLOY")) {
+    return { endpoint: defaultEndpoint, mode: "simulated" };
+  }
+
+  const deployCommand = process.env.RUNFABRIC_AZURE_DEPLOY_CMD || defaultAzureDeployCommand(functionAppName);
+  const hasCommandOverride = Boolean(process.env.RUNFABRIC_AZURE_DEPLOY_CMD);
+  const rawResponse = await runJsonCommand(deployCommand, {
+    cwd: options.projectDir,
+    env: {
+      RUNFABRIC_SERVICE: project.service,
+      RUNFABRIC_STAGE: stage,
+      RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
+      RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
+    }
+  });
+
+  const parsedEndpoint = endpointFromAzureResponse(rawResponse);
+  if (!parsedEndpoint && hasCommandOverride) {
+    throw new Error("azure-functions deploy response does not include function app endpoint");
+  }
+
+  return {
+    endpoint: parsedEndpoint || defaultEndpoint,
+    mode: "cli",
+    rawResponse,
+    resource: {
+      ...(azureResourceMetadata(rawResponse) || {}),
+      functionAppName,
+      deployCommandSource: hasCommandOverride ? "override" : "builtin"
+    }
+  };
+}
+
+async function deployAzureFunctions(
+  options: ProviderOptions,
+  project: ProjectConfig,
+  plan: DeployPlan
+): Promise<DeployResult> {
+  const stage = project.stage || "default";
+  const functionAppName = resolveFunctionAppName(project);
+  const deploymentId = createDeploymentId("azure-functions", project.service, stage);
+  const deployState = await runRealDeployIfEnabled(options, project, plan, functionAppName, stage);
+
+  await writeDeploymentReceipt(options.projectDir, "azure-functions", {
+    provider: "azure-functions",
+    service: project.service,
+    stage,
+    deploymentId,
+    endpoint: deployState.endpoint,
+    mode: deployState.mode,
+    executedSteps: plan.steps,
+    artifactPath: plan.artifactPath,
+    artifactManifestPath: plan.artifactManifestPath,
+    resource: deployState.resource,
+    rawResponse: deployState.rawResponse,
+    createdAt: new Date().toISOString()
+  });
+  await appendProviderLog(
+    options.projectDir,
+    "azure-functions",
+    `deploy deploymentId=${deploymentId} mode=${deployState.mode} endpoint=${deployState.endpoint}`
+  );
+
+  return { provider: "azure-functions", endpoint: deployState.endpoint };
+}
+
+async function destroyAzureFunctions(options: ProviderOptions, project: ProjectConfig): Promise<void> {
+  if (isRealDeployModeEnabled("RUNFABRIC_AZURE_REAL_DEPLOY")) {
+    const stage = project.stage || "default";
+    const functionAppName = resolveFunctionAppName(project);
+    const destroyCommand = process.env.RUNFABRIC_AZURE_DESTROY_CMD || defaultAzureDestroyCommand(functionAppName);
+    const result = await runShellCommand(destroyCommand, {
+      cwd: options.projectDir,
+      env: {
+        RUNFABRIC_SERVICE: project.service,
+        RUNFABRIC_STAGE: stage
+      }
+    });
+    if (result.code !== 0) {
+      throw new Error(result.stderr || result.stdout || "azure-functions destroy command failed");
+    }
+  }
+
+  await appendProviderLog(options.projectDir, "azure-functions", "destroy local artifacts");
+  await destroyProviderArtifacts(options.projectDir, "azure-functions");
+}
+
+function validateAzureProvider(): ValidationResult {
+  const errors: string[] = [];
+  errors.push(...missingRequiredCredentialErrors(azureCredentialSchema));
+  return { ok: errors.length === 0, warnings: [], errors };
+}
+
+function createPlanBuildResult(): BuildPlan {
+  return {
+    provider: "azure-functions",
+    steps: ["prepare azure function metadata"]
+  };
+}
+
+function createPlanDeployResult(artifact: BuildArtifact): DeployPlan {
+  return {
+    provider: "azure-functions",
+    artifactPath: artifact.entry,
+    artifactManifestPath: artifact.outputPath,
+    steps: [`deploy artifact from ${artifact.outputPath}`]
+  };
+}
+
 export function createAzureFunctionsProvider(options: ProviderOptions): ProviderAdapter {
   return {
     name: "azure-functions",
-    getCapabilities() {
-      return azureFunctionsCapabilities;
-    },
-    getCredentialSchema() {
-      return azureCredentialSchema;
-    },
-    async validate(_project: ProjectConfig): Promise<ValidationResult> {
-      const warnings: string[] = [];
-      const errors: string[] = [];
-      errors.push(...missingRequiredCredentialErrors(azureCredentialSchema));
-      return { ok: errors.length === 0, warnings, errors };
-    },
-    async planBuild(): Promise<BuildPlan> {
-      return {
-        provider: "azure-functions",
-        steps: ["prepare azure function metadata"]
-      };
-    },
-    async build(): Promise<BuildResult> {
-      return { artifacts: [] };
-    },
-    async planDeploy(_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> {
-      return {
-        provider: "azure-functions",
-        artifactPath: artifact.entry,
-        artifactManifestPath: artifact.outputPath,
-        steps: [`deploy artifact from ${artifact.outputPath}`]
-      };
-    },
-    async deploy(project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> {
-      const stage = project.stage || "default";
-      const azureExtension = project.extensions?.["azure-functions"];
-      const functionAppName =
-        typeof azureExtension?.functionAppName === "string" && azureExtension.functionAppName.trim().length > 0
-          ? azureExtension.functionAppName
-          : process.env.AZURE_FUNCTION_APP_NAME || project.service;
-      const deploymentId = createDeploymentId("azure-functions", project.service, stage);
-
-      let endpoint = `https://${functionAppName}.azurewebsites.net/api`;
-      let mode: "simulated" | "cli" = "simulated";
-      let rawResponse: unknown;
-      let resource: Record<string, unknown> | undefined;
-
-      if (isRealDeployModeEnabled("RUNFABRIC_AZURE_REAL_DEPLOY")) {
-        const deployCommand = process.env.RUNFABRIC_AZURE_DEPLOY_CMD || defaultAzureDeployCommand(functionAppName);
-        const hasCommandOverride = Boolean(process.env.RUNFABRIC_AZURE_DEPLOY_CMD);
-
-        rawResponse = await runJsonCommand(deployCommand, {
-          cwd: options.projectDir,
-          env: {
-            RUNFABRIC_SERVICE: project.service,
-            RUNFABRIC_STAGE: stage,
-            RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
-            RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
-          }
-        });
-        const parsedEndpoint = endpointFromAzureResponse(rawResponse);
-        if (parsedEndpoint) {
-          endpoint = parsedEndpoint;
-        } else if (hasCommandOverride) {
-          throw new Error("azure-functions deploy response does not include function app endpoint");
-        }
-        resource = {
-          ...(azureResourceMetadata(rawResponse) || {}),
-          functionAppName,
-          deployCommandSource: hasCommandOverride ? "override" : "builtin"
-        };
-        mode = "cli";
-      }
-
-      await writeDeploymentReceipt(options.projectDir, "azure-functions", {
-        provider: "azure-functions",
-        service: project.service,
-        stage,
-        deploymentId,
-        endpoint,
-        mode,
-        executedSteps: plan.steps,
-        artifactPath: plan.artifactPath,
-        artifactManifestPath: plan.artifactManifestPath,
-        resource,
-        rawResponse,
-        createdAt: new Date().toISOString()
-      });
-      await appendProviderLog(
-        options.projectDir,
-        "azure-functions",
-        `deploy deploymentId=${deploymentId} mode=${mode} endpoint=${endpoint}`
-      );
-
-      return { provider: "azure-functions", endpoint };
-    },
-    async invoke(input) {
-      return invokeProviderViaDeployedEndpoint(options.projectDir, "azure-functions", input);
-    },
-    async logs(input) {
-      return buildProviderLogsFromLocalArtifacts(options.projectDir, "azure-functions", input);
-    },
-    async destroy(project: ProjectConfig) {
-      const azureExtension = project.extensions?.["azure-functions"];
-      const functionAppName =
-        typeof azureExtension?.functionAppName === "string" && azureExtension.functionAppName.trim().length > 0
-          ? azureExtension.functionAppName
-          : process.env.AZURE_FUNCTION_APP_NAME || project.service;
-      if (isRealDeployModeEnabled("RUNFABRIC_AZURE_REAL_DEPLOY")) {
-        const destroyCommand =
-          process.env.RUNFABRIC_AZURE_DESTROY_CMD || defaultAzureDestroyCommand(functionAppName);
-        const result = await runShellCommand(destroyCommand, {
-          cwd: options.projectDir,
-          env: {
-            RUNFABRIC_SERVICE: project.service,
-            RUNFABRIC_STAGE: project.stage || "default"
-          }
-        });
-        if (result.code !== 0) {
-          throw new Error(result.stderr || result.stdout || "azure-functions destroy command failed");
-        }
-      }
-
-      await appendProviderLog(options.projectDir, "azure-functions", "destroy local artifacts");
-      await destroyProviderArtifacts(options.projectDir, "azure-functions");
-    }
+    getCapabilities: () => azureFunctionsCapabilities,
+    getCredentialSchema: () => azureCredentialSchema,
+    validate: async (): Promise<ValidationResult> => validateAzureProvider(),
+    planBuild: async (): Promise<BuildPlan> => createPlanBuildResult(),
+    build: async (): Promise<BuildResult> => ({ artifacts: [] }),
+    planDeploy: async (_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> =>
+      createPlanDeployResult(artifact),
+    deploy: async (project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> =>
+      deployAzureFunctions(options, project, plan),
+    invoke: async (input) => invokeProviderViaDeployedEndpoint(options.projectDir, "azure-functions", input),
+    logs: async (input) => buildProviderLogsFromLocalArtifacts(options.projectDir, "azure-functions", input),
+    destroy: async (project: ProjectConfig) => destroyAzureFunctions(options, project)
   };
 }

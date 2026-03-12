@@ -8,8 +8,14 @@ import { loadPlanningContext } from "../utils/load-config";
 import { error, info, success, warn } from "../utils/logger";
 import { printJson } from "../utils/output";
 import { resolveProjectDir } from "../utils/resolve-project";
-
-type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
+import {
+  renderCallLocalSupportedOptionsSection,
+  renderCredentialsSection,
+  renderFrameworkWiringSection,
+  renderLocalCallSection,
+  renderStateBackendSection,
+  type PackageManager
+} from "./docs/render";
 
 interface DocsContext {
   projectDir: string;
@@ -112,19 +118,6 @@ function runCommandPrefix(packageManager: PackageManager): string {
   return "npm run";
 }
 
-function packageManagerAddCommand(packageManager: PackageManager, packages: string[]): string {
-  if (packageManager === "pnpm") {
-    return `pnpm add ${packages.join(" ")}`;
-  }
-  if (packageManager === "yarn") {
-    return `yarn add ${packages.join(" ")}`;
-  }
-  if (packageManager === "bun") {
-    return `bun add ${packages.join(" ")}`;
-  }
-  return `npm install ${packages.join(" ")}`;
-}
-
 function firstProvider(project: ProjectConfig): string {
   return project.providers[0] || "aws-lambda";
 }
@@ -164,213 +157,6 @@ function renderCommandsSection(commandPrefix: string): string {
     `${commandPrefix} build`,
     `${commandPrefix} deploy`,
     `${commandPrefix} call:local`,
-    "```"
-  ].join("\n");
-}
-
-function renderLocalCallSection(
-  commandPrefix: string,
-  provider: string,
-  trigger: ProjectConfig["triggers"][number] | undefined
-): string {
-  const triggerType = trigger?.type || TriggerEnum.Http;
-  if (triggerType === TriggerEnum.Http) {
-    const method = typeof trigger?.method === "string" && trigger.method.trim().length > 0
-      ? trigger.method.trim().toUpperCase()
-      : "GET";
-    const path = typeof trigger?.path === "string" && trigger.path.trim().length > 0
-      ? trigger.path.trim()
-      : "/hello";
-    return [
-      "## Local Call (Provider-mimic)",
-      "",
-      "Use built-in `runfabric call-local` to start a local HTTP server that forwards provider-shaped requests to your handler.",
-      "",
-      "```bash",
-      `${commandPrefix} call:local`,
-      `curl -i http://127.0.0.1:8787${path}`,
-      "# stop server: Ctrl+C or type 'exit' and press Enter",
-      `${commandPrefix} call:local -- --provider ${provider} --host 127.0.0.1 --port 8787 --serve --watch`,
-      `${commandPrefix} call:local -- --provider ${provider} --method ${method} --path ${path}`,
-      `${commandPrefix} call:local -- --provider ${provider} --event ./event.json`,
-      "```"
-    ].join("\n");
-  }
-
-  const eventFileName = `event.${triggerType}.json`;
-  const samplePayload = (() => {
-    switch (triggerType) {
-      case TriggerEnum.Queue:
-        return '{ "records": [ { "body": { "jobId": "demo-1" } } ] }';
-      case TriggerEnum.Storage:
-        return '{ "records": [ { "bucket": "uploads", "key": "incoming/file.jpg", "event": "ObjectCreated:Put" } ] }';
-      case TriggerEnum.EventBridge:
-        return '{ "source": "app.source", "detail-type": "demo.event", "detail": { "id": "1" } }';
-      case TriggerEnum.PubSub:
-        return '{ "subscription": "projects/demo/subscriptions/events", "message": { "data": "eyJpZCI6IjEifQ==" } }';
-      case TriggerEnum.Cron:
-        return '{ "source": "runfabric.dev", "detail-type": "scheduled", "time": "2026-01-01T00:00:00.000Z" }';
-      case TriggerEnum.Kafka:
-        return '{ "records": [ { "topic": "events", "key": "k1", "value": { "id": "1" } } ] }';
-      case TriggerEnum.RabbitMq:
-        return '{ "messages": [ { "routingKey": "jobs.created", "payload": { "id": "1" } } ] }';
-      default:
-        return '{ "event": "example" }';
-    }
-  })();
-
-  return [
-    "## Local Call (Provider-mimic)",
-    "",
-    `${triggerType} scaffolds are event-driven. Use \`--event\` payload simulation for local calls.`,
-    "",
-    `Example \`${eventFileName}\`:`,
-    "",
-    "```json",
-    samplePayload,
-    "```",
-    "",
-    "```bash",
-    `${commandPrefix} call:local -- --provider ${provider} --event ./${eventFileName}`,
-    "```"
-  ].join("\n");
-}
-
-function renderCallLocalSupportedOptionsSection(): string {
-  return [
-    "Supported options for `call:local`:",
-    "",
-    "- `--serve`",
-    "- `--watch`",
-    "- `--host <host>`",
-    "- `--port <number>`",
-    "- `--provider <id>`",
-    "- `--method <HTTP_METHOD>`",
-    "- `--path </route>`",
-    "- `--query key=value&key2=value2`",
-    "- `--header key:value` (repeatable)",
-    "- `--body <string>`",
-    "- `--event <path-to-json>`"
-  ].join("\n");
-}
-
-function renderFrameworkWiringSection(packageManager: PackageManager): string {
-  const runtimeInstall = packageManagerAddCommand(packageManager, ["@runfabric/runtime-node"]);
-  const expressInstall = packageManagerAddCommand(packageManager, ["express"]);
-  const fastifyInstall = packageManagerAddCommand(packageManager, ["fastify"]);
-  const nestInstall = packageManagerAddCommand(packageManager, [
-    "@nestjs/core",
-    "@nestjs/common",
-    "@nestjs/platform-express",
-    "reflect-metadata",
-    "rxjs"
-  ]);
-
-  return [
-    "## Framework Wiring (Optional)",
-    "",
-    "If you convert this scaffold to Express/Fastify/Nest, use the runtime wrapper:",
-    "",
-    "```bash",
-    runtimeInstall,
-    `${expressInstall}   # optional`,
-    `${fastifyInstall}   # optional`,
-    `${nestInstall}   # optional`,
-    "```",
-    "",
-    "```ts",
-    'import type { UniversalHandler } from "@runfabric/core";',
-    'import { createHandler } from "@runfabric/runtime-node";',
-    "",
-    "export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);",
-    "```",
-    "",
-    "Nest TypeScript projects must enable `experimentalDecorators` and `emitDecoratorMetadata` in `tsconfig.json`."
-  ].join("\n");
-}
-
-function renderCredentialsSection(
-  commandPrefix: string,
-  provider: string,
-  credentialEnvVars: string[]
-): string {
-  const credentialLines =
-    credentialEnvVars.length > 0
-      ? credentialEnvVars.map((envName) => `export ${envName}="your-value"`)
-      : ['# no provider credential schema exposed for this provider'];
-  const envFileLines =
-    credentialEnvVars.length > 0
-      ? credentialEnvVars.map((envName) => `${envName}=your-value`)
-      : ["# credentials"];
-
-  return [
-    "## Credentials",
-    "",
-    `Set credentials for \`${provider}\` in your shell before running deploy:`,
-    "",
-    "```bash",
-    ...credentialLines,
-    "```",
-    "",
-    "Or create `.env` in this project root:",
-    "",
-    "```dotenv",
-    ...envFileLines,
-    "```",
-    "",
-    "Load `.env` and run:",
-    "",
-    "```bash",
-    "set -a",
-    "source .env",
-    "set +a",
-    `${commandPrefix} deploy`,
-    "```",
-    "",
-    "Credential quick matrix (providers + state backends): https://github.com/runfabric/runfabric/blob/main/docs/CREDENTIALS_MATRIX.md"
-  ].join("\n");
-}
-
-function renderStateBackendSection(backend: string): string {
-  const hints = (() => {
-    if (backend === "local") {
-      return ["# local backend selected; no additional state credentials required"];
-    }
-    if (backend === "postgres") {
-      return ['RUNFABRIC_STATE_POSTGRES_URL="postgres://user:pass@host:5432/dbname?sslmode=require"'];
-    }
-    if (backend === "s3") {
-      return [
-        'RUNFABRIC_STATE_S3_BUCKET="your-state-bucket"',
-        'AWS_REGION="us-east-1"',
-        'AWS_ACCESS_KEY_ID="your-key"',
-        'AWS_SECRET_ACCESS_KEY="your-secret"'
-      ];
-    }
-    if (backend === "gcs") {
-      return [
-        'RUNFABRIC_STATE_GCS_BUCKET="your-state-bucket"',
-        'GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"'
-      ];
-    }
-    if (backend === "azblob") {
-      return [
-        'RUNFABRIC_STATE_AZBLOB_CONTAINER="runfabric-state"',
-        'AZURE_STORAGE_CONNECTION_STRING="your-connection-string"'
-      ];
-    }
-    return ["# set backend-specific credentials"];
-  })();
-
-  return [
-    "## State Backend",
-    "",
-    `Configured state backend in \`runfabric.yml\`: \`${backend}\`.`,
-    "",
-    "Typical environment variables for this backend:",
-    "",
-    "```bash",
-    ...hints,
     "```"
   ].join("\n");
 }
@@ -480,6 +266,132 @@ async function buildDocsContext(options: {
   };
 }
 
+interface DocsCheckOptions {
+  config?: string;
+  stage?: string;
+  readme?: string;
+  json?: boolean;
+}
+
+interface DocsSyncOptions {
+  config?: string;
+  stage?: string;
+  readme?: string;
+  dryRun?: boolean;
+  json?: boolean;
+}
+
+async function assertReadmeExists(readmePath: string): Promise<void> {
+  if (!(await pathExists(readmePath))) {
+    throw new Error(`README not found at ${readmePath}`);
+  }
+}
+
+function buildDocsCheckIssues(context: DocsContext, readmeContent: string): string[] {
+  const issues: string[] = [];
+  const providerLine = `Set credentials for \`${context.provider}\` in your shell before running deploy:`;
+  if (!readmeContent.includes(providerLine)) {
+    issues.push(`README credentials section provider mismatch or missing line: ${providerLine}`);
+  }
+  const backendLine = `Configured state backend in \`runfabric.yml\`: \`${context.stateBackend}\`.`;
+  if (!readmeContent.includes(backendLine)) {
+    issues.push(`README state-backend line mismatch or missing line: ${backendLine}`);
+  }
+  issues.push(...validateTriggerExamples(readmeContent, context.project));
+  if (context.hasRuntimeNode && !hasFrameworkSection(readmeContent)) {
+    issues.push("README missing `## Framework Wiring (Optional)` while @runfabric/runtime-node is installed");
+  }
+  return issues;
+}
+
+function syncCallLocalOptionsSection(content: string, replacement: string): string {
+  const callLocalOptionsPattern = /^Supported options for `call:local`:/m;
+  if (callLocalOptionsPattern.test(content)) {
+    const pattern = /^Supported options for `call:local`:[\s\S]*?(?=^## |\Z)/m;
+    return content.replace(pattern, `${replacement}\n\n`);
+  }
+  return content.replace(/^## Credentials$/m, `${replacement}\n\n## Credentials`);
+}
+
+function applyReadmeSync(before: string, context: DocsContext): string {
+  const sections = renderReadmeSections(context);
+  let after = before;
+  after = replaceSection(after, "Commands", sections.commands);
+  after = replaceSection(after, "Local Call (Provider-mimic)", sections.localCall);
+  after = replaceSection(after, "Credentials", sections.credentials);
+  after = replaceSection(after, "State Backend", sections.stateBackend);
+  after = syncCallLocalOptionsSection(after, sections.options);
+  if (context.hasRuntimeNode) {
+    return replaceSection(after, "Framework Wiring (Optional)", sections.framework);
+  }
+  return hasFrameworkSection(after) ? removeSection(after, "Framework Wiring (Optional)") : after;
+}
+
+async function runDocsCheck(options: DocsCheckOptions): Promise<void> {
+  const context = await buildDocsContext(options);
+  await assertReadmeExists(context.readmePath);
+  const readmeContent = await readFile(context.readmePath, "utf8");
+  const issues = buildDocsCheckIssues(context, readmeContent);
+  const payload = {
+    ok: issues.length === 0,
+    projectDir: context.projectDir,
+    readmePath: context.readmePath,
+    provider: context.provider,
+    stateBackend: context.stateBackend,
+    triggerType: firstTrigger(context.project)?.type || null,
+    hasRuntimeNode: context.hasRuntimeNode,
+    issues
+  };
+
+  if (options.json) {
+    printJson(payload);
+  } else if (payload.ok) {
+    success("docs check passed");
+  } else {
+    warn(`docs check found ${issues.length} issue(s)`);
+    for (const issue of issues) {
+      error(`- ${issue}`);
+    }
+  }
+  if (!payload.ok) {
+    process.exitCode = 1;
+  }
+}
+
+async function runDocsSync(options: DocsSyncOptions): Promise<void> {
+  const context = await buildDocsContext(options);
+  await assertReadmeExists(context.readmePath);
+  const before = await readFile(context.readmePath, "utf8");
+  const after = applyReadmeSync(before, context);
+  const changed = after !== before;
+
+  if (changed && !options.dryRun) {
+    await writeFile(context.readmePath, after, "utf8");
+  }
+
+  const payload = {
+    ok: true,
+    changed,
+    dryRun: Boolean(options.dryRun),
+    projectDir: context.projectDir,
+    readmePath: context.readmePath,
+    provider: context.provider,
+    stateBackend: context.stateBackend,
+    triggerType: firstTrigger(context.project)?.type || null,
+    hasRuntimeNode: context.hasRuntimeNode
+  };
+
+  if (options.json) {
+    printJson(payload);
+  } else if (changed && options.dryRun) {
+    info(`docs sync preview: changes detected for ${context.readmePath}`);
+  } else if (changed) {
+    success(`docs sync wrote ${context.readmePath}`);
+  } else {
+    success("docs sync: README already up to date");
+  }
+}
+
 export const registerDocsCommand: CommandRegistrar = (program) => {
   const docs = program.command("docs").description("Scaffold README drift checks and sync tools");
 
@@ -490,59 +402,7 @@ export const registerDocsCommand: CommandRegistrar = (program) => {
     .option("-s, --stage <name>", "Stage name override")
     .option("-r, --readme <path>", "Path to README file (default: project README.md)")
     .option("--json", "Emit JSON output")
-    .action(
-      async (options: { config?: string; stage?: string; readme?: string; json?: boolean }) => {
-        const context = await buildDocsContext(options);
-        if (!(await pathExists(context.readmePath))) {
-          throw new Error(`README not found at ${context.readmePath}`);
-        }
-
-        const readmeContent = await readFile(context.readmePath, "utf8");
-        const issues: string[] = [];
-
-        const providerLine = `Set credentials for \`${context.provider}\` in your shell before running deploy:`;
-        if (!readmeContent.includes(providerLine)) {
-          issues.push(`README credentials section provider mismatch or missing line: ${providerLine}`);
-        }
-
-        const backendLine = `Configured state backend in \`runfabric.yml\`: \`${context.stateBackend}\`.`;
-        if (!readmeContent.includes(backendLine)) {
-          issues.push(`README state-backend line mismatch or missing line: ${backendLine}`);
-        }
-
-        issues.push(...validateTriggerExamples(readmeContent, context.project));
-
-        if (context.hasRuntimeNode && !hasFrameworkSection(readmeContent)) {
-          issues.push("README missing `## Framework Wiring (Optional)` while @runfabric/runtime-node is installed");
-        }
-
-        const payload = {
-          ok: issues.length === 0,
-          projectDir: context.projectDir,
-          readmePath: context.readmePath,
-          provider: context.provider,
-          stateBackend: context.stateBackend,
-          triggerType: firstTrigger(context.project)?.type || null,
-          hasRuntimeNode: context.hasRuntimeNode,
-          issues
-        };
-
-        if (options.json) {
-          printJson(payload);
-        } else if (payload.ok) {
-          success("docs check passed");
-        } else {
-          warn(`docs check found ${issues.length} issue(s)`);
-          for (const issue of issues) {
-            error(`- ${issue}`);
-          }
-        }
-
-        if (!payload.ok) {
-          process.exitCode = 1;
-        }
-      }
-    );
+    .action(async (options: DocsCheckOptions) => runDocsCheck(options));
 
   docs
     .command("sync")
@@ -552,69 +412,5 @@ export const registerDocsCommand: CommandRegistrar = (program) => {
     .option("-r, --readme <path>", "Path to README file (default: project README.md)")
     .option("--dry-run", "Preview without writing changes")
     .option("--json", "Emit JSON output")
-    .action(
-      async (options: {
-        config?: string;
-        stage?: string;
-        readme?: string;
-        dryRun?: boolean;
-        json?: boolean;
-      }) => {
-        const context = await buildDocsContext(options);
-        if (!(await pathExists(context.readmePath))) {
-          throw new Error(`README not found at ${context.readmePath}`);
-        }
-
-        const before = await readFile(context.readmePath, "utf8");
-        const sections = renderReadmeSections(context);
-        let after = before;
-        after = replaceSection(after, "Commands", sections.commands);
-        after = replaceSection(after, "Local Call (Provider-mimic)", sections.localCall);
-        after = replaceSection(after, "Credentials", sections.credentials);
-        after = replaceSection(after, "State Backend", sections.stateBackend);
-
-        const callLocalOptionsPattern = /^Supported options for `call:local`:/m;
-        if (callLocalOptionsPattern.test(after)) {
-          const pattern = /^Supported options for `call:local`:[\s\S]*?(?=^## |\Z)/m;
-          after = after.replace(pattern, `${sections.options}\n\n`);
-        } else {
-          after = after.replace(/^## Credentials$/m, `${sections.options}\n\n## Credentials`);
-        }
-
-        if (context.hasRuntimeNode) {
-          after = replaceSection(after, "Framework Wiring (Optional)", sections.framework);
-        } else if (hasFrameworkSection(after)) {
-          after = removeSection(after, "Framework Wiring (Optional)");
-        }
-
-        const changed = after !== before;
-        if (changed && !options.dryRun) {
-          await writeFile(context.readmePath, after, "utf8");
-        }
-
-        const payload = {
-          ok: true,
-          changed,
-          dryRun: Boolean(options.dryRun),
-          projectDir: context.projectDir,
-          readmePath: context.readmePath,
-          provider: context.provider,
-          stateBackend: context.stateBackend,
-          triggerType: firstTrigger(context.project)?.type || null,
-          hasRuntimeNode: context.hasRuntimeNode
-        };
-
-        if (options.json) {
-          printJson(payload);
-        } else if (changed) {
-          if (options.dryRun) {
-            info(`docs sync preview: changes detected for ${context.readmePath}`);
-          } else {
-            success(`docs sync wrote ${context.readmePath}`);
-          }
-        } else {
-          success("docs sync: README already up to date");
-        }
-      }
-    );
+    .action(async (options: DocsSyncOptions) => runDocsSync(options));
 };

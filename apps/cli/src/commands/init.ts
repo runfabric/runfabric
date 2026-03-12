@@ -2,124 +2,61 @@ import type { CommandRegistrar } from "../types/cli";
 import { mkdir, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { join, resolve } from "node:path";
-import { stdin, stdout } from "node:process";
-import { createInterface } from "node:readline/promises";
-import { emitKeypressEvents } from "node:readline";
 import { PROVIDER_IDS } from "@runfabric/core";
 import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { error, info, success, warn } from "../utils/logger";
+import { canPromptInteractively, promptSelection } from "./init/prompt";
+import {
+  buildConfigContent,
+  buildGitIgnoreContent,
+  buildHandlerContent,
+  buildPackageJsonContent,
+  buildProjectReadmeContent,
+  buildTsConfigContent,
+  packageManagerAddCommand
+} from "./init/render";
+import {
+  initLanguages,
+  initStateBackends,
+  isLanguage,
+  isPackageManager,
+  isStateBackend,
+  isTemplateName,
+  templateDefinitions,
+  type InitLanguage,
+  type InitTemplateName,
+  type PackageManager,
+  type StateBackend
+} from "./init/types";
 
-type InitTemplateName = "api" | "worker" | "queue" | "cron";
-type InitLanguage = "ts" | "js";
-type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
-type StateBackend = "local" | "postgres" | "s3" | "gcs" | "azblob";
-
-interface InitTemplateDefinition {
-  name: InitTemplateName;
-  defaultService: string;
-  triggerBlock: string[];
-  handlerBody: string[];
+interface InitCommandOptions {
+  dir: string;
+  template?: string;
+  provider?: string;
+  stateBackend?: string;
+  lang?: string;
+  pm?: string;
+  service?: string;
+  skipInstall?: boolean;
+  callLocal?: boolean;
+  interactive?: boolean;
 }
 
-const templateDefinitions: Record<InitTemplateName, InitTemplateDefinition> = {
-  api: {
-    name: "api",
-    defaultService: "hello-api",
-    triggerBlock: [
-      "triggers:",
-      "  - type: http",
-      "    method: GET",
-      "    path: /hello"
-    ],
-    handlerBody: [
-      '  body: JSON.stringify({ message: "hello from api template" })'
-    ]
-  },
-  worker: {
-    name: "worker",
-    defaultService: "hello-worker",
-    triggerBlock: [
-      "triggers:",
-      "  - type: http",
-      "    method: POST",
-      "    path: /work"
-    ],
-    handlerBody: [
-      "  body: JSON.stringify({",
-      '    message: "worker template accepted work",',
-      "    received: req.body || null",
-      "  })"
-    ]
-  },
-  queue: {
-    name: "queue",
-    defaultService: "hello-queue",
-    triggerBlock: [
-      "triggers:",
-      "  - type: queue",
-      "    queue: jobs"
-    ],
-    handlerBody: [
-      "  body: JSON.stringify({",
-      '    message: "queue template processed message",',
-      "    payload: req.body || null",
-      "  })"
-    ]
-  },
-  cron: {
-    name: "cron",
-    defaultService: "hello-cron",
-    triggerBlock: [
-      "triggers:",
-      "  - type: cron",
-      "    schedule: \"*/5 * * * *\""
-    ],
-    handlerBody: [
-      "  body: JSON.stringify({",
-      '    message: "cron template tick",',
-      "    at: new Date().toISOString()",
-      "  })"
-    ]
-  }
-};
-
-const initLanguages: InitLanguage[] = ["ts", "js"];
-const initStateBackends: StateBackend[] = ["local", "postgres", "s3", "gcs", "azblob"];
-
-function isTemplateName(value: string): value is InitTemplateName {
-  return value === "api" || value === "worker" || value === "queue" || value === "cron";
+interface InitSelections {
+  templateName: InitTemplateName;
+  provider: string;
+  language: InitLanguage;
+  stateBackend: StateBackend;
+  packageManager: PackageManager;
 }
 
-function isLanguage(value: string): value is InitLanguage {
-  return value === "ts" || value === "js";
-}
-
-function isPackageManager(value: string): value is PackageManager {
-  return value === "npm" || value === "pnpm" || value === "yarn" || value === "bun";
-}
-
-function isStateBackend(value: string): value is StateBackend {
-  return (
-    value === "local" ||
-    value === "postgres" ||
-    value === "s3" ||
-    value === "gcs" ||
-    value === "azblob"
-  );
-}
-
-function canPromptInteractively(): boolean {
-  return Boolean(stdin.isTTY) && Boolean(stdout.isTTY);
-}
-
-function normalizePackageName(service: string): string {
-  return service
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9-_]/g, "-")
-    .replace(/--+/g, "-")
-    .replace(/^-+/, "")
-    .replace(/-+$/, "") || "runfabric-service";
+interface InitFilePaths {
+  configPath: string;
+  handlerPath: string;
+  packageJsonPath: string;
+  gitIgnorePath: string;
+  tsConfigPath: string;
+  readmePath: string;
 }
 
 function detectPackageManager(): PackageManager {
@@ -136,566 +73,166 @@ function detectPackageManager(): PackageManager {
   return "npm";
 }
 
-async function promptSelection(
-  question: string,
-  choices: string[],
-  defaultValue: string
-): Promise<string> {
-  if (!canPromptInteractively()) {
-    return defaultValue;
+function reportUnsupported(value: string, label: string, supported: string[]): null {
+  error(`unknown ${label}: ${value}`);
+  error(`supported ${label}s: ${supported.join(", ")}`);
+  process.exitCode = 1;
+  return null;
+}
+
+async function resolveTemplateName(options: InitCommandOptions, interactiveMode: boolean): Promise<InitTemplateName | null> {
+  const value = options.template
+    ? options.template
+    : interactiveMode
+      ? await promptSelection("Select template", Object.keys(templateDefinitions), "api")
+      : "api";
+  if (!isTemplateName(value)) {
+    return reportUnsupported(value, "template", ["api", "worker", "queue", "cron"]);
   }
+  return value;
+}
 
-  const defaultIndex = Math.max(0, choices.indexOf(defaultValue));
-  const input = stdin as NodeJS.ReadStream;
-  const output = stdout;
-
-  if (!input.isTTY || typeof input.setRawMode !== "function") {
-    const rl = createInterface({
-      input: stdin,
-      output: stdout
-    });
-
-    info(question);
-    choices.forEach((choice, index) => {
-      info(`  ${index + 1}. ${choice}`);
-    });
-
-    const answer = (await rl.question(`Select [1-${choices.length}] (default ${defaultValue}): `)).trim();
-    await rl.close();
-
-    if (!answer) {
-      return defaultValue;
-    }
-    const asIndex = Number(answer);
-    if (Number.isInteger(asIndex) && asIndex >= 1 && asIndex <= choices.length) {
-      return choices[asIndex - 1];
-    }
-    if (choices.includes(answer)) {
-      return answer;
-    }
-    warn(`invalid selection "${answer}", using default "${defaultValue}"`);
-    return defaultValue;
+async function resolveProviderName(options: InitCommandOptions, interactiveMode: boolean): Promise<string | null> {
+  const value = options.provider
+    ? options.provider
+    : interactiveMode
+      ? await promptSelection("Select provider", [...PROVIDER_IDS], "aws-lambda")
+      : "aws-lambda";
+  if (!PROVIDER_IDS.includes(value as (typeof PROVIDER_IDS)[number])) {
+    return reportUnsupported(value, "provider", [...PROVIDER_IDS]);
   }
+  return value;
+}
 
-  let selectedIndex = defaultIndex;
-  const totalLines = choices.length + 2;
+async function resolveLanguage(options: InitCommandOptions, interactiveMode: boolean): Promise<InitLanguage | null> {
+  const value = options.lang
+    ? options.lang
+    : interactiveMode
+      ? await promptSelection("Select language", [...initLanguages], "ts")
+      : "ts";
+  if (!isLanguage(value)) {
+    return reportUnsupported(value, "language", ["ts", "js"]);
+  }
+  return value;
+}
 
-  const render = (firstRender = false): void => {
-    if (!firstRender) {
-      output.write(`\u001B[${totalLines}A`);
-    }
-    output.write("\u001B[0J");
-    output.write(`${question}\n`);
-    output.write("Use up/down arrows and Enter\n");
-    for (let index = 0; index < choices.length; index += 1) {
-      const prefix = index === selectedIndex ? ">" : " ";
-      output.write(` ${prefix} ${choices[index]}\n`);
-    }
+async function resolveStateBackend(options: InitCommandOptions, interactiveMode: boolean): Promise<StateBackend | null> {
+  const value = options.stateBackend
+    ? options.stateBackend
+    : interactiveMode
+      ? await promptSelection("Select state backend", [...initStateBackends], "local")
+      : "local";
+  if (!isStateBackend(value)) {
+    return reportUnsupported(value, "state backend", [...initStateBackends]);
+  }
+  return value;
+}
+
+function resolvePackageManager(value: string): PackageManager | null {
+  if (!isPackageManager(value)) {
+    return reportUnsupported(value, "package manager", ["npm", "pnpm", "yarn", "bun"]);
+  }
+  return value;
+}
+
+async function resolveSelections(options: InitCommandOptions): Promise<InitSelections | null> {
+  const interactiveMode = options.interactive !== false && canPromptInteractively();
+  const templateName = await resolveTemplateName(options, interactiveMode);
+  if (!templateName) {
+    return null;
+  }
+  const provider = await resolveProviderName(options, interactiveMode);
+  if (!provider) {
+    return null;
+  }
+  const language = await resolveLanguage(options, interactiveMode);
+  if (!language) {
+    return null;
+  }
+  const stateBackend = await resolveStateBackend(options, interactiveMode);
+  if (!stateBackend) {
+    return null;
+  }
+  const packageManager = resolvePackageManager(options.pm || detectPackageManager());
+  if (!packageManager) {
+    return null;
+  }
+  return { templateName, provider, language, stateBackend, packageManager };
+}
+
+function initFilePaths(projectDir: string, extension: string): InitFilePaths {
+  return {
+    configPath: join(projectDir, "runfabric.yml"),
+    handlerPath: join(projectDir, "src", `index.${extension}`),
+    packageJsonPath: join(projectDir, "package.json"),
+    gitIgnorePath: join(projectDir, ".gitignore"),
+    tsConfigPath: join(projectDir, "tsconfig.json"),
+    readmePath: join(projectDir, "README.md")
   };
-
-  return new Promise<string>((resolvePromise, rejectPromise) => {
-    const cleanup = (): void => {
-      input.off("keypress", onKeypress);
-      input.setRawMode(false);
-      input.pause();
-      output.write("\u001B[?25h");
-      output.write("\n");
-    };
-
-    const onKeypress = (_str: string, key: { name?: string; ctrl?: boolean } | undefined): void => {
-      if (!key) {
-        return;
-      }
-
-      if (key.ctrl && key.name === "c") {
-        cleanup();
-        rejectPromise(new Error("prompt cancelled by user"));
-        return;
-      }
-
-      if (key.name === "up") {
-        selectedIndex = (selectedIndex - 1 + choices.length) % choices.length;
-        render();
-        return;
-      }
-
-      if (key.name === "down") {
-        selectedIndex = (selectedIndex + 1) % choices.length;
-        render();
-        return;
-      }
-
-      if (key.name === "return" || key.name === "enter") {
-        const selected = choices[selectedIndex] || defaultValue;
-        cleanup();
-        resolvePromise(selected);
-      }
-    };
-
-    emitKeypressEvents(input);
-    input.setRawMode(true);
-    input.resume();
-    output.write("\u001B[?25l");
-    render(true);
-    input.on("keypress", onKeypress);
-  });
 }
 
-function buildConfigContent(
-  template: InitTemplateDefinition,
-  service: string,
-  provider: string,
-  language: InitLanguage,
-  stateBackend: StateBackend
-): string {
-  const extension = language === "ts" ? "ts" : "js";
-  const stateLines = (() => {
-    if (stateBackend === "local") {
-      return [
-        "state:",
-        "  backend: local",
-        "  local:",
-        "    dir: ./.runfabric/state"
-      ];
-    }
-    if (stateBackend === "postgres") {
-      return [
-        "state:",
-        "  backend: postgres",
-        "  postgres:",
-        "    connectionStringEnv: RUNFABRIC_STATE_POSTGRES_URL",
-        "    schema: public",
-        "    table: runfabric_state"
-      ];
-    }
-    if (stateBackend === "s3") {
-      return [
-        "state:",
-        "  backend: s3",
-        "  s3:",
-        "    bucket: ${env:RUNFABRIC_STATE_S3_BUCKET}",
-        "    region: ${env:AWS_REGION,us-east-1}",
-        "    keyPrefix: runfabric/state",
-        "    useLockfile: true"
-      ];
-    }
-    if (stateBackend === "gcs") {
-      return [
-        "state:",
-        "  backend: gcs",
-        "  gcs:",
-        "    bucket: ${env:RUNFABRIC_STATE_GCS_BUCKET}",
-        "    prefix: runfabric/state"
-      ];
-    }
-    return [
-      "state:",
-      "  backend: azblob",
-      "  azblob:",
-      "    container: ${env:RUNFABRIC_STATE_AZBLOB_CONTAINER}",
-      "    prefix: runfabric/state"
-    ];
-  })();
-
-  return [
-    `service: ${service}`,
-    "runtime: nodejs",
-    `entry: src/index.${extension}`,
-    "",
-    "providers:",
-    `  - ${provider}`,
-    "",
-    ...stateLines,
-    "",
-    ...template.triggerBlock,
-    ""
-  ].join("\n");
+function resolveCredentialEnvVars(projectDir: string, provider: string): string[] {
+  const adapter = createProviderRegistry(projectDir, [provider])[provider];
+  const schema = adapter?.getCredentialSchema?.();
+  return schema?.fields.map((field) => field.env).filter((value) => value.trim().length > 0) || [];
 }
 
-function buildHandlerContent(template: InitTemplateDefinition, language: InitLanguage): string {
-  if (language === "ts") {
-    return [
-      'import type { UniversalHandler, UniversalRequest, UniversalResponse } from "@runfabric/core";',
-      "",
-      "export const handler: UniversalHandler = async (",
-      "  req: UniversalRequest",
-      "): Promise<UniversalResponse> => ({",
-      "  status: 200,",
-      '  headers: { "content-type": "application/json" },',
-      ...template.handlerBody,
-      "});",
-      ""
-    ].join("\n");
-  }
-
-  return [
-    "export const handler = async (req) => ({",
-    "  status: 200,",
-    '  headers: { "content-type": "application/json" },',
-    ...template.handlerBody,
-    "});",
-    ""
-  ].join("\n");
-}
-
-function buildPackageJsonContent(
-  service: string,
-  language: InitLanguage,
-  provider: string
-): string {
-  const scripts: Record<string, string> = {
-    doctor: "runfabric doctor",
-    plan: "runfabric plan",
-    build: language === "ts" ? "tsc -p tsconfig.json" : "node -e \"console.log('no build step for js template')\"",
-    deploy: "runfabric deploy",
-    "call:local":
-      language === "ts"
-        ? "runfabric call-local -c runfabric.yml --serve --watch"
-        : "runfabric call-local -c runfabric.yml --serve --watch"
-  };
-
-  if (language === "ts") {
-    scripts.typecheck = "tsc --noEmit -p tsconfig.json";
-  }
-
-  const providerPackage = getProviderPackageName(provider);
-  const dependencies: Record<string, string> = {
-    "@runfabric/core": "^0.1.0"
-  };
-  if (providerPackage) {
-    dependencies[providerPackage] = "^0.1.0";
-  }
-
-  const packageJson: Record<string, unknown> = {
-    name: normalizePackageName(service),
-    private: true,
-    version: "0.1.0",
-    type: "module",
-    scripts,
-    dependencies
-  };
-
-  if (language === "ts") {
-    packageJson.devDependencies = {
-      typescript: "^5.9.2",
-      "@types/node": "^24.5.2"
-    };
-  }
-
-  return `${JSON.stringify(packageJson, null, 2)}\n`;
-}
-
-function buildTsConfigContent(): string {
-  return [
-    "{",
-    "  \"compilerOptions\": {",
-    "    \"target\": \"ES2022\",",
-    "    \"module\": \"NodeNext\",",
-    "    \"moduleResolution\": \"NodeNext\",",
-    "    \"strict\": true,",
-    "    \"esModuleInterop\": true,",
-    "    \"types\": [\"node\"],",
-    "    \"skipLibCheck\": true,",
-    "    \"outDir\": \"dist\"",
-    "  },",
-    "  \"include\": [\"src/**/*.ts\"]",
-    "}",
-    ""
-  ].join("\n");
-}
-
-function buildGitIgnoreContent(): string {
-  return [
-    "node_modules",
-    "dist",
-    ".runfabric",
-    ".env",
-    ""
-  ].join("\n");
-}
-
-function runCommandPrefix(packageManager: PackageManager): string {
-  if (packageManager === "pnpm") {
-    return "pnpm run";
-  }
-  if (packageManager === "yarn") {
-    return "yarn";
-  }
-  if (packageManager === "bun") {
-    return "bun run";
-  }
-  return "npm run";
-}
-
-function buildLocalCallReadmeSection(params: {
-  template: InitTemplateDefinition;
-  provider: string;
-  commandPrefix: string;
-}): string[] {
-  if (params.template.name === "api" || params.template.name === "worker") {
-    const path = params.template.name === "api" ? "/hello" : "/work";
-    const method = params.template.name === "api" ? "GET" : "POST";
-    return [
-      "## Local Call (Provider-mimic)",
-      "",
-      "Use built-in `runfabric call-local` to start a local HTTP server that forwards provider-shaped requests to your handler.",
-      "",
-      "```bash",
-      `${params.commandPrefix} call:local`,
-      `curl -i http://127.0.0.1:8787${path}`,
-      "# stop server: Ctrl+C or type 'exit' and press Enter",
-      `${params.commandPrefix} call:local -- --provider ${params.provider} --host 127.0.0.1 --port 8787 --serve --watch`,
-      `${params.commandPrefix} call:local -- --provider ${params.provider} --method ${method} --path ${path}`,
-      `${params.commandPrefix} call:local -- --provider ${params.provider} --event ./event.json`,
-      "```"
-    ];
-  }
-
-  if (params.template.name === "queue") {
-    return [
-      "## Local Call (Provider-mimic)",
-      "",
-      "Queue scaffolds are event-driven. Use `--event` payload simulation for local calls.",
-      "",
-      "Example `event.queue.json`:",
-      "",
-      "```json",
-      '{ "records": [ { "body": { "jobId": "demo-1" } } ] }',
-      "```",
-      "",
-      "```bash",
-      `${params.commandPrefix} call:local -- --provider ${params.provider} --event ./event.queue.json`,
-      "```"
-    ];
-  }
-
-  return [
-    "## Local Call (Provider-mimic)",
-    "",
-    "Cron scaffolds are event-driven. Use `--event` payload simulation for local calls.",
-    "",
-    "Example `event.cron.json`:",
-    "",
-    "```json",
-    '{ "source": "runfabric.dev", "detail-type": "scheduled", "time": "2026-01-01T00:00:00.000Z" }',
-    "```",
-    "",
-    "```bash",
-    `${params.commandPrefix} call:local -- --provider ${params.provider} --event ./event.cron.json`,
-    "```"
-  ];
-}
-
-function buildFrameworkWiringReadmeSection(params: {
-  template: InitTemplateDefinition;
-  packageManager: PackageManager;
-}): string[] {
-  if (params.template.name !== "api" && params.template.name !== "worker") {
-    return [];
-  }
-
-  const runtimeInstall = packageManagerAddCommand(params.packageManager, ["@runfabric/runtime-node"]);
-  const expressInstall = packageManagerAddCommand(params.packageManager, ["express"]);
-  const fastifyInstall = packageManagerAddCommand(params.packageManager, ["fastify"]);
-  const nestInstall = packageManagerAddCommand(params.packageManager, [
-    "@nestjs/core",
-    "@nestjs/common",
-    "@nestjs/platform-express",
-    "reflect-metadata",
-    "rxjs"
-  ]);
-
-  return [
-    "## Framework Wiring (Optional)",
-    "",
-    "If you convert this scaffold to Express/Fastify/Nest, use the runtime wrapper:",
-    "",
-    "```bash",
-    runtimeInstall,
-    `${expressInstall}   # optional`,
-    `${fastifyInstall}   # optional`,
-    `${nestInstall}   # optional`,
-    "```",
-    "",
-    "```ts",
-    'import type { UniversalHandler } from "@runfabric/core";',
-    'import { createHandler } from "@runfabric/runtime-node";',
-    "",
-    "export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);",
-    "```",
-    "",
-    "Nest TypeScript projects must enable `experimentalDecorators` and `emitDecoratorMetadata` in `tsconfig.json`.",
-    "After trigger or framework changes, update this README command/examples section so project docs stay aligned.",
-    ""
-  ];
-}
-
-function buildProjectReadmeContent(params: {
+async function writeProjectFiles(params: {
+  projectDir: string;
   service: string;
   provider: string;
   language: InitLanguage;
-  template: InitTemplateDefinition;
   stateBackend: StateBackend;
   packageManager: PackageManager;
   credentialEnvVars: string[];
-  skippedInstall: boolean;
-}): string {
-  const commandPrefix = runCommandPrefix(params.packageManager);
-  const localCallSection = buildLocalCallReadmeSection({
-    template: params.template,
-    provider: params.provider,
-    commandPrefix
-  });
-  const frameworkWiringSection = buildFrameworkWiringReadmeSection({
-    template: params.template,
-    packageManager: params.packageManager
-  });
+  skipInstall: boolean;
+  templateName: InitTemplateName;
+}): Promise<InitFilePaths> {
+  const template = templateDefinitions[params.templateName];
   const extension = params.language === "ts" ? "ts" : "js";
-  const credentialLines =
-    params.credentialEnvVars.length > 0
-      ? params.credentialEnvVars.map((envName) => `export ${envName}="your-value"`)
-      : ['# no provider credential schema exposed for this provider'];
-  const envFileLines =
-    params.credentialEnvVars.length > 0
-      ? params.credentialEnvVars.map((envName) => `${envName}=your-value`)
-      : ["# credentials"];
-  const stateBackendEnvHints = (() => {
-    if (params.stateBackend === "local") {
-      return ["# local backend selected; no additional state credentials required"];
-    }
-    if (params.stateBackend === "postgres") {
-      return ['RUNFABRIC_STATE_POSTGRES_URL="postgres://user:pass@host:5432/dbname?sslmode=require"'];
-    }
-    if (params.stateBackend === "s3") {
-      return [
-        'RUNFABRIC_STATE_S3_BUCKET="your-state-bucket"',
-        'AWS_REGION="us-east-1"',
-        'AWS_ACCESS_KEY_ID="your-key"',
-        'AWS_SECRET_ACCESS_KEY="your-secret"'
-      ];
-    }
-    if (params.stateBackend === "gcs") {
-      return [
-        'RUNFABRIC_STATE_GCS_BUCKET="your-state-bucket"',
-        'GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"'
-      ];
-    }
-    return [
-      'RUNFABRIC_STATE_AZBLOB_CONTAINER="runfabric-state"',
-      'AZURE_STORAGE_CONNECTION_STRING="your-connection-string"'
-    ];
-  })();
+  const paths = initFilePaths(params.projectDir, extension);
 
-  return [
-    `# ${params.service}`,
-    "",
-    `Generated by \`runfabric init\` (${params.template.name}, ${params.provider}, ${params.language}).`,
-    "",
-    "## Handler Import",
-    "",
-    "Use this in your handler file:",
-    "",
-    "```ts",
-    params.language === "ts"
-      ? 'import type { UniversalHandler, UniversalRequest, UniversalResponse } from "@runfabric/core";'
-      : '// JavaScript template does not require type imports',
-    "```",
-    "",
-    "## Commands",
-    "",
-    "From this project directory:",
-    "",
-    "```bash",
-    `${commandPrefix} doctor`,
-    `${commandPrefix} plan`,
-    `${commandPrefix} build`,
-    `${commandPrefix} deploy`,
-    `${commandPrefix} call:local`,
-    "```",
-    "",
-    ...localCallSection,
-    "",
-    "Supported options for `call:local`:",
-    "",
-    "- `--serve`",
-    "- `--watch`",
-    "- `--host <host>`",
-    "- `--port <number>`",
-    "- `--provider <id>`",
-    "- `--method <HTTP_METHOD>`",
-    "- `--path </route>`",
-    "- `--query key=value&key2=value2`",
-    "- `--header key:value` (repeatable)",
-    "- `--body <string>`",
-    "- `--event <path-to-json>`",
-    "",
-    params.language === "ts"
-      ? "- TypeScript mode: if no built handler is found, `call-local` runs an initial `tsc -p tsconfig.json` automatically (requires `typescript` in dev dependencies)."
-      : "- JavaScript mode: handler is loaded directly from configured entry.",
-    "",
-    ...frameworkWiringSection,
-    "## Credentials",
-    "",
-    `Set credentials for \`${params.provider}\` in your shell before running deploy:`,
-    "",
-    "```bash",
-    ...credentialLines,
-    "```",
-    "",
-    "Or create `.env` in this project root:",
-    "",
-    "```dotenv",
-    ...envFileLines,
-    "```",
-    "",
-    "Load `.env` and run:",
-    "",
-    "```bash",
-    "set -a",
-    "source .env",
-    "set +a",
-    `${commandPrefix} deploy`,
-    "```",
-    "",
-    "Credential quick matrix (providers + state backends): https://github.com/runfabric/runfabric/blob/main/docs/CREDENTIALS_MATRIX.md",
-    "",
-    "## State Backend",
-    "",
-    `Configured state backend in \`runfabric.yml\`: \`${params.stateBackend}\`.`,
-    "",
-    "Typical environment variables for this backend:",
-    "",
-    "```bash",
-    ...stateBackendEnvHints,
-    "```",
-    "",
-    "## Generated Files",
-    "",
-    "- `runfabric.yml`",
-    `- \`src/index.${extension}\``,
-    "- `package.json`",
-    "- `.gitignore`",
-    ...(params.language === "ts" ? ["- `tsconfig.json`"] : []),
-    ...(params.skippedInstall ? ["", "Dependencies were not installed automatically (`--skip-install` was used)."] : []),
-    ""
-  ].join("\n");
+  await mkdir(join(params.projectDir, "src"), { recursive: true });
+  await writeFile(paths.configPath, buildConfigContent(template, params.service, params.provider, params.language, params.stateBackend), "utf8");
+  await writeFile(paths.handlerPath, buildHandlerContent(template, params.language), "utf8");
+  await writeFile(paths.packageJsonPath, buildPackageJsonContent(params.service, params.language, params.provider), "utf8");
+  await writeFile(paths.gitIgnorePath, buildGitIgnoreContent(), "utf8");
+  await writeFile(
+    paths.readmePath,
+    buildProjectReadmeContent({
+      service: params.service,
+      provider: params.provider,
+      language: params.language,
+      template,
+      stateBackend: params.stateBackend,
+      packageManager: params.packageManager,
+      credentialEnvVars: params.credentialEnvVars,
+      skippedInstall: params.skipInstall
+    }),
+    "utf8"
+  );
+  if (params.language === "ts") {
+    await writeFile(paths.tsConfigPath, buildTsConfigContent(), "utf8");
+  }
+
+  return paths;
 }
 
-async function runCommand(
-  command: string,
-  args: string[],
-  cwd: string
-): Promise<void> {
-  await new Promise<void>((resolvePromise, rejectPromise) => {
-    const child = spawn(command, args, {
-      cwd,
-      stdio: "inherit",
-      env: process.env
-    });
+function logCreatedFiles(paths: InitFilePaths, language: InitLanguage): void {
+  info(`created ${paths.configPath}`);
+  info(`created ${paths.handlerPath}`);
+  info(`created ${paths.packageJsonPath}`);
+  info(`created ${paths.gitIgnorePath}`);
+  info(`created ${paths.readmePath}`);
+  if (language === "ts") {
+    info(`created ${paths.tsConfigPath}`);
+  }
+}
 
-    child.on("error", (commandError) => {
-      rejectPromise(commandError);
-    });
+async function runCommand(command: string, args: string[], cwd: string): Promise<void> {
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    const child = spawn(command, args, { cwd, stdio: "inherit", env: process.env });
+    child.on("error", (commandError) => rejectPromise(commandError));
     child.on("close", (code) => {
       if (code === 0) {
         resolvePromise();
@@ -713,9 +250,7 @@ async function installCoreDependency(
   provider: string
 ): Promise<void> {
   const providerPackage = getProviderPackageName(provider);
-  const corePackages = providerPackage
-    ? ["@runfabric/core", providerPackage]
-    : ["@runfabric/core"];
+  const corePackages = providerPackage ? ["@runfabric/core", providerPackage] : ["@runfabric/core"];
 
   if (packageManager === "pnpm") {
     await runCommand("pnpm", ["add", ...corePackages], projectDir);
@@ -724,7 +259,6 @@ async function installCoreDependency(
     }
     return;
   }
-
   if (packageManager === "yarn") {
     await runCommand("yarn", ["add", ...corePackages], projectDir);
     if (language === "ts") {
@@ -732,7 +266,6 @@ async function installCoreDependency(
     }
     return;
   }
-
   if (packageManager === "bun") {
     await runCommand("bun", ["add", ...corePackages], projectDir);
     if (language === "ts") {
@@ -754,17 +287,90 @@ function packageManagerRunArgs(packageManager: PackageManager, scriptName: strin
   return [packageManager, ["run", scriptName]];
 }
 
-function packageManagerAddCommand(packageManager: PackageManager, packages: string[]): string {
-  if (packageManager === "pnpm") {
-    return `pnpm add ${packages.join(" ")}`;
+async function installDependenciesIfNeeded(params: {
+  projectDir: string;
+  packageManager: PackageManager;
+  language: InitLanguage;
+  provider: string;
+  skipInstall?: boolean;
+}): Promise<void> {
+  if (params.skipInstall) {
+    info("dependency installation skipped");
+    return;
   }
-  if (packageManager === "yarn") {
-    return `yarn add ${packages.join(" ")}`;
+
+  info(`installing dependencies using ${params.packageManager}...`);
+  try {
+    await installCoreDependency(params.projectDir, params.packageManager, params.language, params.provider);
+    const providerPackage = getProviderPackageName(params.provider);
+    success(providerPackage ? `installed @runfabric/core and ${providerPackage}` : "installed @runfabric/core");
+  } catch (installError) {
+    const message = installError instanceof Error ? installError.message : String(installError);
+    warn(`dependency installation failed: ${message}`);
+    const providerPackage = getProviderPackageName(params.provider);
+    const manualPackages = providerPackage ? ["@runfabric/core", providerPackage] : ["@runfabric/core"];
+    warn(`run manually: (cd ${params.projectDir} && ${packageManagerAddCommand(params.packageManager, manualPackages)})`);
   }
-  if (packageManager === "bun") {
-    return `bun add ${packages.join(" ")}`;
+}
+
+async function runCallLocalIfRequested(params: {
+  callLocal?: boolean;
+  packageManager: PackageManager;
+  projectDir: string;
+}): Promise<void> {
+  if (!params.callLocal) {
+    return;
   }
-  return `npm install ${packages.join(" ")}`;
+
+  info("running local provider-mimic call...");
+  const [command, args] = packageManagerRunArgs(params.packageManager, "call:local");
+  try {
+    await runCommand(command, args, params.projectDir);
+    success("local call completed");
+  } catch (callError) {
+    const message = callError instanceof Error ? callError.message : String(callError);
+    warn(`local call failed: ${message}`);
+    warn(`run manually later: (cd ${params.projectDir} && ${command} ${args.join(" ")})`);
+  }
+}
+
+async function runInitCommand(options: InitCommandOptions): Promise<void> {
+  const selections = await resolveSelections(options);
+  if (!selections) {
+    return;
+  }
+
+  const template = templateDefinitions[selections.templateName];
+  const service = options.service && options.service.trim().length > 0 ? options.service.trim() : template.defaultService;
+  const projectDir = resolve(options.dir);
+  const credentialEnvVars = resolveCredentialEnvVars(projectDir, selections.provider);
+  const paths = await writeProjectFiles({
+    projectDir,
+    service,
+    provider: selections.provider,
+    language: selections.language,
+    stateBackend: selections.stateBackend,
+    packageManager: selections.packageManager,
+    credentialEnvVars,
+    skipInstall: Boolean(options.skipInstall),
+    templateName: selections.templateName
+  });
+
+  logCreatedFiles(paths, selections.language);
+  await installDependenciesIfNeeded({
+    projectDir,
+    packageManager: selections.packageManager,
+    language: selections.language,
+    provider: selections.provider,
+    skipInstall: options.skipInstall
+  });
+  await runCallLocalIfRequested({
+    callLocal: options.callLocal,
+    packageManager: selections.packageManager,
+    projectDir
+  });
+
+  success(`project scaffold initialized (${template.name}, ${selections.provider}, ${selections.language})`);
 }
 
 export const registerInitCommand: CommandRegistrar = (program) => {
@@ -781,173 +387,13 @@ export const registerInitCommand: CommandRegistrar = (program) => {
     .option("--skip-install", "Skip dependency installation")
     .option("--call-local", "Run local provider-mimic call after scaffold is generated")
     .option("--no-interactive", "Disable interactive prompts")
-    .action(
-      async (options: {
-        dir: string;
-        template?: string;
-        provider?: string;
-        stateBackend?: string;
-        lang?: string;
-        pm?: string;
-        service?: string;
-        skipInstall?: boolean;
-        callLocal?: boolean;
-        interactive?: boolean;
-      }) => {
-        const interactiveMode = options.interactive !== false && canPromptInteractively();
-
-        const templateNameRaw = options.template
-          ? options.template
-          : interactiveMode
-            ? await promptSelection("Select template", Object.keys(templateDefinitions), "api")
-            : "api";
-        if (!isTemplateName(templateNameRaw)) {
-          error(`unknown template: ${templateNameRaw}`);
-          error("supported templates: api, worker, queue, cron");
-          process.exitCode = 1;
-          return;
-        }
-
-        const providerRaw = options.provider
-          ? options.provider
-          : interactiveMode
-            ? await promptSelection("Select provider", [...PROVIDER_IDS], "aws-lambda")
-            : "aws-lambda";
-        if (!PROVIDER_IDS.includes(providerRaw as (typeof PROVIDER_IDS)[number])) {
-          error(`unknown provider: ${providerRaw}`);
-          error(`supported providers: ${PROVIDER_IDS.join(", ")}`);
-          process.exitCode = 1;
-          return;
-        }
-
-        const languageRaw = options.lang
-          ? options.lang
-          : interactiveMode
-            ? await promptSelection("Select language", [...initLanguages], "ts")
-            : "ts";
-        if (!isLanguage(languageRaw)) {
-          error(`unknown language: ${languageRaw}`);
-          error("supported languages: ts, js");
-          process.exitCode = 1;
-          return;
-        }
-
-        const stateBackendRaw = options.stateBackend
-          ? options.stateBackend
-          : interactiveMode
-            ? await promptSelection("Select state backend", [...initStateBackends], "local")
-            : "local";
-        if (!isStateBackend(stateBackendRaw)) {
-          error(`unknown state backend: ${stateBackendRaw}`);
-          error(`supported state backends: ${initStateBackends.join(", ")}`);
-          process.exitCode = 1;
-          return;
-        }
-
-        const packageManagerRaw = options.pm || detectPackageManager();
-        if (!isPackageManager(packageManagerRaw)) {
-          error(`unknown package manager: ${packageManagerRaw}`);
-          error("supported package managers: npm, pnpm, yarn, bun");
-          process.exitCode = 1;
-          return;
-        }
-
-        const template = templateDefinitions[templateNameRaw];
-        const service = options.service && options.service.trim().length > 0
-          ? options.service.trim()
-          : template.defaultService;
-        const language = languageRaw;
-        const projectDir = resolve(options.dir);
-        const extension = language === "ts" ? "ts" : "js";
-
-        await mkdir(join(projectDir, "src"), { recursive: true });
-
-        const configPath = join(projectDir, "runfabric.yml");
-        const handlerPath = join(projectDir, "src", `index.${extension}`);
-        const packageJsonPath = join(projectDir, "package.json");
-        const gitIgnorePath = join(projectDir, ".gitignore");
-        const tsConfigPath = join(projectDir, "tsconfig.json");
-        const readmePath = join(projectDir, "README.md");
-
-        const provider = createProviderRegistry(projectDir, [providerRaw])[providerRaw];
-        const credentialSchema = provider?.getCredentialSchema?.();
-        const credentialEnvVars =
-          credentialSchema?.fields.map((field) => field.env).filter((value) => value.trim().length > 0) || [];
-
-        await writeFile(
-          configPath,
-          buildConfigContent(template, service, providerRaw, language, stateBackendRaw),
-          "utf8"
-        );
-        await writeFile(handlerPath, buildHandlerContent(template, language), "utf8");
-        await writeFile(packageJsonPath, buildPackageJsonContent(service, language, providerRaw), "utf8");
-        await writeFile(gitIgnorePath, buildGitIgnoreContent(), "utf8");
-        await writeFile(
-          readmePath,
-          buildProjectReadmeContent({
-            service,
-            provider: providerRaw,
-            language,
-            template,
-            stateBackend: stateBackendRaw,
-            packageManager: packageManagerRaw,
-            credentialEnvVars,
-            skippedInstall: Boolean(options.skipInstall)
-          }),
-          "utf8"
-        );
-        if (language === "ts") {
-          await writeFile(tsConfigPath, buildTsConfigContent(), "utf8");
-        }
-
-        info(`created ${configPath}`);
-        info(`created ${handlerPath}`);
-        info(`created ${packageJsonPath}`);
-        info(`created ${gitIgnorePath}`);
-        info(`created ${readmePath}`);
-        if (language === "ts") {
-          info(`created ${tsConfigPath}`);
-        }
-
-        if (!options.skipInstall) {
-          info(`installing dependencies using ${packageManagerRaw}...`);
-          try {
-            await installCoreDependency(projectDir, packageManagerRaw, language, providerRaw);
-            const providerPackage = getProviderPackageName(providerRaw);
-            success(
-              providerPackage
-                ? `installed @runfabric/core and ${providerPackage}`
-                : "installed @runfabric/core"
-            );
-          } catch (installError) {
-            const message = installError instanceof Error ? installError.message : String(installError);
-            warn(`dependency installation failed: ${message}`);
-            const providerPackage = getProviderPackageName(providerRaw);
-            const manualPackages = providerPackage
-              ? ["@runfabric/core", providerPackage]
-              : ["@runfabric/core"];
-            warn(
-              `run manually: (cd ${projectDir} && ${packageManagerAddCommand(packageManagerRaw, manualPackages)})`
-            );
-          }
-        } else {
-          info("dependency installation skipped");
-        }
-
-        if (options.callLocal) {
-          info("running local provider-mimic call...");
-          const [command, args] = packageManagerRunArgs(packageManagerRaw, "call:local");
-          try {
-            await runCommand(command, args, projectDir);
-            success("local call completed");
-          } catch (callError) {
-            const message = callError instanceof Error ? callError.message : String(callError);
-            warn(`local call failed: ${message}`);
-            warn(`run manually later: (cd ${projectDir} && ${command} ${args.join(" ")})`);
-          }
-        }
-
-        success(`project scaffold initialized (${template.name}, ${providerRaw}, ${language})`);
+    .action(async (options: InitCommandOptions) => {
+      try {
+        await runInitCommand(options);
+      } catch (initError) {
+        const message = initError instanceof Error ? initError.message : String(initError);
+        error(message);
+        process.exitCode = 1;
       }
-    );
+    });
 };
