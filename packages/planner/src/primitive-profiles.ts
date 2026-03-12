@@ -34,6 +34,17 @@ export const primitiveProfiles: Record<string, ProviderPrimitiveProfile> = {
     stateStorage: true,
     observability: true
   },
+  kubernetes: {
+    compute: true,
+    functionRuntime: true,
+    eventTriggers: true,
+    workflowOrchestration: true,
+    queue: false,
+    eventBus: false,
+    scheduler: true,
+    stateStorage: true,
+    observability: true
+  },
   "cloudflare-workers": {
     compute: true,
     functionRuntime: true,

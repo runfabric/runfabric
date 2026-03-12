@@ -56,6 +56,7 @@ Per-provider real mode flag:
 | `aws-lambda` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` |
 | `gcp-functions` | `GCP_PROJECT_ID`, `GCP_SERVICE_ACCOUNT_KEY` |
 | `azure-functions` | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` |
+| `kubernetes` | `KUBECONFIG`, `KUBE_CONTEXT`, `KUBE_NAMESPACE` |
 | `cloudflare-workers` | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
 | `vercel` | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` |
 | `netlify` | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` |
@@ -75,6 +76,7 @@ When real mode is enabled, every provider has a built-in deployer path. Command 
 | `aws-lambda` | AWS SDK deploy + destroy | `RUNFABRIC_AWS_DEPLOY_CMD`, `RUNFABRIC_AWS_DESTROY_CMD` |
 | `gcp-functions` | built-in `gcloud` command contract | `RUNFABRIC_GCP_DEPLOY_CMD`, `RUNFABRIC_GCP_DESTROY_CMD` |
 | `azure-functions` | built-in `func/az` command contract | `RUNFABRIC_AZURE_DEPLOY_CMD`, `RUNFABRIC_AZURE_DESTROY_CMD` |
+| `kubernetes` | built-in `kubectl` command contract | `RUNFABRIC_KUBERNETES_DEPLOY_CMD`, `RUNFABRIC_KUBERNETES_DESTROY_CMD` |
 | `cloudflare-workers` | Cloudflare Workers API deploy + destroy | `RUNFABRIC_CLOUDFLARE_DESTROY_CMD` |
 | `vercel` | built-in `vercel` command contract | `RUNFABRIC_VERCEL_DEPLOY_CMD`, `RUNFABRIC_VERCEL_DESTROY_CMD` |
 | `netlify` | built-in `netlify` command contract | `RUNFABRIC_NETLIFY_DEPLOY_CMD`, `RUNFABRIC_NETLIFY_DESTROY_CMD` |
@@ -98,6 +100,7 @@ If these are unset, runfabric falls back to local artifact-derived traces/metric
 | `aws-lambda` | `RUNFABRIC_AWS_TRACES_CMD` | `RUNFABRIC_AWS_METRICS_CMD` |
 | `gcp-functions` | `RUNFABRIC_GCP_TRACES_CMD` | `RUNFABRIC_GCP_METRICS_CMD` |
 | `azure-functions` | `RUNFABRIC_AZURE_TRACES_CMD` | `RUNFABRIC_AZURE_METRICS_CMD` |
+| `kubernetes` | `RUNFABRIC_KUBERNETES_TRACES_CMD` | `RUNFABRIC_KUBERNETES_METRICS_CMD` |
 | `cloudflare-workers` | `RUNFABRIC_CLOUDFLARE_TRACES_CMD` | `RUNFABRIC_CLOUDFLARE_METRICS_CMD` |
 | `vercel` | `RUNFABRIC_VERCEL_TRACES_CMD` | `RUNFABRIC_VERCEL_METRICS_CMD` |
 | `netlify` | `RUNFABRIC_NETLIFY_TRACES_CMD` | `RUNFABRIC_NETLIFY_METRICS_CMD` |

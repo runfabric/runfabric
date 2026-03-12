@@ -67,7 +67,8 @@ const runfabricSchema: Record<string, unknown> = {
       type: "object",
       additionalProperties: { type: "object", additionalProperties: true },
       properties: {
-        "aws-lambda": { $ref: "#/$defs/awsLambdaExtension" }
+        "aws-lambda": { $ref: "#/$defs/awsLambdaExtension" },
+        kubernetes: { $ref: "#/$defs/kubernetesExtension" }
       }
     },
     state: { $ref: "#/$defs/stateConfig" },
@@ -304,6 +305,17 @@ const runfabricSchema: Record<string, unknown> = {
             }
           }
         }
+      }
+    },
+    kubernetesExtension: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        namespace: { type: "string" },
+        context: { type: "string" },
+        deploymentName: { type: "string" },
+        serviceName: { type: "string" },
+        ingressHost: { type: "string" }
       }
     }
   }

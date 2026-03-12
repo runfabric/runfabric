@@ -72,6 +72,12 @@ Example (AWS + Cloudflare):
 npm install -D @runfabric/provider-aws-lambda @runfabric/provider-cloudflare-workers
 ```
 
+Example (Kubernetes):
+
+```bash
+npm install -D @runfabric/provider-kubernetes
+```
+
 ## Quick Start
 
 Create a new project:
@@ -180,6 +186,7 @@ Full command reference: `docs/site/command-reference.md`
 - `aws-lambda`
 - `gcp-functions`
 - `azure-functions`
+- `kubernetes`
 - `cloudflare-workers`
 - `vercel`
 - `netlify`

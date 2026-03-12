@@ -69,6 +69,9 @@ importers:
       '@runfabric/provider-ibm-openwhisk':
         specifier: workspace:*
         version: link:../../packages/provider-ibm-openwhisk
+      '@runfabric/provider-kubernetes':
+        specifier: workspace:*
+        version: link:../../packages/provider-kubernetes
       '@runfabric/provider-netlify':
         specifier: workspace:*
         version: link:../../packages/provider-netlify
@@ -158,6 +161,12 @@ importers:
         version: link:../core
 
   packages/provider-ibm-openwhisk:
+    dependencies:
+      '@runfabric/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/provider-kubernetes:
     dependencies:
       '@runfabric/core':
         specifier: workspace:*

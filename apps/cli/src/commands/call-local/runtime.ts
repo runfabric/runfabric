@@ -137,6 +137,7 @@ export function createEventFromOptions(options: ParsedCallOptions): unknown {
       return createAwsLambdaEvent(options, query);
     case "gcp-functions":
     case "azure-functions":
+    case "kubernetes":
     case "vercel":
     case "fly-machines":
       return createHttpAdapterEvent(options, query);
@@ -422,6 +423,8 @@ async function invokeStandardProvider(
     case "digitalocean-functions":
       return normalizeAdapterResponse(provider, await createDigitalOceanHttpAdapter(handler)(event));
     case "fly-machines":
+      return normalizeAdapterResponse(provider, await createFlyHttpAdapter(handler)(event));
+    case "kubernetes":
       return normalizeAdapterResponse(provider, await createFlyHttpAdapter(handler)(event));
     case "ibm-openwhisk":
       return normalizeAdapterResponse(provider, await createIbmOpenWhiskAdapter(handler)(event));

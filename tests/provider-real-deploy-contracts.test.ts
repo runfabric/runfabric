@@ -12,6 +12,7 @@ import { createDigitalOceanFunctionsProvider } from "../packages/provider-digita
 import { createFlyMachinesProvider } from "../packages/provider-fly-machines/src/index.ts";
 import { createGcpFunctionsProvider } from "../packages/provider-gcp-functions/src/index.ts";
 import { createIbmOpenWhiskProvider } from "../packages/provider-ibm-openwhisk/src/index.ts";
+import { createKubernetesProvider } from "../packages/provider-kubernetes/src/index.ts";
 import { createNetlifyProvider } from "../packages/provider-netlify/src/index.ts";
 import { createVercelProvider } from "../packages/provider-vercel/src/index.ts";
 
@@ -92,6 +93,20 @@ const providerCases: ProviderRealDeployCase[] = [
     },
     expectedEndpoint: "https://contract-azure.azurewebsites.net",
     createProvider: (projectDir) => createAzureFunctionsProvider({ projectDir })
+  },
+  {
+    provider: "kubernetes",
+    enableRealDeployEnv: "RUNFABRIC_KUBERNETES_REAL_DEPLOY",
+    deployCommandEnv: "RUNFABRIC_KUBERNETES_DEPLOY_CMD",
+    destroyCommandEnv: "RUNFABRIC_KUBERNETES_DESTROY_CMD",
+    requiredCredentials: {
+      KUBECONFIG: "/tmp/kubeconfig"
+    },
+    deployResponseFixture: {
+      endpoint: "https://contract-k8s.default.svc.cluster.local"
+    },
+    expectedEndpoint: "https://contract-k8s.default.svc.cluster.local",
+    createProvider: (projectDir) => createKubernetesProvider({ projectDir })
   },
   {
     provider: "vercel",

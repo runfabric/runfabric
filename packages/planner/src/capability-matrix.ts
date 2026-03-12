@@ -55,6 +55,22 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     maxTimeoutSeconds: 600,
     maxMemoryMB: 4096
   },
+  kubernetes: {
+    http: true,
+    cron: true,
+    queue: false,
+    storageEvent: false,
+    eventbridge: false,
+    pubsub: false,
+    kafka: false,
+    rabbitmq: false,
+    streamingResponse: true,
+    edgeRuntime: false,
+    containerImage: true,
+    customRuntime: true,
+    backgroundJobs: true,
+    websockets: true
+  },
   "cloudflare-workers": {
     http: true,
     cron: true,

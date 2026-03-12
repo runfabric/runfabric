@@ -29,8 +29,10 @@ test("init prompt provider options include grouped metadata", () => {
   const options = providerPromptOptions();
   assert.equal(options.length > 5, true);
   const aws = options.find((option) => option.value === "aws-lambda");
+  const kubernetes = options.find((option) => option.value === "kubernetes");
   const cloudflare = options.find((option) => option.value === "cloudflare-workers");
   assert.equal(aws?.group, "Cloud");
+  assert.equal(kubernetes?.group, "Container");
   assert.equal(cloudflare?.group, "Edge");
 });
 

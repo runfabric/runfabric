@@ -21,6 +21,13 @@ const providerExtensionSchema: Record<string, Record<string, ExtensionValueType>
     functionAppName: "string",
     routePrefix: "string"
   },
+  kubernetes: {
+    namespace: "string",
+    context: "string",
+    deploymentName: "string",
+    serviceName: "string",
+    ingressHost: "string"
+  },
   "cloudflare-workers": {
     scriptName: "string"
   },

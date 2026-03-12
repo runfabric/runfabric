@@ -7,6 +7,7 @@ All example configs use the same handler (`src/index.ts`) and HTTP trigger.
 - `runfabric.aws-lambda.yml`
 - `runfabric.gcp-functions.yml`
 - `runfabric.azure-functions.yml`
+- `runfabric.kubernetes.yml`
 - `runfabric.cloudflare-workers.yml`
 - `runfabric.vercel.yml`
 - `runfabric.netlify.yml`
@@ -33,6 +34,7 @@ Replace `<provider>` with one of:
 - `aws-lambda`
 - `gcp-functions`
 - `azure-functions`
+- `kubernetes`
 - `cloudflare-workers`
 - `vercel`
 - `netlify`

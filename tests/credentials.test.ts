@@ -12,6 +12,7 @@ import { createDigitalOceanFunctionsProvider } from "../packages/provider-digita
 import { createFlyMachinesProvider } from "../packages/provider-fly-machines/src/index.ts";
 import { createGcpFunctionsProvider } from "../packages/provider-gcp-functions/src/index.ts";
 import { createIbmOpenWhiskProvider } from "../packages/provider-ibm-openwhisk/src/index.ts";
+import { createKubernetesProvider } from "../packages/provider-kubernetes/src/index.ts";
 import { createNetlifyProvider } from "../packages/provider-netlify/src/index.ts";
 import { createVercelProvider } from "../packages/provider-vercel/src/index.ts";
 
@@ -39,6 +40,7 @@ test("all providers expose required credential schemas", async () => {
     createAwsLambdaProvider({ projectDir }),
     createGcpFunctionsProvider({ projectDir }),
     createAzureFunctionsProvider({ projectDir }),
+    createKubernetesProvider({ projectDir }),
     createCloudflareWorkersProvider({ projectDir }),
     createVercelProvider({ projectDir }),
     createNetlifyProvider({ projectDir }),

@@ -10,6 +10,12 @@ HTTP:
 runfabric init --dir ./runfabric-aws-lambda-http-state-local --template api --provider aws-lambda --state-backend local --lang ts --skip-install --no-interactive
 ```
 
+HTTP (Kubernetes):
+
+```bash
+runfabric init --dir ./runfabric-kubernetes-http-state-local --template api --provider kubernetes --state-backend local --lang ts --skip-install --no-interactive
+```
+
 Queue:
 
 ```bash
@@ -61,6 +67,7 @@ triggers:
 
 - `examples/hello-http/runfabric.quickstart.yml`
 - Provider-specific variants in `examples/hello-http/`
+- Kubernetes variant: `examples/hello-http/runfabric.kubernetes.yml`
 
 ## Handler Scenarios
 

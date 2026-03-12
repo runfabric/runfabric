@@ -6,6 +6,7 @@ export const publishOrder = [
   "@runfabric/provider-aws-lambda",
   "@runfabric/provider-gcp-functions",
   "@runfabric/provider-azure-functions",
+  "@runfabric/provider-kubernetes",
   "@runfabric/provider-cloudflare-workers",
   "@runfabric/provider-vercel",
   "@runfabric/provider-netlify",

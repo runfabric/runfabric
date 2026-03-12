@@ -67,6 +67,25 @@ Optional real mode:
   - `RUNFABRIC_AZURE_DEPLOY_CMD`
   - `RUNFABRIC_AZURE_DESTROY_CMD`
 
+## Kubernetes
+
+Required env:
+
+- `KUBECONFIG`
+
+Optional env:
+
+- `KUBE_CONTEXT`
+- `KUBE_NAMESPACE`
+
+Optional real mode:
+
+- `RUNFABRIC_KUBERNETES_REAL_DEPLOY=1`
+- built-in deploy/remove uses `kubectl` command contract
+- optional overrides:
+  - `RUNFABRIC_KUBERNETES_DEPLOY_CMD`
+  - `RUNFABRIC_KUBERNETES_DESTROY_CMD`
+
 ## Cloudflare Workers
 
 Required env:

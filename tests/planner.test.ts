@@ -448,6 +448,49 @@ test("createPlan supports ibm-openwhisk for http trigger", () => {
   assert.equal(plan.errors.length, 0);
 });
 
+test("createPlan supports kubernetes for http trigger", () => {
+  const config = [
+    "service: k8s-http",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - kubernetes",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /status",
+    ""
+  ].join("\n");
+
+  const project = parseProjectConfig(config);
+  const plan = createPlan(project);
+  assert.equal(plan.ok, true);
+  assert.equal(plan.errors.length, 0);
+});
+
+test("createPlan reports unsupported queue trigger on kubernetes", () => {
+  const config = [
+    "service: k8s-queue",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - kubernetes",
+    "",
+    "triggers:",
+    "  - type: queue",
+    "    queue: jobs",
+    ""
+  ].join("\n");
+
+  const project = parseProjectConfig(config);
+  const plan = createPlan(project);
+  assert.equal(plan.ok, false);
+  assert.ok(plan.errors.some((value) => value.includes("queue trigger is not supported")));
+});
+
 test("createPlan adds portability warning for partially supported triggers", () => {
   const config = [
     "service: portability-check",

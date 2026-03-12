@@ -5,6 +5,7 @@ const providerToCapabilitiesFile = {
   "aws-lambda": "packages/provider-aws-lambda/src/capabilities.ts",
   "gcp-functions": "packages/provider-gcp-functions/src/capabilities.ts",
   "azure-functions": "packages/provider-azure-functions/src/capabilities.ts",
+  kubernetes: "packages/provider-kubernetes/src/capabilities.ts",
   "cloudflare-workers": "packages/provider-cloudflare-workers/src/capabilities.ts",
   vercel: "packages/provider-vercel/src/capabilities.ts",
   netlify: "packages/provider-netlify/src/capabilities.ts",

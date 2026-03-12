@@ -13,6 +13,7 @@ Runtime status:
 - `runfabric.aws-lambda.yml`
 - `runfabric.gcp-functions.yml`
 - `runfabric.azure-functions.yml`
+- `runfabric.kubernetes.yml`
 - `runfabric.cloudflare-workers.yml`
 - `runfabric.vercel.yml`
 - `runfabric.netlify.yml`
@@ -30,6 +31,7 @@ Legend: `Y` supported, `N` not supported by planner capability matrix.
 | aws-lambda | Y | Y | Y | Y | Y | N | N | N |
 | gcp-functions | Y | Y | Y | Y | N | Y | N | N |
 | azure-functions | Y | Y | Y | Y | N | N | N | N |
+| kubernetes | Y | Y | N | N | N | N | N | N |
 | cloudflare-workers | Y | Y | N | N | N | N | N | N |
 | vercel | Y | Y | N | N | N | N | N | N |
 | netlify | Y | Y | N | N | N | N | N | N |

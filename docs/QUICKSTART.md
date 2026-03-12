@@ -80,6 +80,7 @@ Provider IDs (copy/paste):
 - `aws-lambda`
 - `gcp-functions`
 - `azure-functions`
+- `kubernetes`
 - `cloudflare-workers`
 - `vercel`
 - `netlify`
@@ -237,6 +238,7 @@ Built-in real deployers are used by default:
 
 - `aws-lambda`: AWS SDK deployer (requires `RUNFABRIC_AWS_LAMBDA_ROLE_ARN`)
 - `cloudflare-workers`: direct Cloudflare API deployer
+- `kubernetes`: `kubectl` command contract
 - other providers: built-in provider CLI command contracts
 
 One-time AWS role bootstrap for real deploy:

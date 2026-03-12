@@ -15,6 +15,7 @@ import { createDigitalOceanFunctionsProvider } from "../packages/provider-digita
 import { createFlyMachinesProvider } from "../packages/provider-fly-machines/src/index.ts";
 import { createGcpFunctionsProvider } from "../packages/provider-gcp-functions/src/index.ts";
 import { createIbmOpenWhiskProvider } from "../packages/provider-ibm-openwhisk/src/index.ts";
+import { createKubernetesProvider } from "../packages/provider-kubernetes/src/index.ts";
 import { createNetlifyProvider } from "../packages/provider-netlify/src/index.ts";
 import { createVercelProvider } from "../packages/provider-vercel/src/index.ts";
 
@@ -56,6 +57,14 @@ const providerCases: ProviderIntegrationCase[] = [
       AZURE_RESOURCE_GROUP: "rg"
     },
     createProvider: (projectDir) => createAzureFunctionsProvider({ projectDir })
+  },
+  {
+    provider: "kubernetes",
+    endpointIncludes: ".svc.cluster.local",
+    env: {
+      KUBECONFIG: "/tmp/kubeconfig"
+    },
+    createProvider: (projectDir) => createKubernetesProvider({ projectDir })
   },
   {
     provider: "cloudflare-workers",

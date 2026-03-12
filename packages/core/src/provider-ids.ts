@@ -2,6 +2,7 @@ export const PROVIDER_IDS = [
   "aws-lambda",
   "gcp-functions",
   "azure-functions",
+  "kubernetes",
   "cloudflare-workers",
   "vercel",
   "netlify",

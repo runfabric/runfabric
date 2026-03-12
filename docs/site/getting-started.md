@@ -39,6 +39,7 @@ Provider IDs (copy/paste):
 - `aws-lambda`
 - `gcp-functions`
 - `azure-functions`
+- `kubernetes`
 - `cloudflare-workers`
 - `vercel`
 - `netlify`

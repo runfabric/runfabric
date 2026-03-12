@@ -45,6 +45,7 @@ export function providerPromptOptions(): PromptOption[] {
     "aws-lambda": { group: "Cloud", description: "AWS Lambda", keywords: ["amazon", "aws"] },
     "gcp-functions": { group: "Cloud", description: "Google Cloud Functions", keywords: ["google", "gcp"] },
     "azure-functions": { group: "Cloud", description: "Azure Functions", keywords: ["microsoft", "azure"] },
+    kubernetes: { group: "Container", description: "Kubernetes", keywords: ["k8s", "kubectl", "cluster"] },
     "cloudflare-workers": { group: "Edge", description: "Cloudflare Workers", keywords: ["edge", "cdn"] },
     vercel: { group: "Edge", description: "Vercel Functions", keywords: ["nextjs", "edge"] },
     netlify: { group: "Edge", description: "Netlify Functions", keywords: ["jamstack"] },

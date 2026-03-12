@@ -65,9 +65,23 @@ export interface AwsLambdaExtensionConfig {
   [key: string]: unknown;
 }
 
+export interface KubernetesExtensionConfig {
+  namespace?: string;
+  context?: string;
+  deploymentName?: string;
+  serviceName?: string;
+  ingressHost?: string;
+  [key: string]: unknown;
+}
+
 export interface ProjectExtensions {
   "aws-lambda"?: AwsLambdaExtensionConfig;
-  [provider: string]: Record<string, unknown> | AwsLambdaExtensionConfig | undefined;
+  kubernetes?: KubernetesExtensionConfig;
+  [provider: string]:
+    | Record<string, unknown>
+    | AwsLambdaExtensionConfig
+    | KubernetesExtensionConfig
+    | undefined;
 }
 
 export type StateBackendType = "local" | "postgres" | "s3" | "gcs" | "azblob";

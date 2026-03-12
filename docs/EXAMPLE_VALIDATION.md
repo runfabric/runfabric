@@ -27,6 +27,7 @@ Use exact provider IDs:
 - `aws-lambda`
 - `gcp-functions`
 - `azure-functions`
+- `kubernetes`
 - `cloudflare-workers`
 - `vercel`
 - `netlify`

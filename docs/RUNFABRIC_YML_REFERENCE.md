@@ -169,6 +169,18 @@ extensions:
               - arn:aws:s3:::uploads/*
 ```
 
+## Kubernetes Extension Example
+
+```yaml
+extensions:
+  kubernetes:
+    namespace: runfabric
+    context: dev-cluster
+    deploymentName: hello-api
+    serviceName: hello-api
+    ingressHost: api.dev.example.com
+```
+
 ## State Backends
 
 ```yaml

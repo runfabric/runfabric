@@ -25,7 +25,7 @@ Built-in real deployers are used by default in real mode:
 
 - `aws-lambda`: AWS SDK path
 - `cloudflare-workers`: direct Cloudflare API path
-- `gcp-functions|azure-functions|vercel|netlify|alibaba-fc|digitalocean-functions|fly-machines|ibm-openwhisk`:
+- `gcp-functions|azure-functions|kubernetes|vercel|netlify|alibaba-fc|digitalocean-functions|fly-machines|ibm-openwhisk`:
   built-in provider CLI command contracts
 
 Optional override envs (deploy command should return JSON on stdout):

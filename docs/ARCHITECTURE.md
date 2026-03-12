@@ -52,6 +52,7 @@ Controls:
 - built-in real deployers are used by default in real mode:
   - `aws-lambda`: AWS SDK
   - `cloudflare-workers`: Cloudflare API
+  - `kubernetes`: `kubectl` command contract
   - other providers: built-in provider CLI command contracts
 - `RUNFABRIC_<PROVIDER>_DEPLOY_CMD` and `RUNFABRIC_<PROVIDER>_DESTROY_CMD` remain optional override hooks
 

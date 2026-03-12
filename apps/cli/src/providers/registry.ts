@@ -30,6 +30,10 @@ const PROVIDER_MODULE_SPECS: Record<string, ProviderModuleSpec> = {
     packageName: "@runfabric/provider-azure-functions",
     factoryExport: "createAzureFunctionsProvider"
   },
+  kubernetes: {
+    packageName: "@runfabric/provider-kubernetes",
+    factoryExport: "createKubernetesProvider"
+  },
   "cloudflare-workers": {
     packageName: "@runfabric/provider-cloudflare-workers",
     factoryExport: "createCloudflareWorkersProvider"
@@ -66,6 +70,7 @@ const OBSERVABILITY_ENV_PREFIX: Record<string, string> = {
   "aws-lambda": "AWS",
   "gcp-functions": "GCP",
   "azure-functions": "AZURE",
+  kubernetes: "KUBERNETES",
   "cloudflare-workers": "CLOUDFLARE",
   vercel: "VERCEL",
   netlify: "NETLIFY",
