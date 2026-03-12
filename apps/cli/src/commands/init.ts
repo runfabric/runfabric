@@ -427,6 +427,109 @@ function runCommandPrefix(packageManager: PackageManager): string {
   return "npm run";
 }
 
+function buildLocalCallReadmeSection(params: {
+  template: InitTemplateDefinition;
+  provider: string;
+  commandPrefix: string;
+}): string[] {
+  if (params.template.name === "api" || params.template.name === "worker") {
+    const path = params.template.name === "api" ? "/hello" : "/work";
+    const method = params.template.name === "api" ? "GET" : "POST";
+    return [
+      "## Local Call (Provider-mimic)",
+      "",
+      "Use built-in `runfabric call-local` to start a local HTTP server that forwards provider-shaped requests to your handler.",
+      "",
+      "```bash",
+      `${params.commandPrefix} call:local`,
+      `curl -i http://127.0.0.1:8787${path}`,
+      "# stop server: Ctrl+C or type 'exit' and press Enter",
+      `${params.commandPrefix} call:local -- --provider ${params.provider} --host 127.0.0.1 --port 8787 --serve --watch`,
+      `${params.commandPrefix} call:local -- --provider ${params.provider} --method ${method} --path ${path}`,
+      `${params.commandPrefix} call:local -- --provider ${params.provider} --event ./event.json`,
+      "```"
+    ];
+  }
+
+  if (params.template.name === "queue") {
+    return [
+      "## Local Call (Provider-mimic)",
+      "",
+      "Queue scaffolds are event-driven. Use `--event` payload simulation for local calls.",
+      "",
+      "Example `event.queue.json`:",
+      "",
+      "```json",
+      '{ "records": [ { "body": { "jobId": "demo-1" } } ] }',
+      "```",
+      "",
+      "```bash",
+      `${params.commandPrefix} call:local -- --provider ${params.provider} --event ./event.queue.json`,
+      "```"
+    ];
+  }
+
+  return [
+    "## Local Call (Provider-mimic)",
+    "",
+    "Cron scaffolds are event-driven. Use `--event` payload simulation for local calls.",
+    "",
+    "Example `event.cron.json`:",
+    "",
+    "```json",
+    '{ "source": "runfabric.dev", "detail-type": "scheduled", "time": "2026-01-01T00:00:00.000Z" }',
+    "```",
+    "",
+    "```bash",
+    `${params.commandPrefix} call:local -- --provider ${params.provider} --event ./event.cron.json`,
+    "```"
+  ];
+}
+
+function buildFrameworkWiringReadmeSection(params: {
+  template: InitTemplateDefinition;
+  packageManager: PackageManager;
+}): string[] {
+  if (params.template.name !== "api" && params.template.name !== "worker") {
+    return [];
+  }
+
+  const runtimeInstall = packageManagerAddCommand(params.packageManager, ["@runfabric/runtime-node"]);
+  const expressInstall = packageManagerAddCommand(params.packageManager, ["express"]);
+  const fastifyInstall = packageManagerAddCommand(params.packageManager, ["fastify"]);
+  const nestInstall = packageManagerAddCommand(params.packageManager, [
+    "@nestjs/core",
+    "@nestjs/common",
+    "@nestjs/platform-express",
+    "reflect-metadata",
+    "rxjs"
+  ]);
+
+  return [
+    "## Framework Wiring (Optional)",
+    "",
+    "If you convert this scaffold to Express/Fastify/Nest, use the runtime wrapper:",
+    "",
+    "```bash",
+    runtimeInstall,
+    `${expressInstall}   # optional`,
+    `${fastifyInstall}   # optional`,
+    `${nestInstall}   # optional`,
+    "```",
+    "",
+    "```ts",
+    'import type { UniversalHandler } from "@runfabric/core";',
+    'import { createHandler } from "@runfabric/runtime-node";',
+    "",
+    "export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);",
+    "```",
+    "",
+    "Nest TypeScript projects must enable `experimentalDecorators` and `emitDecoratorMetadata` in `tsconfig.json`.",
+    "After trigger or framework changes, update this README command/examples section so project docs stay aligned.",
+    ""
+  ];
+}
+
 function buildProjectReadmeContent(params: {
   service: string;
   provider: string;
@@ -438,6 +541,15 @@ function buildProjectReadmeContent(params: {
   skippedInstall: boolean;
 }): string {
   const commandPrefix = runCommandPrefix(params.packageManager);
+  const localCallSection = buildLocalCallReadmeSection({
+    template: params.template,
+    provider: params.provider,
+    commandPrefix
+  });
+  const frameworkWiringSection = buildFrameworkWiringReadmeSection({
+    template: params.template,
+    packageManager: params.packageManager
+  });
   const extension = params.language === "ts" ? "ts" : "js";
   const credentialLines =
     params.credentialEnvVars.length > 0
@@ -501,18 +613,7 @@ function buildProjectReadmeContent(params: {
     `${commandPrefix} call:local`,
     "```",
     "",
-    "## Local Call (Provider-mimic)",
-    "",
-    "Use built-in `runfabric call-local` to start a local HTTP server that forwards provider-shaped requests to your handler.",
-    "",
-    "```bash",
-    `${commandPrefix} call:local`,
-    `curl -i http://127.0.0.1:8787/hello`,
-    "# stop server: Ctrl+C or type 'exit' and press Enter",
-    `${commandPrefix} call:local -- --provider ${params.provider} --host 127.0.0.1 --port 8787 --serve --watch`,
-    `${commandPrefix} call:local -- --provider ${params.provider} --method GET --path /hello`,
-    `${commandPrefix} call:local -- --provider ${params.provider} --event ./event.json`,
-    "```",
+    ...localCallSection,
     "",
     "Supported options for `call:local`:",
     "",
@@ -532,6 +633,7 @@ function buildProjectReadmeContent(params: {
       ? "- TypeScript mode: if no built handler is found, `call-local` runs an initial `tsc -p tsconfig.json` automatically (requires `typescript` in dev dependencies)."
       : "- JavaScript mode: handler is loaded directly from configured entry.",
     "",
+    ...frameworkWiringSection,
     "## Credentials",
     "",
     `Set credentials for \`${params.provider}\` in your shell before running deploy:`,
@@ -554,6 +656,8 @@ function buildProjectReadmeContent(params: {
     "set +a",
     `${commandPrefix} deploy`,
     "```",
+    "",
+    "Credential quick matrix (providers + state backends): https://github.com/runfabric/runfabric/blob/main/docs/CREDENTIALS_MATRIX.md",
     "",
     "## State Backend",
     "",

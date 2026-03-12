@@ -5,6 +5,7 @@ import { registerCallLocalCommand } from "./commands/call-local";
 import { registerComposeCommand } from "./commands/compose";
 import { registerDeployCommand } from "./commands/deploy";
 import { registerDoctorCommand } from "./commands/doctor";
+import { registerDocsCommand } from "./commands/docs";
 import { registerInitCommand } from "./commands/init";
 import { registerInvokeCommand } from "./commands/invoke";
 import { registerLogsCommand } from "./commands/logs";
@@ -29,6 +30,7 @@ program
   .version(cliVersion);
 
 registerInitCommand(program);
+registerDocsCommand(program);
 registerDoctorCommand(program);
 registerPlanCommand(program);
 registerBuildCommand(program);

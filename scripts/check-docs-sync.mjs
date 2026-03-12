@@ -184,6 +184,16 @@ function validateCommandReference() {
       docCommand: "runfabric init"
     },
     {
+      file: "apps/cli/src/commands/docs.ts",
+      anchor: '.command("check")',
+      docCommand: "runfabric docs check"
+    },
+    {
+      file: "apps/cli/src/commands/docs.ts",
+      anchor: '.command("sync")',
+      docCommand: "runfabric docs sync"
+    },
+    {
       file: "apps/cli/src/commands/dev.ts",
       anchor: '.command("dev")',
       docCommand: "runfabric dev"

@@ -2,6 +2,8 @@
 
 This document defines how runfabric state storage works, how to wire backend credentials, and minimum access requirements.
 
+Quick credentials matrix (providers + state backends): `docs/CREDENTIALS_MATRIX.md`.
+
 ## Supported Backends
 
 - `local` (default)

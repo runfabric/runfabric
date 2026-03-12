@@ -2,6 +2,8 @@
 
 `runfabric` reads credentials from environment variables.
 
+Quick matrix (providers + state backends): `docs/CREDENTIALS_MATRIX.md`.
+
 ## How To Pass Credentials
 
 ### Option 1: Export in shell
@@ -140,6 +142,8 @@ export RUNFABRIC_AWS_LAMBDA_ROLE_ARN="$(aws iam get-role --role-name runfabric-l
 ```
 
 If AWS returns assume-role errors right after role creation, wait 20-60 seconds and retry deploy.
+
+For real AWS deployments, set `RUNFABRIC_AWS_REAL_DEPLOY=1` for both `deploy` and `remove`. If omitted during remove, runfabric now fails fast instead of silently skipping cloud deletion.
 
 Optional command overrides for custom AWS workflows:
 

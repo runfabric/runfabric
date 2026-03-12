@@ -61,6 +61,24 @@ Interactive `init` prompts for:
 - state backend (`local`, `postgres`, `s3`, `gcs`, `azblob`) with default `local`
 - language (`ts` or `js`)
 
+Template scope note:
+
+- `init` currently scaffolds only `api|worker|queue|cron`.
+- For `storage|eventbridge|pubsub` scenarios, scaffold from `worker` then edit `triggers` in `runfabric.yml`.
+
+Provider IDs (copy/paste):
+
+- `aws-lambda`
+- `gcp-functions`
+- `azure-functions`
+- `cloudflare-workers`
+- `vercel`
+- `netlify`
+- `alibaba-fc`
+- `digitalocean-functions`
+- `fly-machines`
+- `ibm-openwhisk`
+
 It also creates:
 
 - `package.json` with `@runfabric/core` and the selected provider adapter dependency
@@ -122,6 +140,12 @@ curl -i http://127.0.0.1:3000/hello
 # one-shot (non-server) invocation still available:
 pnpm run call:local -- --provider aws-lambda --method GET --path /hello
 pnpm run call:local -- --provider aws-lambda --event ./event.json
+
+# non-http local simulation via explicit event payload:
+pnpm run call:local -- --provider aws-lambda --event ./event.queue.json
+pnpm run call:local -- --provider aws-lambda --event ./event.storage.json
+pnpm run call:local -- --provider aws-lambda --event ./event.eventbridge.json
+pnpm run call:local -- --provider gcp-functions --event ./event.pubsub.json
 ```
 
 For TypeScript entries, `call-local` now runs an initial `tsc -p tsconfig.json` automatically when no built handler artifact is found (published CLI mode). Keep `typescript` installed in your project dev dependencies.
@@ -211,6 +235,8 @@ export RUNFABRIC_AWS_LAMBDA_ROLE_ARN="$(aws iam get-role --role-name runfabric-l
 
 If AWS returns assume-role errors right after role creation, wait 20-60 seconds and retry deploy.
 
+For real AWS deployments, keep `RUNFABRIC_AWS_REAL_DEPLOY=1` set when running `runfabric remove`; otherwise cloud deletion is blocked and remove fails fast with guidance.
+
 Optional override hooks:
 
 - `RUNFABRIC_<PROVIDER>_DEPLOY_CMD` (deploy command must return JSON)
@@ -218,6 +244,8 @@ Optional override hooks:
 
 Full credential and command matrix: `docs/CREDENTIALS.md`.
 State backend credentials/auth/IAM: `docs/STATE_BACKENDS.md`.
+Combined quick matrix: `docs/CREDENTIALS_MATRIX.md`.
+Example validation checklist: `docs/EXAMPLE_VALIDATION.md`.
 
 ## AWS Queue/Storage/IAM Example
 

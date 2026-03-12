@@ -75,6 +75,17 @@ import { createHandler } from "@runfabric/runtime-node";
 export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);
 ```
 
+Framework wiring checklist:
+
+- Install runtime adapter: `npm i @runfabric/runtime-node`
+- Express dependency: `npm i express`
+- Fastify dependency: `npm i fastify`
+- Nest dependencies: `npm i @nestjs/core @nestjs/common @nestjs/platform-express reflect-metadata rxjs`
+- TypeScript projects should include framework typings as needed (`@types/express`, etc.).
+- Nest TypeScript config must set `"experimentalDecorators": true`.
+- Nest TypeScript config must set `"emitDecoratorMetadata": true`.
+- Ensure `reflect-metadata` is imported before Nest bootstrap where required.
+
 ## Scenario 4: Queue + Storage
 
 ```yaml

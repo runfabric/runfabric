@@ -132,6 +132,7 @@ export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);
 ## Core Commands
 
 - `runfabric init`
+- `runfabric docs check|sync`
 - `runfabric doctor`
 - `runfabric plan`
 - `runfabric build`
@@ -176,6 +177,7 @@ Full command reference: `docs/site/command-reference.md`
 - `docs/QUICKSTART.md`
 - `docs/HANDLER_SCENARIOS.md`
 - `docs/CREDENTIALS.md`
+- `docs/CREDENTIALS_MATRIX.md`
 - `docs/PROVIDER-SETUP.md`
 - `docs/ARCHITECTURE.md`
 - `docs/REPO_DEVELOPMENT.md`
@@ -183,6 +185,7 @@ Full command reference: `docs/site/command-reference.md`
 - `docs/PLUGIN_API.md`
 - `docs/RUNFABRIC_YML_REFERENCE.md`
 - `docs/EXAMPLES_MATRIX.md`
+- `docs/EXAMPLE_VALIDATION.md`
 - `docs/COMPARISON.md`
 - `docs/site/README.md`
 
