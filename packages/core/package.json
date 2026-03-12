@@ -6,7 +6,8 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist/**/*.js",
-    "dist/**/*.d.ts"
+    "dist/**/*.d.ts",
+    "runfabric.schema.json"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -70,6 +70,12 @@ test("init supports api/worker/queue/cron templates", async () => {
     assert.equal(config.includes(`service: hello-${check.template}`), false);
     assert.ok(config.includes("state:"));
     assert.ok(config.includes("backend: local"));
+    assert.ok(config.includes("# yaml-language-server: $schema=./node_modules/@runfabric/core/runfabric.schema.json"));
+    const schemaPath = join(projectDir, "node_modules", "@runfabric", "core", "runfabric.schema.json");
+    assert.equal(existsSync(schemaPath), true);
+    const schema = JSON.parse(await readFile(schemaPath, "utf8"));
+    assert.equal(schema.properties?.service?.type, "string");
+    assert.equal(Array.isArray(schema.properties?.providers?.items?.enum), true);
 
     const packageJson = JSON.parse(await readFile(join(projectDir, "package.json"), "utf8"));
     assert.equal(packageJson.dependencies?.["@runfabric/core"], "^0.1.0");
@@ -118,6 +124,8 @@ test("init supports js language scaffold", async () => {
   const config = await readFile(join(projectDir, "runfabric.yml"), "utf8");
   assert.ok(config.includes("entry: src/index.js"));
   assert.ok(config.includes("backend: local"));
+  assert.ok(config.includes("# yaml-language-server: $schema=./node_modules/@runfabric/core/runfabric.schema.json"));
+  assert.equal(existsSync(join(projectDir, "node_modules", "@runfabric", "core", "runfabric.schema.json")), true);
   assert.equal(existsSync(join(projectDir, "src", "index.js")), true);
   assert.equal(existsSync(join(projectDir, "tsconfig.json")), false);
   assert.equal(existsSync(join(projectDir, "scripts", "call-local.mjs")), false);
@@ -159,6 +167,7 @@ test("init supports explicit state backend selection", async () => {
 
   const config = await readFile(join(projectDir, "runfabric.yml"), "utf8");
   assert.ok(config.includes("backend: s3"));
+  assert.ok(config.includes("# yaml-language-server: $schema=./node_modules/@runfabric/core/runfabric.schema.json"));
   assert.ok(config.includes("bucket: ${env:RUNFABRIC_STATE_S3_BUCKET}"));
   assert.ok(config.includes("region: ${env:AWS_REGION,us-east-1}"));
   assert.match(

@@ -2,7 +2,7 @@ import type { CommandRegistrar } from "../types/cli";
 import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { PROVIDER_IDS } from "@runfabric/core";
 import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { error, info, success, warn } from "../utils/logger";
@@ -24,6 +24,11 @@ import {
   buildTsConfigContent,
   packageManagerAddCommand
 } from "./init/render";
+import {
+  buildRunfabricSchemaContent,
+  RUNFABRIC_SCHEMA_RELATIVE_PATH,
+  RUNFABRIC_YAML_SCHEMA_DIRECTIVE
+} from "./init/yaml-schema";
 import {
   initLanguages,
   initStateBackends,
@@ -62,6 +67,7 @@ interface InitSelections {
 
 interface InitFilePaths {
   configPath: string;
+  schemaPath: string;
   handlerPath: string;
   packageJsonPath: string;
   gitIgnorePath: string;
@@ -212,6 +218,7 @@ async function resolveSelections(options: InitCommandOptions): Promise<InitSelec
 function initFilePaths(projectDir: string, extension: string): InitFilePaths {
   return {
     configPath: join(projectDir, "runfabric.yml"),
+    schemaPath: join(projectDir, RUNFABRIC_SCHEMA_RELATIVE_PATH),
     handlerPath: join(projectDir, "src", `index.${extension}`),
     packageJsonPath: join(projectDir, "package.json"),
     gitIgnorePath: join(projectDir, ".gitignore"),
@@ -238,14 +245,14 @@ function initConfigContent(
   },
   template: (typeof templateDefinitions)[InitTemplateName]
 ): string {
-  return buildConfigContent(
+  return `${RUNFABRIC_YAML_SCHEMA_DIRECTIVE}\n${buildConfigContent(
     template,
     params.service,
     params.provider,
     params.language,
     params.stateBackend,
     params.stateNamespaceId
-  );
+  )}`;
 }
 
 function initReadmeContent(
@@ -312,6 +319,13 @@ function logCreatedFiles(paths: InitFilePaths, language: InitLanguage): void {
   if (language === "ts") {
     info(`created ${paths.tsConfigPath}`);
   }
+}
+
+async function ensureEditorSchema(projectDir: string): Promise<string> {
+  const schemaPath = join(projectDir, RUNFABRIC_SCHEMA_RELATIVE_PATH);
+  await mkdir(dirname(schemaPath), { recursive: true });
+  await writeFile(schemaPath, buildRunfabricSchemaContent(), "utf8");
+  return schemaPath;
 }
 
 async function runCommand(command: string, args: string[], cwd: string): Promise<void> {
@@ -463,6 +477,7 @@ async function runInitCommand(options: InitCommandOptions): Promise<void> {
     provider: selections.provider,
     skipInstall: options.skipInstall
   });
+  info(`created ${await ensureEditorSchema(projectDir)}`);
   await runCallLocalIfRequested({
     callLocal: options.callLocal,
     packageManager: selections.packageManager,
