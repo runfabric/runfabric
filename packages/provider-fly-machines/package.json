@@ -1,6 +1,6 @@
 {
   "name": "@runfabric/provider-fly-machines",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-beta.2",
   "private": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,7 +21,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/runfabric/runfabric-framework-scaffold.git",
+    "url": "https://github.com/runfabric/runfabric.git",
     "directory": "packages/provider-fly-machines"
   },
   "keywords": [

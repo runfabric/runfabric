@@ -14,6 +14,11 @@ This is the root runbook for shipping `runfabric`.
 Create release notes file:
 
 - `release-notes/<version>.md`
+- or scaffold it:
+
+```bash
+pnpm run release:notes:create -- --version <version>
+```
 
 Sign file:
 
@@ -41,6 +46,8 @@ CI/GitHub Actions:
 - Use a granular npm access token with package publish permission for `@runfabric/*`.
 - Enable bypass 2FA for publish on that token.
 - Save it as repository secret `NPM_TOKEN`.
+
+`release:publish` now injects `NPM_TOKEN` into a temporary npm user config for the publish process, so a repository `.npmrc` token stanza is not required.
 
 Local publish with 2FA account:
 - Option A: use the same bypass token in `NPM_TOKEN`.

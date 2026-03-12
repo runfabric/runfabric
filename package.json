@@ -1,7 +1,7 @@
 {
   "name": "runfabric",
   "private": true,
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-beta.2",
   "packageManager": "pnpm@10.5.2",
   "workspaces": [
     "apps/*",
@@ -22,6 +22,7 @@
     "runfabric": "node --import ./tests/register-loader.mjs apps/cli/src/index.ts",
     "test": "tsx --tsconfig tsconfig.runtime.json --test tests/*.test.ts",
     "release:check": "npm run check:syntax && npm run check:capabilities && npm run check:docs-sync && npm run check:compatibility && npm test && pnpm -r --if-present run build && pnpm -r --if-present run typecheck",
+    "release:notes:create": "node scripts/release/create-release-notes.mjs",
     "release:notes:verify": "node scripts/release/verify-release-notes.mjs",
     "release:notes:sign": "node scripts/release/sign-release-notes.mjs",
     "release:publish": "node scripts/release/publish-packages.mjs",
@@ -37,7 +38,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Rabson/runfabric.git"
+    "url": "git+https://github.com/runfabric/runfabric.git"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",

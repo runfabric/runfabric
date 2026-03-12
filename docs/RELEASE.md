@@ -7,6 +7,11 @@ Maintainer guide for publishing `runfabric` packages.
 - Update package versions.
 - Update `CHANGELOG.md` with `## [<version>]` section.
 - Add `release-notes/<version>.md`.
+- Optional scaffold command:
+
+```bash
+pnpm run release:notes:create -- --version <version>
+```
 - Sign notes:
 
 ```bash
@@ -64,3 +69,5 @@ The automation uses this order:
 - `NPM_TOKEN`
 - `RELEASE_NOTES_SIGNING_KEY`
 - `GITHUB_TOKEN` (provided automatically in GitHub Actions, required for API-based release body verification)
+
+`release:publish` wires `NPM_TOKEN` into a temporary npm user config automatically, so a local `.npmrc` auth token entry is not required for that script.

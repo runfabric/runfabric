@@ -2,7 +2,7 @@
 
 **Alternate of Serverless Framework**
 
-`runfabric` is a multi-provider serverless framework package. It gives you one config and one CLI workflow across cloud providers.
+`runfabric` is a multi-provider serverless framework package. It gives you one config and one CLI workflow across cloud providers, so you can deploy on managed serverless services that auto-scale and keep idle-cost overhead low.
 
 Project scope (current):
 

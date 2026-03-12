@@ -1,6 +1,6 @@
 {
   "name": "@runfabric/provider-aws-lambda",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-beta.2",
   "private": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -23,7 +23,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/runfabric/runfabric-framework-scaffold.git",
+    "url": "https://github.com/runfabric/runfabric.git",
     "directory": "packages/provider-aws-lambda"
   },
   "keywords": [

@@ -1,6 +1,6 @@
 {
   "name": "@runfabric/cli",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-beta.2",
   "private": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,16 +25,16 @@
     "commander": "^14.0.1"
   },
   "peerDependencies": {
-    "@runfabric/provider-alibaba-fc": "^0.1.0-beta.0",
-    "@runfabric/provider-aws-lambda": "^0.1.0-beta.0",
-    "@runfabric/provider-azure-functions": "^0.1.0-beta.0",
-    "@runfabric/provider-cloudflare-workers": "^0.1.0-beta.0",
-    "@runfabric/provider-digitalocean-functions": "^0.1.0-beta.0",
-    "@runfabric/provider-fly-machines": "^0.1.0-beta.0",
-    "@runfabric/provider-gcp-functions": "^0.1.0-beta.0",
-    "@runfabric/provider-ibm-openwhisk": "^0.1.0-beta.0",
-    "@runfabric/provider-netlify": "^0.1.0-beta.0",
-    "@runfabric/provider-vercel": "^0.1.0-beta.0"
+    "@runfabric/provider-alibaba-fc": "^0.1.0-beta.2",
+    "@runfabric/provider-aws-lambda": "^0.1.0-beta.2",
+    "@runfabric/provider-azure-functions": "^0.1.0-beta.2",
+    "@runfabric/provider-cloudflare-workers": "^0.1.0-beta.2",
+    "@runfabric/provider-digitalocean-functions": "^0.1.0-beta.2",
+    "@runfabric/provider-fly-machines": "^0.1.0-beta.2",
+    "@runfabric/provider-gcp-functions": "^0.1.0-beta.2",
+    "@runfabric/provider-ibm-openwhisk": "^0.1.0-beta.2",
+    "@runfabric/provider-netlify": "^0.1.0-beta.2",
+    "@runfabric/provider-vercel": "^0.1.0-beta.2"
   },
   "peerDependenciesMeta": {
     "@runfabric/provider-alibaba-fc": {
@@ -84,7 +84,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/runfabric/runfabric-framework-scaffold.git",
+    "url": "https://github.com/runfabric/runfabric.git",
     "directory": "apps/cli"
   },
   "keywords": [
