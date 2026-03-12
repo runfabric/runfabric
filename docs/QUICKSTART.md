@@ -54,12 +54,21 @@ Create API template:
 pnpm run runfabric -- init --dir ./my-api
 ```
 
+Default service name is derived from the target directory (`my-api` here). Use `--service` to override.
+
 Interactive `init` prompts for:
 
 - template (`api`, `worker`, `queue`, `cron`)
 - provider
 - state backend (`local`, `postgres`, `s3`, `gcs`, `azblob`) with default `local`
 - language (`ts` or `js`)
+
+Interactive picker UX:
+
+- grouped options for templates/providers/state backends
+- type to filter options in place
+- keyboard controls: `Up/Down` to move, `Enter` to select, `Backspace` to edit filter, `Esc` to clear filter
+- template list is filtered by selected provider capabilities
 
 Template scope note:
 
@@ -83,6 +92,18 @@ It also creates:
 
 - `package.json` with `@runfabric/core` and the selected provider adapter dependency
 - `call:local` script that runs `runfabric call-local -c runfabric.yml --serve --watch`
+- `.env.example` with provider and selected state backend variables
+- project-scoped random state prefix for object backends (`s3`, `gcs`, `azblob`)
+
+Copy and load `.env.example` before deploy:
+
+```bash
+cd my-api
+cp .env.example .env
+set -a
+source .env
+set +a
+```
 
 Provider adapters are loaded dynamically. Install only providers used by the project
 (init installs the selected provider adapter unless `--skip-install` is used).

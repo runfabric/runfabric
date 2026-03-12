@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -93,6 +93,21 @@ test("package + deploy function + remove workflow", async () => {
   assert.ok(existsSync(receiptPath));
   const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
   assert.equal(receipt.provider, "cloudflare-workers");
+
+  const statePath = join(
+    projectDir,
+    ".runfabric",
+    "state",
+    "lifecycle-http",
+    "default",
+    "cloudflare-workers.state.json"
+  );
+  assert.ok(existsSync(statePath));
+  const stateRecord = JSON.parse(await readFile(statePath, "utf8"));
+  assert.equal(isAbsolute(stateRecord.details.artifact.entry), false);
+  assert.equal(isAbsolute(stateRecord.details.artifact.outputPath), false);
+  assert.equal(isAbsolute(stateRecord.details.deployPlan.artifactPath), false);
+  assert.equal(isAbsolute(stateRecord.details.deployPlan.artifactManifestPath), false);
 
   const removed = runCli(["remove", "-c", join(projectDir, "runfabric.yml"), "--json"], env);
   assert.equal(removed.status, 0, removed.stderr);

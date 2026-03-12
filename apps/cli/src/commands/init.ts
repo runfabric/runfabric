@@ -1,13 +1,22 @@
 import type { CommandRegistrar } from "../types/cli";
+import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { PROVIDER_IDS } from "@runfabric/core";
 import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { error, info, success, warn } from "../utils/logger";
 import { canPromptInteractively, promptSelection } from "./init/prompt";
 import {
+  languagePromptOptions,
+  providerPromptOptions,
+  stateBackendPromptOptions,
+  templatePromptOptions
+} from "./init/prompt-options";
+import { isTemplateSupportedByProvider, supportedTemplatesForProvider } from "./init/template-support";
+import {
   buildConfigContent,
+  buildEnvExampleContent,
   buildGitIgnoreContent,
   buildHandlerContent,
   buildPackageJsonContent,
@@ -22,6 +31,7 @@ import {
   isPackageManager,
   isStateBackend,
   isTemplateName,
+  normalizePackageName,
   templateDefinitions,
   type InitLanguage,
   type InitTemplateName,
@@ -55,6 +65,7 @@ interface InitFilePaths {
   handlerPath: string;
   packageJsonPath: string;
   gitIgnorePath: string;
+  envExamplePath: string;
   tsConfigPath: string;
   readmePath: string;
 }
@@ -80,23 +91,61 @@ function reportUnsupported(value: string, label: string, supported: string[]): n
   return null;
 }
 
-async function resolveTemplateName(options: InitCommandOptions, interactiveMode: boolean): Promise<InitTemplateName | null> {
+function reportUnsupportedTemplateForProvider(template: InitTemplateName, provider: string): null {
+  error(`template "${template}" is not supported by provider "${provider}"`);
+  const supported = supportedTemplatesForProvider(provider);
+  error(`supported templates for ${provider}: ${supported.join(", ")}`);
+  process.exitCode = 1;
+  return null;
+}
+
+function reportNoTemplatesForProvider(provider: string): null {
+  error(`no init templates are supported by provider "${provider}"`);
+  process.exitCode = 1;
+  return null;
+}
+
+function defaultTemplateForProvider(provider: string): InitTemplateName {
+  const supported = supportedTemplatesForProvider(provider);
+  if (supported.length === 0) {
+    return "api";
+  }
+  return supported.includes("api") ? "api" : supported[0];
+}
+
+function validateTemplateSupport(template: InitTemplateName, provider: string): InitTemplateName | null {
+  if (!isTemplateSupportedByProvider(template, provider)) {
+    return reportUnsupportedTemplateForProvider(template, provider);
+  }
+  return template;
+}
+
+async function resolveTemplateName(
+  options: InitCommandOptions,
+  interactiveMode: boolean,
+  provider: string
+): Promise<InitTemplateName | null> {
+  const supportedTemplates = supportedTemplatesForProvider(provider);
+  if (supportedTemplates.length === 0) {
+    return reportNoTemplatesForProvider(provider);
+  }
+  const defaultTemplate = defaultTemplateForProvider(provider);
   const value = options.template
     ? options.template
     : interactiveMode
-      ? await promptSelection("Select template", Object.keys(templateDefinitions), "api")
-      : "api";
+      ? await promptSelection("Select template", templatePromptOptions(supportedTemplates), defaultTemplate)
+      : defaultTemplate;
   if (!isTemplateName(value)) {
     return reportUnsupported(value, "template", ["api", "worker", "queue", "cron"]);
   }
-  return value;
+  return validateTemplateSupport(value, provider);
 }
 
 async function resolveProviderName(options: InitCommandOptions, interactiveMode: boolean): Promise<string | null> {
   const value = options.provider
     ? options.provider
     : interactiveMode
-      ? await promptSelection("Select provider", [...PROVIDER_IDS], "aws-lambda")
+      ? await promptSelection("Select provider", providerPromptOptions(), "aws-lambda")
       : "aws-lambda";
   if (!PROVIDER_IDS.includes(value as (typeof PROVIDER_IDS)[number])) {
     return reportUnsupported(value, "provider", [...PROVIDER_IDS]);
@@ -108,7 +157,7 @@ async function resolveLanguage(options: InitCommandOptions, interactiveMode: boo
   const value = options.lang
     ? options.lang
     : interactiveMode
-      ? await promptSelection("Select language", [...initLanguages], "ts")
+      ? await promptSelection("Select language", languagePromptOptions(), "ts")
       : "ts";
   if (!isLanguage(value)) {
     return reportUnsupported(value, "language", ["ts", "js"]);
@@ -120,7 +169,7 @@ async function resolveStateBackend(options: InitCommandOptions, interactiveMode:
   const value = options.stateBackend
     ? options.stateBackend
     : interactiveMode
-      ? await promptSelection("Select state backend", [...initStateBackends], "local")
+      ? await promptSelection("Select state backend", stateBackendPromptOptions(), "local")
       : "local";
   if (!isStateBackend(value)) {
     return reportUnsupported(value, "state backend", [...initStateBackends]);
@@ -137,12 +186,12 @@ function resolvePackageManager(value: string): PackageManager | null {
 
 async function resolveSelections(options: InitCommandOptions): Promise<InitSelections | null> {
   const interactiveMode = options.interactive !== false && canPromptInteractively();
-  const templateName = await resolveTemplateName(options, interactiveMode);
-  if (!templateName) {
-    return null;
-  }
   const provider = await resolveProviderName(options, interactiveMode);
   if (!provider) {
+    return null;
+  }
+  const templateName = await resolveTemplateName(options, interactiveMode, provider);
+  if (!templateName) {
     return null;
   }
   const language = await resolveLanguage(options, interactiveMode);
@@ -166,6 +215,7 @@ function initFilePaths(projectDir: string, extension: string): InitFilePaths {
     handlerPath: join(projectDir, "src", `index.${extension}`),
     packageJsonPath: join(projectDir, "package.json"),
     gitIgnorePath: join(projectDir, ".gitignore"),
+    envExamplePath: join(projectDir, ".env.example"),
     tsConfigPath: join(projectDir, "tsconfig.json"),
     readmePath: join(projectDir, "README.md")
   };
@@ -174,12 +224,58 @@ function initFilePaths(projectDir: string, extension: string): InitFilePaths {
 function resolveCredentialEnvVars(projectDir: string, provider: string): string[] {
   const adapter = createProviderRegistry(projectDir, [provider])[provider];
   const schema = adapter?.getCredentialSchema?.();
-  return schema?.fields.map((field) => field.env).filter((value) => value.trim().length > 0) || [];
+  const values = schema?.fields.map((field) => field.env).filter((value) => value.trim().length > 0) || [];
+  return [...new Set(values)];
+}
+
+function initConfigContent(
+  params: {
+    service: string;
+    provider: string;
+    language: InitLanguage;
+    stateBackend: StateBackend;
+    stateNamespaceId: string;
+  },
+  template: (typeof templateDefinitions)[InitTemplateName]
+): string {
+  return buildConfigContent(
+    template,
+    params.service,
+    params.provider,
+    params.language,
+    params.stateBackend,
+    params.stateNamespaceId
+  );
+}
+
+function initReadmeContent(
+  params: {
+    service: string;
+    provider: string;
+    language: InitLanguage;
+    stateBackend: StateBackend;
+    packageManager: PackageManager;
+    credentialEnvVars: string[];
+    skipInstall: boolean;
+  },
+  template: (typeof templateDefinitions)[InitTemplateName]
+): string {
+  return buildProjectReadmeContent({
+    service: params.service,
+    provider: params.provider,
+    language: params.language,
+    template,
+    stateBackend: params.stateBackend,
+    packageManager: params.packageManager,
+    credentialEnvVars: params.credentialEnvVars,
+    skippedInstall: params.skipInstall
+  });
 }
 
 async function writeProjectFiles(params: {
   projectDir: string;
   service: string;
+  stateNamespaceId: string;
   provider: string;
   language: InitLanguage;
   stateBackend: StateBackend;
@@ -193,24 +289,12 @@ async function writeProjectFiles(params: {
   const paths = initFilePaths(params.projectDir, extension);
 
   await mkdir(join(params.projectDir, "src"), { recursive: true });
-  await writeFile(paths.configPath, buildConfigContent(template, params.service, params.provider, params.language, params.stateBackend), "utf8");
+  await writeFile(paths.configPath, initConfigContent(params, template), "utf8");
   await writeFile(paths.handlerPath, buildHandlerContent(template, params.language), "utf8");
   await writeFile(paths.packageJsonPath, buildPackageJsonContent(params.service, params.language, params.provider), "utf8");
   await writeFile(paths.gitIgnorePath, buildGitIgnoreContent(), "utf8");
-  await writeFile(
-    paths.readmePath,
-    buildProjectReadmeContent({
-      service: params.service,
-      provider: params.provider,
-      language: params.language,
-      template,
-      stateBackend: params.stateBackend,
-      packageManager: params.packageManager,
-      credentialEnvVars: params.credentialEnvVars,
-      skippedInstall: params.skipInstall
-    }),
-    "utf8"
-  );
+  await writeFile(paths.envExamplePath, buildEnvExampleContent(params.credentialEnvVars, params.stateBackend), "utf8");
+  await writeFile(paths.readmePath, initReadmeContent(params, template), "utf8");
   if (params.language === "ts") {
     await writeFile(paths.tsConfigPath, buildTsConfigContent(), "utf8");
   }
@@ -223,6 +307,7 @@ function logCreatedFiles(paths: InitFilePaths, language: InitLanguage): void {
   info(`created ${paths.handlerPath}`);
   info(`created ${paths.packageJsonPath}`);
   info(`created ${paths.gitIgnorePath}`);
+  info(`created ${paths.envExamplePath}`);
   info(`created ${paths.readmePath}`);
   if (language === "ts") {
     info(`created ${paths.tsConfigPath}`);
@@ -334,6 +419,15 @@ async function runCallLocalIfRequested(params: {
   }
 }
 
+function defaultServiceName(projectDir: string, fallback: string): string {
+  const derived = normalizePackageName(basename(projectDir));
+  return derived === "runfabric-service" ? fallback : derived;
+}
+
+function createStateNamespaceId(service: string): string {
+  return `${normalizePackageName(service)}-${randomBytes(4).toString("hex")}`;
+}
+
 async function runInitCommand(options: InitCommandOptions): Promise<void> {
   const selections = await resolveSelections(options);
   if (!selections) {
@@ -341,12 +435,17 @@ async function runInitCommand(options: InitCommandOptions): Promise<void> {
   }
 
   const template = templateDefinitions[selections.templateName];
-  const service = options.service && options.service.trim().length > 0 ? options.service.trim() : template.defaultService;
   const projectDir = resolve(options.dir);
+  const service =
+    options.service && options.service.trim().length > 0
+      ? options.service.trim()
+      : defaultServiceName(projectDir, template.defaultService);
+  const stateNamespaceId = createStateNamespaceId(service);
   const credentialEnvVars = resolveCredentialEnvVars(projectDir, selections.provider);
   const paths = await writeProjectFiles({
     projectDir,
     service,
+    stateNamespaceId,
     provider: selections.provider,
     language: selections.language,
     stateBackend: selections.stateBackend,

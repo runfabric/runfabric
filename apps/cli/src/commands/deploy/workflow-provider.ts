@@ -1,5 +1,5 @@
 import { rm } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import {
   readDeploymentReceipt,
   type DeployFailure,
@@ -48,6 +48,69 @@ function logProgress(enabled: boolean | undefined, message: string): void {
   if (enabled) {
     info(message);
   }
+}
+
+function toPosixPath(pathValue: string): string {
+  return pathValue.split("\\").join("/");
+}
+
+function toStatePath(pathValue: string, projectDir: string): string {
+  const normalized = pathValue.trim();
+  if (normalized.length === 0) {
+    return pathValue;
+  }
+  if (!isAbsolute(normalized)) {
+    return toPosixPath(normalized);
+  }
+  const relativePath = toPosixPath(relative(projectDir, normalized));
+  return relativePath.length > 0 ? relativePath : ".";
+}
+
+function sanitizeArtifactForState(
+  artifact: ProviderDeployInput["artifact"],
+  projectDir: string
+): ProviderDeployInput["artifact"] {
+  return {
+    ...artifact,
+    entry: toStatePath(artifact.entry, projectDir),
+    outputPath: toStatePath(artifact.outputPath, projectDir)
+  };
+}
+
+function sanitizeDeployPlanForState(
+  deployPlan: Awaited<ReturnType<ProviderAdapter["planDeploy"]>>,
+  projectDir: string,
+  artifact: ProviderDeployInput["artifact"]
+): Awaited<ReturnType<ProviderAdapter["planDeploy"]>> {
+  const replacements = new Map<string, string>([[artifact.outputPath, toStatePath(artifact.outputPath, projectDir)]]);
+  const artifactPath = deployPlan.artifactPath ? toStatePath(deployPlan.artifactPath, projectDir) : undefined;
+  const artifactManifestPath = deployPlan.artifactManifestPath
+    ? toStatePath(deployPlan.artifactManifestPath, projectDir)
+    : undefined;
+  if (deployPlan.artifactPath) {
+    replacements.set(deployPlan.artifactPath, artifactPath || deployPlan.artifactPath);
+  }
+  if (deployPlan.artifactManifestPath) {
+    replacements.set(deployPlan.artifactManifestPath, artifactManifestPath || deployPlan.artifactManifestPath);
+  }
+
+  const steps = deployPlan.steps.map((step) => {
+    let sanitizedStep = step;
+    for (const [fromValue, toValue] of replacements.entries()) {
+      if (fromValue === toValue || fromValue.length === 0) {
+        continue;
+      }
+      sanitizedStep = sanitizedStep.split(fromValue).join(toValue);
+    }
+    return sanitizedStep;
+  });
+
+  return {
+    ...deployPlan,
+    steps,
+    artifactPath,
+    artifactManifestPath
+  };
 }
 
 function startLockHeartbeat(
@@ -127,12 +190,13 @@ function createStateAddress(project: ProjectConfig, stage: string, provider: str
 
 function createInProgressStateDetails(
   artifact: ProviderDeployInput["artifact"],
+  projectDir: string,
   functionName: string | undefined,
   startedAt: string,
   retryFromInProgress: boolean
 ): Record<string, unknown> {
   return {
-    artifact,
+    artifact: sanitizeArtifactForState(artifact, projectDir),
     functionName,
     retryFromInProgress,
     startedAt
@@ -170,6 +234,7 @@ async function openProviderStateSession(
       updatedAt: deploymentStartedAt,
       details: createInProgressStateDetails(
         params.artifact,
+        input.projectDir,
         input.functionName,
         deploymentStartedAt,
         existing?.lifecycle === "in_progress"
@@ -246,9 +311,12 @@ function createAppliedStateDetails(
     secretReferences?: Record<string, string>;
   }
 ): Record<string, unknown> {
+  const artifact = sanitizeArtifactForState(params.artifact, params.input.projectDir);
+  const sanitizedDeployPlan = sanitizeDeployPlanForState(deployPlan, params.input.projectDir, params.artifact);
+
   return {
-    artifact: params.artifact,
-    deployPlan,
+    artifact,
+    deployPlan: sanitizedDeployPlan,
     functionName: params.input.functionName,
     startedAt: deploymentStartedAt,
     completedAt: new Date().toISOString(),
@@ -293,7 +361,7 @@ function createFailedStateDetails(
   message: string
 ): Record<string, unknown> {
   return {
-    artifact: params.artifact,
+    artifact: sanitizeArtifactForState(params.artifact, params.input.projectDir),
     functionName: params.input.functionName,
     startedAt: deploymentStartedAt,
     failedAt: new Date().toISOString(),

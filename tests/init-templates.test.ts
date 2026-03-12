@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -24,6 +24,16 @@ function runCli(args: string[]): { status: number | null; stdout: string; stderr
     stdout: result.stdout || "",
     stderr: result.stderr || ""
   };
+}
+
+function normalizeServiceName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]/g, "-")
+    .replace(/--+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "") || "runfabric-service";
 }
 
 test("init supports api/worker/queue/cron templates", async () => {
@@ -51,10 +61,13 @@ test("init supports api/worker/queue/cron templates", async () => {
     assert.equal(result.status, 0, result.stderr);
 
     const config = await readFile(join(projectDir, "runfabric.yml"), "utf8");
+    const expectedService = normalizeServiceName(basename(projectDir));
     assert.ok(
       config.includes(check.expected),
       `template ${check.template} should include "${check.expected}" in runfabric.yml`
     );
+    assert.ok(config.includes(`service: ${expectedService}`));
+    assert.equal(config.includes(`service: hello-${check.template}`), false);
     assert.ok(config.includes("state:"));
     assert.ok(config.includes("backend: local"));
 
@@ -69,11 +82,19 @@ test("init supports api/worker/queue/cron templates", async () => {
     assert.equal(existsSync(join(projectDir, "tsconfig.json")), true);
     assert.equal(existsSync(join(projectDir, "src", "index.ts")), true);
     assert.equal(existsSync(join(projectDir, "scripts", "call-local.mjs")), false);
+    assert.equal(existsSync(join(projectDir, ".env.example")), true);
+
+    const envExample = await readFile(join(projectDir, ".env.example"), "utf8");
+    assert.ok(envExample.includes("AWS_ACCESS_KEY_ID=your-value"));
+    assert.ok(envExample.includes("AWS_SECRET_ACCESS_KEY=your-value"));
+    assert.ok(envExample.includes("AWS_REGION=your-value"));
+    assert.ok(envExample.includes("local backend selected"));
 
     const readme = await readFile(join(projectDir, "README.md"), "utf8");
     assert.ok(readme.includes("## Commands"));
     assert.ok(readme.includes("## Local Call (Provider-mimic)"));
     assert.ok(readme.includes("## Credentials"));
+    assert.ok(readme.includes("cp .env.example .env"));
     assert.ok(readme.includes("export AWS_ACCESS_KEY_ID"));
   }
 });
@@ -100,6 +121,7 @@ test("init supports js language scaffold", async () => {
   assert.equal(existsSync(join(projectDir, "src", "index.js")), true);
   assert.equal(existsSync(join(projectDir, "tsconfig.json")), false);
   assert.equal(existsSync(join(projectDir, "scripts", "call-local.mjs")), false);
+  assert.equal(existsSync(join(projectDir, ".env.example")), true);
 
   const packageJson = JSON.parse(await readFile(join(projectDir, "package.json"), "utf8"));
   assert.equal(packageJson.dependencies?.["@runfabric/core"], "^0.1.0");
@@ -111,6 +133,10 @@ test("init supports js language scaffold", async () => {
   assert.ok(readme.includes("src/index.js"));
   assert.ok(readme.includes("call:local"));
   assert.ok(readme.includes("export CLOUDFLARE_API_TOKEN"));
+
+  const envExample = await readFile(join(projectDir, ".env.example"), "utf8");
+  assert.ok(envExample.includes("CLOUDFLARE_API_TOKEN=your-value"));
+  assert.ok(envExample.includes("CLOUDFLARE_ACCOUNT_ID=your-value"));
 });
 
 test("init supports explicit state backend selection", async () => {
@@ -135,8 +161,68 @@ test("init supports explicit state backend selection", async () => {
   assert.ok(config.includes("backend: s3"));
   assert.ok(config.includes("bucket: ${env:RUNFABRIC_STATE_S3_BUCKET}"));
   assert.ok(config.includes("region: ${env:AWS_REGION,us-east-1}"));
+  assert.match(
+    config,
+    new RegExp(`keyPrefix: runfabric/${normalizeServiceName(basename(projectDir))}-[a-f0-9]{8}/state`)
+  );
 
   const readme = await readFile(join(projectDir, "README.md"), "utf8");
   assert.ok(readme.includes("Configured state backend in `runfabric.yml`: `s3`"));
   assert.ok(readme.includes("RUNFABRIC_STATE_S3_BUCKET"));
+
+  const envExample = await readFile(join(projectDir, ".env.example"), "utf8");
+  assert.ok(envExample.includes("RUNFABRIC_STATE_S3_BUCKET=your-state-bucket"));
+  assert.ok(envExample.includes("AWS_REGION=us-east-1"));
+});
+
+test("init namespaces object-storage state backends with random hash", async () => {
+  const backends = ["s3", "gcs", "azblob"] as const;
+
+  for (const backend of backends) {
+    const projectDir = await mkdtemp(join(tmpdir(), `runfabric-init-${backend}-`));
+    const result = runCli([
+      "init",
+      "--dir",
+      projectDir,
+      "--template",
+      "api",
+      "--provider",
+      "aws-lambda",
+      "--lang",
+      "ts",
+      "--state-backend",
+      backend,
+      "--skip-install"
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+
+    const config = await readFile(join(projectDir, "runfabric.yml"), "utf8");
+    const fieldName = backend === "s3" ? "keyPrefix" : "prefix";
+    assert.match(
+      config,
+      new RegExp(`${fieldName}: runfabric/${normalizeServiceName(basename(projectDir))}-[a-f0-9]{8}/state`)
+    );
+  }
+});
+
+test("init rejects template not supported by selected provider", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-init-template-provider-mismatch-"));
+  const result = runCli([
+    "init",
+    "--dir",
+    projectDir,
+    "--template",
+    "queue",
+    "--provider",
+    "cloudflare-workers",
+    "--lang",
+    "ts",
+    "--skip-install"
+  ]);
+  assert.notEqual(result.status, 0);
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  assert.match(
+    combinedOutput,
+    /template "queue" is not supported by provider "cloudflare-workers"/
+  );
 });

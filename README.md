@@ -80,10 +80,27 @@ Create a new project:
 runfabric init --dir ./my-api
 ```
 
+Interactive `init` uses grouped pickers with type-to-filter search (`Up/Down`, `Enter`, `Esc` to clear filter).
+Template choices are provider-aware (unsupported templates are hidden or rejected in non-interactive mode).
+
+Default service name is derived from the target directory (`my-api` here). Override with `--service` when needed.
+
 Explicit state backend selection:
 
 ```bash
 runfabric init --dir ./my-api --provider aws-lambda --state-backend s3
+```
+
+`init` now generates `.env.example` with provider + selected state backend variables.
+For object-storage backends (`s3`, `gcs`, `azblob`), `init` also generates a project-scoped random state prefix to avoid collisions.
+Copy and load it before deploy:
+
+```bash
+cd my-api
+cp .env.example .env
+set -a
+source .env
+set +a
 ```
 
 Migrate an existing Serverless Framework config (best-effort bootstrap):

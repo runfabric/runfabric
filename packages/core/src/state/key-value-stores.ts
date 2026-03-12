@@ -2,7 +2,6 @@ import { createRequire } from "node:module";
 import type { StateBackendType } from "../project";
 import type { ResolvedStateConfig } from "../state";
 const requireModule = createRequire(__filename);
-
 export interface KeyValueStore {
   get(key: string): Promise<string | null>;
   put(key: string, value: string): Promise<void>;
@@ -13,7 +12,6 @@ export interface KeyValueStore {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
 function requireOptionalModule<T>(moduleName: string, installHint: string): T {
   try {
     return requireModule(moduleName) as T;
@@ -24,17 +22,17 @@ function requireOptionalModule<T>(moduleName: string, installHint: string): T {
     throw error;
   }
 }
-
 function isErrnoWithCode(error: unknown, code: string): boolean {
   return isRecord(error) && typeof error.code === "string" && error.code === code;
 }
-
 function isHttpStatusError(error: unknown, statusCode: number): boolean {
   return (
     isRecord(error) &&
-    typeof error.statusCode === "number" &&
-    Number.isFinite(error.statusCode) &&
-    error.statusCode === statusCode
+    ((typeof error.statusCode === "number" && Number.isFinite(error.statusCode) && error.statusCode === statusCode) ||
+      (isRecord(error.$metadata) &&
+        typeof error.$metadata.httpStatusCode === "number" &&
+        Number.isFinite(error.$metadata.httpStatusCode) &&
+        error.$metadata.httpStatusCode === statusCode))
   );
 }
 function quotePostgresIdentifier(value: string, field: string): string {
@@ -45,11 +43,9 @@ function quotePostgresIdentifier(value: string, field: string): string {
   }
   return `"${value}"`;
 }
-
 function formatBackendCredentialError(backend: StateBackendType, detail: string): Error {
   return new Error(`state backend "${backend}" credential/config error: ${detail}`);
 }
-
 async function streamToUtf8(input: unknown): Promise<string> {
   if (!input) {
     return "";
@@ -60,7 +56,6 @@ async function streamToUtf8(input: unknown): Promise<string> {
   if (Buffer.isBuffer(input)) {
     return input.toString("utf8");
   }
-
   if (isRecord(input) && typeof input.transformToString === "function") {
     const value = await input.transformToString("utf8");
     return typeof value === "string" ? value : String(value ?? "");
@@ -78,7 +73,6 @@ async function streamToUtf8(input: unknown): Promise<string> {
     }
     return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8");
   }
-
   const maybeAsyncIterable = input as { [Symbol.asyncIterator]?: () => AsyncIterator<unknown> };
   if (
     typeof input === "object" &&
@@ -271,7 +265,12 @@ export class S3KeyValueStore implements KeyValueStore {
       if (
         isErrnoWithCode(error, "NoSuchKey") ||
         isErrnoWithCode(error, "NotFound") ||
-        isHttpStatusError(error, 404)
+        isHttpStatusError(error, 404) ||
+        (isRecord(error) &&
+          ((typeof error.name === "string" && (error.name === "NoSuchKey" || error.name === "NotFound")) ||
+            (typeof error.message === "string" &&
+              (error.message.toLowerCase().includes("specified key does not exist") ||
+                error.message.toLowerCase().includes("no such key")))))
       ) {
         return null;
       }
