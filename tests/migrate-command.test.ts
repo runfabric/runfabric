@@ -82,3 +82,44 @@ test("migrate converts serverless.yml to runfabric.yml", async () => {
   const planned = runCli(["plan", "-c", outputPath, "--json"]);
   assert.equal(planned.status, 0, planned.stderr);
 });
+
+test("migrate normalizes provider runtime families", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-migrate-runtime-"));
+  await mkdir(projectDir, { recursive: true });
+  const inputPath = join(projectDir, "serverless.yml");
+  const outputPath = join(projectDir, "runfabric.yml");
+
+  await writeFile(
+    inputPath,
+    [
+      "service: migrate-runtime",
+      "",
+      "provider:",
+      "  name: aws",
+      "  runtime: python3.12",
+      "",
+      "functions:",
+      "  save:",
+      "    handler: src/handler.save",
+      "    events:",
+      "      - http:",
+      "          method: get",
+      "          path: /save",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const migrated = runCli([
+    "migrate",
+    "--input",
+    inputPath,
+    "--output",
+    outputPath,
+    "--json",
+    "--force"
+  ]);
+  assert.equal(migrated.status, 0, migrated.stderr);
+  const migratedJson = JSON.parse(migrated.stdout);
+  assert.equal(migratedJson.runtime, "python");
+});

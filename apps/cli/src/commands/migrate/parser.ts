@@ -1,3 +1,5 @@
+import { normalizeRuntimeFamily, runtimeFamilyList, type RuntimeFamily } from "@runfabric/core";
+
 export type TriggerDraft =
   | { type: "http"; method: string; path: string }
   | { type: "cron"; schedule: string }
@@ -12,7 +14,7 @@ interface FunctionDraft {
 
 export interface MigrationDraft {
   service: string;
-  runtime: string;
+  runtime: RuntimeFamily;
   entry: string;
   provider: string;
   functions: FunctionDraft[];
@@ -70,18 +72,18 @@ function parseProviderName(value: string): string {
   return PROVIDER_NAME_ALIASES[value.trim().toLowerCase()] || "aws-lambda";
 }
 
-function normalizeRuntime(runtime: string | undefined, warnings: string[]): string {
+function normalizeRuntime(runtime: string | undefined, warnings: string[]): RuntimeFamily {
   if (!runtime) {
     return "nodejs";
   }
 
-  const normalized = runtime.trim().toLowerCase();
-  if (normalized.startsWith("node")) {
-    return "nodejs";
+  const normalized = normalizeRuntimeFamily(runtime);
+  if (normalized) {
+    return normalized;
   }
 
   warnings.push(
-    `runtime ${runtime} is not currently production-ready in runfabric; migrated runtime set to nodejs`
+    `runtime ${runtime} is not supported by runfabric (${runtimeFamilyList()}); migrated runtime set to nodejs`
   );
   return "nodejs";
 }

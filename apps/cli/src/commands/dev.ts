@@ -430,6 +430,9 @@ async function runEventPreset(projectDir: string, options: DevCommandOptions, pr
 async function runDevCommand(options: DevCommandOptions): Promise<void> {
   const projectDir = await resolveProjectDir(process.cwd(), options.config);
   const context = await loadPlanningContext(projectDir, options.config, options.stage);
+  if (context.project.runtime !== "nodejs") {
+    throw new Error(`dev currently supports runtime nodejs only. project runtime is ${context.project.runtime}`);
+  }
   const preset = parsePreset(options.preset, context.project);
   if (preset === "http") {
     await runHttpPreset(projectDir, options);

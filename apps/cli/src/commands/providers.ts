@@ -22,8 +22,9 @@ export const registerProvidersCommand: CommandRegistrar = (program) => {
           continue;
         }
         const capabilities = provider.getCapabilities();
+        const runtimes = capabilities.supportedRuntimes.join(",");
         info(
-          `${provider.name} | http=${capabilities.http} cron=${capabilities.cron} queue=${capabilities.queue} edge=${capabilities.edgeRuntime}`
+          `${provider.name} | http=${capabilities.http} cron=${capabilities.cron} queue=${capabilities.queue} edge=${capabilities.edgeRuntime} runtimes=${runtimes}`
         );
       }
     });

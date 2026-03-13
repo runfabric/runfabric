@@ -1,4 +1,5 @@
 import { getProviderPackageName } from "../../providers/registry";
+import type { RuntimeFamily } from "@runfabric/core";
 import type {
   InitLanguage,
   InitTemplateDefinition,
@@ -43,6 +44,7 @@ export function buildConfigContent(
   template: InitTemplateDefinition,
   service: string,
   provider: string,
+  runtime: RuntimeFamily,
   language: InitLanguage,
   stateBackend: StateBackend,
   stateNamespaceId: string
@@ -50,7 +52,7 @@ export function buildConfigContent(
   const extension = language === "ts" ? "ts" : "js";
   return [
     `service: ${service}`,
-    "runtime: nodejs",
+    `runtime: ${runtime}`,
     `entry: src/index.${extension}`,
     "",
     "providers:",

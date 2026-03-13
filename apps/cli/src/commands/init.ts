@@ -1,15 +1,21 @@
 import type { CommandRegistrar } from "../types/cli";
 import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { spawn } from "node:child_process";
 import { basename, dirname, join, resolve } from "node:path";
-import { PROVIDER_IDS } from "@runfabric/core";
-import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
-import { error, info, success, warn } from "../utils/logger";
+import {
+  normalizeRuntimeFamily,
+  PROVIDER_IDS,
+  runtimeFamilyList,
+  type RuntimeFamily
+} from "@runfabric/core";
+import { createProviderRegistry } from "../providers/registry";
+import { error, info, success } from "../utils/logger";
 import { canPromptInteractively, promptSelection } from "./init/prompt";
+import { installDependenciesIfNeeded, runCallLocalIfRequested } from "./init/dependencies";
 import {
   languagePromptOptions,
   providerPromptOptions,
+  runtimePromptOptions,
   stateBackendPromptOptions,
   templatePromptOptions
 } from "./init/prompt-options";
@@ -26,8 +32,7 @@ import {
   buildHandlerContent,
   buildPackageJsonContent,
   buildProjectReadmeContent,
-  buildTsConfigContent,
-  packageManagerAddCommand
+  buildTsConfigContent
 } from "./init/render";
 import {
   buildRunfabricSchemaContent,
@@ -35,10 +40,13 @@ import {
   RUNFABRIC_YAML_SCHEMA_DIRECTIVE
 } from "./init/yaml-schema";
 import {
+  detectPackageManager,
+  parsePackageManager
+} from "./init/package-manager";
+import {
   initLanguages,
   initStateBackends,
   isLanguage,
-  isPackageManager,
   isStateBackend,
   isTemplateName,
   normalizePackageName,
@@ -53,6 +61,7 @@ interface InitCommandOptions {
   dir: string;
   template?: string;
   provider?: string;
+  runtime?: string;
   stateBackend?: string;
   lang?: string;
   pm?: string;
@@ -65,6 +74,7 @@ interface InitCommandOptions {
 interface InitSelections {
   templateName: InitTemplateName;
   provider: string;
+  runtime: RuntimeFamily;
   language: InitLanguage;
   stateBackend: StateBackend;
   packageManager: PackageManager;
@@ -81,19 +91,6 @@ interface InitFilePaths {
   readmePath: string;
 }
 const SUPPORTED_TEMPLATE_NAMES = supportedTemplatesForAnyProvider();
-function detectPackageManager(): PackageManager {
-  const userAgent = process.env.npm_config_user_agent?.toLowerCase() || "";
-  if (userAgent.includes("pnpm")) {
-    return "pnpm";
-  }
-  if (userAgent.includes("yarn")) {
-    return "yarn";
-  }
-  if (userAgent.includes("bun")) {
-    return "bun";
-  }
-  return "npm";
-}
 function reportUnsupported(value: string, label: string, supported: string[]): null {
   error(`unknown ${label}: ${value}`);
   error(`supported ${label}s: ${supported.join(", ")}`);
@@ -208,6 +205,19 @@ async function resolveLanguage(options: InitCommandOptions, interactiveMode: boo
   return value;
 }
 
+async function resolveRuntime(options: InitCommandOptions, interactiveMode: boolean): Promise<RuntimeFamily | null> {
+  const value = options.runtime
+    ? options.runtime
+    : interactiveMode
+      ? await promptSelection("Select runtime", runtimePromptOptions(), "nodejs")
+      : "nodejs";
+  const normalized = normalizeRuntimeFamily(value);
+  if (!normalized) {
+    return reportUnsupported(value, "runtime", runtimeFamilyList().split(" | "));
+  }
+  return normalized;
+}
+
 async function resolveStateBackend(options: InitCommandOptions, interactiveMode: boolean): Promise<StateBackend | null> {
   const value = options.stateBackend
     ? options.stateBackend
@@ -221,10 +231,11 @@ async function resolveStateBackend(options: InitCommandOptions, interactiveMode:
 }
 
 function resolvePackageManager(value: string): PackageManager | null {
-  if (!isPackageManager(value)) {
+  const parsed = parsePackageManager(value);
+  if (!parsed) {
     return reportUnsupported(value, "package manager", ["npm", "pnpm", "yarn", "bun"]);
   }
-  return value;
+  return parsed;
 }
 
 async function resolveProviderAndTemplate(
@@ -289,15 +300,19 @@ async function resolveSelections(options: InitCommandOptions): Promise<InitSelec
   if (!language) {
     return null;
   }
+  const runtime = await resolveRuntime(options, interactiveMode);
+  if (!runtime) {
+    return null;
+  }
   const stateBackend = await resolveStateBackend(options, interactiveMode);
   if (!stateBackend) {
     return null;
   }
-  const packageManager = resolvePackageManager(options.pm || detectPackageManager());
+  const packageManager = resolvePackageManager(options.pm || detectPackageManager(process.env.npm_config_user_agent));
   if (!packageManager) {
     return null;
   }
-  return { templateName, provider, language, stateBackend, packageManager };
+  return { templateName, provider, runtime, language, stateBackend, packageManager };
 }
 
 function initFilePaths(projectDir: string, extension: string): InitFilePaths {
@@ -324,6 +339,7 @@ function initConfigContent(
   params: {
     service: string;
     provider: string;
+    runtime: RuntimeFamily;
     language: InitLanguage;
     stateBackend: StateBackend;
     stateNamespaceId: string;
@@ -334,6 +350,7 @@ function initConfigContent(
     template,
     params.service,
     params.provider,
+    params.runtime,
     params.language,
     params.stateBackend,
     params.stateNamespaceId
@@ -369,6 +386,7 @@ async function writeProjectFiles(params: {
   service: string;
   stateNamespaceId: string;
   provider: string;
+  runtime: RuntimeFamily;
   language: InitLanguage;
   stateBackend: StateBackend;
   packageManager: PackageManager;
@@ -413,111 +431,6 @@ async function ensureEditorSchema(projectDir: string): Promise<string> {
   return schemaPath;
 }
 
-async function runCommand(command: string, args: string[], cwd: string): Promise<void> {
-  await new Promise<void>((resolvePromise, rejectPromise) => {
-    const child = spawn(command, args, { cwd, stdio: "inherit", env: process.env });
-    child.on("error", (commandError) => rejectPromise(commandError));
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolvePromise();
-        return;
-      }
-      rejectPromise(new Error(`${command} ${args.join(" ")} failed with exit code ${code ?? 1}`));
-    });
-  });
-}
-
-async function installCoreDependency(
-  projectDir: string,
-  packageManager: PackageManager,
-  language: InitLanguage,
-  provider: string
-): Promise<void> {
-  const providerPackage = getProviderPackageName(provider);
-  const corePackages = providerPackage ? ["@runfabric/core", providerPackage] : ["@runfabric/core"];
-
-  if (packageManager === "pnpm") {
-    await runCommand("pnpm", ["add", ...corePackages], projectDir);
-    if (language === "ts") {
-      await runCommand("pnpm", ["add", "-D", "typescript", "@types/node"], projectDir);
-    }
-    return;
-  }
-  if (packageManager === "yarn") {
-    await runCommand("yarn", ["add", ...corePackages], projectDir);
-    if (language === "ts") {
-      await runCommand("yarn", ["add", "-D", "typescript", "@types/node"], projectDir);
-    }
-    return;
-  }
-  if (packageManager === "bun") {
-    await runCommand("bun", ["add", ...corePackages], projectDir);
-    if (language === "ts") {
-      await runCommand("bun", ["add", "-d", "typescript", "@types/node"], projectDir);
-    }
-    return;
-  }
-
-  await runCommand("npm", ["install", ...corePackages], projectDir);
-  if (language === "ts") {
-    await runCommand("npm", ["install", "-D", "typescript", "@types/node"], projectDir);
-  }
-}
-
-function packageManagerRunArgs(packageManager: PackageManager, scriptName: string): [string, string[]] {
-  if (packageManager === "yarn") {
-    return ["yarn", [scriptName]];
-  }
-  return [packageManager, ["run", scriptName]];
-}
-
-async function installDependenciesIfNeeded(params: {
-  projectDir: string;
-  packageManager: PackageManager;
-  language: InitLanguage;
-  provider: string;
-  skipInstall?: boolean;
-}): Promise<void> {
-  if (params.skipInstall) {
-    info("dependency installation skipped");
-    return;
-  }
-
-  info(`installing dependencies using ${params.packageManager}...`);
-  try {
-    await installCoreDependency(params.projectDir, params.packageManager, params.language, params.provider);
-    const providerPackage = getProviderPackageName(params.provider);
-    success(providerPackage ? `installed @runfabric/core and ${providerPackage}` : "installed @runfabric/core");
-  } catch (installError) {
-    const message = installError instanceof Error ? installError.message : String(installError);
-    warn(`dependency installation failed: ${message}`);
-    const providerPackage = getProviderPackageName(params.provider);
-    const manualPackages = providerPackage ? ["@runfabric/core", providerPackage] : ["@runfabric/core"];
-    warn(`run manually: (cd ${params.projectDir} && ${packageManagerAddCommand(params.packageManager, manualPackages)})`);
-  }
-}
-
-async function runCallLocalIfRequested(params: {
-  callLocal?: boolean;
-  packageManager: PackageManager;
-  projectDir: string;
-}): Promise<void> {
-  if (!params.callLocal) {
-    return;
-  }
-
-  info("running local provider-mimic call...");
-  const [command, args] = packageManagerRunArgs(params.packageManager, "call:local");
-  try {
-    await runCommand(command, args, params.projectDir);
-    success("local call completed");
-  } catch (callError) {
-    const message = callError instanceof Error ? callError.message : String(callError);
-    warn(`local call failed: ${message}`);
-    warn(`run manually later: (cd ${params.projectDir} && ${command} ${args.join(" ")})`);
-  }
-}
-
 function defaultServiceName(projectDir: string, fallback: string): string {
   const derived = normalizePackageName(basename(projectDir));
   return derived === "runfabric-service" ? fallback : derived;
@@ -546,6 +459,7 @@ async function runInitCommand(options: InitCommandOptions): Promise<void> {
     service,
     stateNamespaceId,
     provider: selections.provider,
+    runtime: selections.runtime,
     language: selections.language,
     stateBackend: selections.stateBackend,
     packageManager: selections.packageManager,
@@ -569,7 +483,9 @@ async function runInitCommand(options: InitCommandOptions): Promise<void> {
     projectDir
   });
 
-  success(`project scaffold initialized (${template.name}, ${selections.provider}, ${selections.language})`);
+  success(
+    `project scaffold initialized (${template.name}, ${selections.provider}, runtime=${selections.runtime}, ${selections.language})`
+  );
 }
 
 export const registerInitCommand: CommandRegistrar = (program) => {
@@ -579,6 +495,7 @@ export const registerInitCommand: CommandRegistrar = (program) => {
     .option("--dir <path>", "Directory to initialize", ".")
     .option("--template <name>", `Template: ${SUPPORTED_TEMPLATE_NAMES.join(", ")}`)
     .option("--provider <name>", "Primary provider for generated config")
+    .option("--runtime <name>", `Runtime family: ${runtimeFamilyList()}`)
     .option("--state-backend <name>", "State backend: local, postgres, s3, gcs, azblob")
     .option("--lang <name>", "Source language: ts or js")
     .option("--pm <name>", "Package manager: npm, pnpm, yarn, bun")
