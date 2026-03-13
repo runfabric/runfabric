@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import type {
   LocalFileStateBackendOptions,
   ProviderStateRecord,
@@ -30,6 +30,8 @@ import {
   toIsoNow
 } from "./record-utils";
 
+const STATE_LIST_READ_CONCURRENCY = 8;
+
 class FileStateBackend implements StateBackend {
   readonly backend: StateBackendType;
   readonly config: ResolvedStateConfig;
@@ -41,9 +43,22 @@ class FileStateBackend implements StateBackend {
     this.rootDir = options.rootDir;
   }
 
+  private resolveWithinRoot(...segments: string[]): string {
+    const candidate = resolve(this.rootDir, ...segments);
+    const relativePath = relative(this.rootDir, candidate);
+    if (relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath))) {
+      return candidate;
+    }
+    throw new Error(`state address escapes configured backend root: ${segments.join("/")}`);
+  }
+
   private toStateFilePath(address: StateAddress): string {
     const safeAddress = resolveAddress(address);
-    return resolve(this.rootDir, safeAddress.service, safeAddress.stage, `${safeAddress.provider}${STATE_FILE_SUFFIX}`);
+    return this.resolveWithinRoot(
+      safeAddress.service,
+      safeAddress.stage,
+      `${safeAddress.provider}${STATE_FILE_SUFFIX}`
+    );
   }
 
   private toLockFilePath(address: StateAddress): string {
@@ -97,8 +112,12 @@ class FileStateBackend implements StateBackend {
   }
 
   private extractAddressFromPath(path: string): StateAddress | null {
-    const relative = path.slice(this.rootDir.length).replace(/^\/+/, "");
-    const segments = relative.split("/");
+    const relativePath = relative(this.rootDir, path);
+    if (!relativePath || relativePath.startsWith("..") || isAbsolute(relativePath)) {
+      return null;
+    }
+
+    const segments = relativePath.split(/[\\/]+/);
     if (segments.length < 3) {
       return null;
     }
@@ -154,11 +173,20 @@ class FileStateBackend implements StateBackend {
     return false;
   }
 
+  private parseStateRecordContent(content: string, source: string): ProviderStateRecord {
+    try {
+      return migrateStateRecord(JSON.parse(content) as unknown);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`failed to parse state record at ${source}: ${message}`);
+    }
+  }
+
   async read(address: StateAddress): Promise<ProviderStateRecord | null> {
     const filePath = this.toStateFilePath(address);
     try {
       const content = await readFile(filePath, "utf8");
-      return migrateStateRecord(JSON.parse(content) as unknown);
+      return this.parseStateRecordContent(content, filePath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return null;
@@ -185,27 +213,50 @@ class FileStateBackend implements StateBackend {
     await rm(this.toStateFilePath(address), { force: true });
   }
 
-  async list(filter?: StateListFilter): Promise<StateRecordEntry[]> {
-    const files = await this.listStateFiles();
-    const entries: StateRecordEntry[] = [];
-
-    for (const filePath of files) {
-      const address = this.extractAddressFromPath(filePath);
-      if (!address) {
-        continue;
-      }
-
-      try {
-        const record = migrateStateRecord(JSON.parse(await readFile(filePath, "utf8")) as unknown);
-        if (this.matchesFilter(address, record, filter)) {
-          entries.push({ address, record });
-        }
-      } catch {
-        continue;
-      }
+  private async readListEntry(filePath: string, filter?: StateListFilter): Promise<StateRecordEntry | null> {
+    const address = this.extractAddressFromPath(filePath);
+    if (!address) {
+      return null;
     }
 
-    return entries;
+    let content: string;
+    try {
+      content = await readFile(filePath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return null;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`failed to read state record at ${filePath}: ${message}`);
+    }
+
+    const record = this.parseStateRecordContent(content, filePath);
+    return this.matchesFilter(address, record, filter) ? { address, record } : null;
+  }
+
+  async list(filter?: StateListFilter): Promise<StateRecordEntry[]> {
+    const files = await this.listStateFiles();
+    if (files.length === 0) {
+      return [];
+    }
+
+    const entries: Array<StateRecordEntry | null> = new Array(files.length);
+    const workerCount = Math.min(STATE_LIST_READ_CONCURRENCY, files.length);
+    let nextIndex = 0;
+
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        if (currentIndex >= files.length) {
+          return;
+        }
+        entries[currentIndex] = await this.readListEntry(files[currentIndex], filter);
+      }
+    });
+
+    await Promise.all(workers);
+    return entries.filter((entry): entry is StateRecordEntry => entry !== null);
   }
 
   async lock(address: StateAddress, owner = `pid:${process.pid}`): Promise<StateLockInfo> {

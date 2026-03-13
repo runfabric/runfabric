@@ -29,6 +29,8 @@ import {
   toIsoNow
 } from "./record-utils";
 
+const STATE_LIST_READ_CONCURRENCY = 8;
+
 function normalizeObjectPrefix(value: string): string {
   return value
     .split("/")
@@ -50,7 +52,7 @@ function normalizeBackendKeyPrefix(config: ResolvedStateConfig): string {
   }
 }
 
-class KeyValueStateBackend implements StateBackend {
+export class KeyValueStateBackend implements StateBackend {
   readonly backend: StateBackendType;
   readonly config: ResolvedStateConfig;
   private readonly keyPrefix: string;
@@ -203,12 +205,22 @@ class KeyValueStateBackend implements StateBackend {
     };
   }
 
+  private parseStateRecordContent(content: string, key: string): ProviderStateRecord {
+    try {
+      return migrateStateRecord(JSON.parse(content) as unknown);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`failed to parse state record at ${key}: ${message}`);
+    }
+  }
+
   async read(address: StateAddress): Promise<ProviderStateRecord | null> {
-    const content = await this.store.get(this.toStateKey(address));
+    const stateKey = this.toStateKey(address);
+    const content = await this.store.get(stateKey);
     if (!content) {
       return null;
     }
-    return migrateStateRecord(JSON.parse(content) as unknown);
+    return this.parseStateRecordContent(content, stateKey);
   }
 
   async write(address: StateAddress, state: ProviderStateRecord, lock?: StateLockInfo): Promise<void> {
@@ -226,34 +238,52 @@ class KeyValueStateBackend implements StateBackend {
     await this.store.delete(this.toStateKey(address));
   }
 
-  async list(filter?: StateListFilter): Promise<StateRecordEntry[]> {
-    const keys = await this.store.list(this.objectPrefix());
-    const entries: StateRecordEntry[] = [];
-
-    for (const key of keys) {
-      if (!key.endsWith(STATE_FILE_SUFFIX) || key.endsWith(LOCK_FILE_SUFFIX)) {
-        continue;
-      }
-      const address = this.extractAddressFromKey(key);
-      if (!address) {
-        continue;
-      }
-
-      try {
-        const content = await this.store.get(key);
-        if (!content) {
-          continue;
-        }
-        const record = migrateStateRecord(JSON.parse(content) as unknown);
-        if (this.matchesFilter(address, record, filter)) {
-          entries.push({ address, record });
-        }
-      } catch {
-        continue;
-      }
+  private async readListEntryByKey(key: string, filter?: StateListFilter): Promise<StateRecordEntry | null> {
+    const address = this.extractAddressFromKey(key);
+    if (!address) {
+      return null;
     }
 
-    return entries;
+    let content: string | null;
+    try {
+      content = await this.store.get(key);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`failed to read state record at ${key}: ${message}`);
+    }
+
+    if (!content) {
+      return null;
+    }
+
+    const record = this.parseStateRecordContent(content, key);
+    return this.matchesFilter(address, record, filter) ? { address, record } : null;
+  }
+
+  async list(filter?: StateListFilter): Promise<StateRecordEntry[]> {
+    const keys = await this.store.list(this.objectPrefix());
+    const stateKeys = keys.filter((key) => key.endsWith(STATE_FILE_SUFFIX) && !key.endsWith(LOCK_FILE_SUFFIX));
+    if (stateKeys.length === 0) {
+      return [];
+    }
+
+    const entries: Array<StateRecordEntry | null> = new Array(stateKeys.length);
+    const workerCount = Math.min(STATE_LIST_READ_CONCURRENCY, stateKeys.length);
+    let nextIndex = 0;
+
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        if (currentIndex >= stateKeys.length) {
+          return;
+        }
+        entries[currentIndex] = await this.readListEntryByKey(stateKeys[currentIndex], filter);
+      }
+    });
+
+    await Promise.all(workers);
+    return entries.filter((entry): entry is StateRecordEntry => entry !== null);
   }
 
   async lock(address: StateAddress, owner = `pid:${process.pid}`): Promise<StateLockInfo> {

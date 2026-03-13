@@ -1,10 +1,11 @@
 import type { Command } from "commander";
 import type { CommandRegistrar } from "../types/cli";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   createStateBackend,
   migrateStateBetweenBackends,
+  readDeploymentReceipt as readProviderDeploymentReceipt,
   readStateBackupFile,
   stateAddressToKey,
   type StateBackend,
@@ -125,21 +126,6 @@ async function loadStateContext(options: {
     stage,
     backend
   };
-}
-
-async function readDeploymentReceipt(
-  projectDir: string,
-  provider: string
-): Promise<Record<string, unknown> | null> {
-  const receiptPath = resolve(projectDir, ".runfabric", "deploy", provider, "deployment.json");
-  try {
-    return JSON.parse(await readFile(receiptPath, "utf8")) as Record<string, unknown>;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
 }
 
 async function handlePullAction(options: PullOptions): Promise<void> {
@@ -347,7 +333,7 @@ async function gatherReceiptDrift(
 
   for (const entry of records) {
     const key = stateAddressToKey(entry.address);
-    const receipt = await readDeploymentReceipt(context.projectDir, entry.address.provider);
+    const receipt = await readProviderDeploymentReceipt(context.projectDir, entry.address.provider);
     if (!receipt) {
       missingReceipt.push(key);
       continue;
@@ -388,7 +374,7 @@ async function gatherMissingStateDrift(
         continue;
       }
 
-      const receipt = await readDeploymentReceipt(context.projectDir, provider);
+      const receipt = await readProviderDeploymentReceipt(context.projectDir, provider);
       if (!receipt) {
         continue;
       }
