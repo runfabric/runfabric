@@ -13,7 +13,12 @@ import {
   stateBackendPromptOptions,
   templatePromptOptions
 } from "./init/prompt-options";
-import { isTemplateSupportedByProvider, supportedTemplatesForProvider } from "./init/template-support";
+import {
+  isTemplateSupportedByProvider,
+  supportedTemplatesForAnyProvider,
+  supportedProvidersForTemplate,
+  supportedTemplatesForProvider
+} from "./init/template-support";
 import {
   buildConfigContent,
   buildEnvExampleContent,
@@ -75,7 +80,7 @@ interface InitFilePaths {
   tsConfigPath: string;
   readmePath: string;
 }
-
+const SUPPORTED_TEMPLATE_NAMES = supportedTemplatesForAnyProvider();
 function detectPackageManager(): PackageManager {
   const userAgent = process.env.npm_config_user_agent?.toLowerCase() || "";
   if (userAgent.includes("pnpm")) {
@@ -89,14 +94,12 @@ function detectPackageManager(): PackageManager {
   }
   return "npm";
 }
-
 function reportUnsupported(value: string, label: string, supported: string[]): null {
   error(`unknown ${label}: ${value}`);
   error(`supported ${label}s: ${supported.join(", ")}`);
   process.exitCode = 1;
   return null;
 }
-
 function reportUnsupportedTemplateForProvider(template: InitTemplateName, provider: string): null {
   error(`template "${template}" is not supported by provider "${provider}"`);
   const supported = supportedTemplatesForProvider(provider);
@@ -104,13 +107,16 @@ function reportUnsupportedTemplateForProvider(template: InitTemplateName, provid
   process.exitCode = 1;
   return null;
 }
-
 function reportNoTemplatesForProvider(provider: string): null {
   error(`no init templates are supported by provider "${provider}"`);
   process.exitCode = 1;
   return null;
 }
-
+function reportNoProvidersForTemplate(template: InitTemplateName): null {
+  error(`no providers support template "${template}"`);
+  process.exitCode = 1;
+  return null;
+}
 function defaultTemplateForProvider(provider: string): InitTemplateName {
   const supported = supportedTemplatesForProvider(provider);
   if (supported.length === 0) {
@@ -118,14 +124,12 @@ function defaultTemplateForProvider(provider: string): InitTemplateName {
   }
   return supported.includes("api") ? "api" : supported[0];
 }
-
 function validateTemplateSupport(template: InitTemplateName, provider: string): InitTemplateName | null {
   if (!isTemplateSupportedByProvider(template, provider)) {
     return reportUnsupportedTemplateForProvider(template, provider);
   }
   return template;
 }
-
 async function resolveTemplateName(
   options: InitCommandOptions,
   interactiveMode: boolean,
@@ -142,23 +146,56 @@ async function resolveTemplateName(
       ? await promptSelection("Select template", templatePromptOptions(supportedTemplates), defaultTemplate)
       : defaultTemplate;
   if (!isTemplateName(value)) {
-    return reportUnsupported(value, "template", ["api", "worker", "queue", "cron"]);
+    return reportUnsupported(value, "template", [...SUPPORTED_TEMPLATE_NAMES]);
   }
   return validateTemplateSupport(value, provider);
 }
-
-async function resolveProviderName(options: InitCommandOptions, interactiveMode: boolean): Promise<string | null> {
-  const value = options.provider
-    ? options.provider
+async function resolveTemplateNameWithoutProvider(
+  options: InitCommandOptions,
+  interactiveMode: boolean
+): Promise<InitTemplateName | null> {
+  const defaultTemplate = SUPPORTED_TEMPLATE_NAMES.includes("api") ? "api" : SUPPORTED_TEMPLATE_NAMES[0];
+  const value = options.template
+    ? options.template
     : interactiveMode
-      ? await promptSelection("Select provider", providerPromptOptions(), "aws-lambda")
-      : "aws-lambda";
-  if (!PROVIDER_IDS.includes(value as (typeof PROVIDER_IDS)[number])) {
-    return reportUnsupported(value, "provider", [...PROVIDER_IDS]);
+      ? await promptSelection("Select template", templatePromptOptions(SUPPORTED_TEMPLATE_NAMES), defaultTemplate)
+      : defaultTemplate;
+  if (!isTemplateName(value)) {
+    return reportUnsupported(value, "template", [...SUPPORTED_TEMPLATE_NAMES]);
   }
   return value;
 }
-
+async function resolveProviderName(
+  options: InitCommandOptions,
+  interactiveMode: boolean,
+  allowedProviders: readonly (typeof PROVIDER_IDS)[number][] = PROVIDER_IDS,
+  defaultProvider = "aws-lambda"
+): Promise<string | null> {
+  const candidates = [...allowedProviders];
+  if (candidates.length === 0) {
+    error("no providers available for selected init options");
+    process.exitCode = 1;
+    return null;
+  }
+  const defaultSelection = candidates.includes(defaultProvider as (typeof PROVIDER_IDS)[number])
+    ? defaultProvider
+    : candidates[0];
+  const value = options.provider
+    ? options.provider
+    : interactiveMode
+      ? await promptSelection("Select provider", providerPromptOptions(candidates), defaultSelection)
+      : defaultSelection;
+  if (!PROVIDER_IDS.includes(value as (typeof PROVIDER_IDS)[number])) {
+    return reportUnsupported(value, "provider", [...PROVIDER_IDS]);
+  }
+  if (!candidates.includes(value as (typeof PROVIDER_IDS)[number])) {
+    error(`provider "${value}" is not supported by selected template`);
+    error(`supported providers: ${candidates.join(", ")}`);
+    process.exitCode = 1;
+    return null;
+  }
+  return value;
+}
 async function resolveLanguage(options: InitCommandOptions, interactiveMode: boolean): Promise<InitLanguage | null> {
   const value = options.lang
     ? options.lang
@@ -190,8 +227,45 @@ function resolvePackageManager(value: string): PackageManager | null {
   return value;
 }
 
-async function resolveSelections(options: InitCommandOptions): Promise<InitSelections | null> {
-  const interactiveMode = options.interactive !== false && canPromptInteractively();
+async function resolveProviderAndTemplate(
+  options: InitCommandOptions,
+  interactiveMode: boolean
+): Promise<{ provider: string; templateName: InitTemplateName } | null> {
+  if (options.provider) {
+    const provider = await resolveProviderName(options, interactiveMode);
+    if (!provider) {
+      return null;
+    }
+    const templateName = await resolveTemplateName(options, interactiveMode, provider);
+    if (!templateName) {
+      return null;
+    }
+    return { provider, templateName };
+  }
+
+  if (options.template || interactiveMode) {
+    const templateName = await resolveTemplateNameWithoutProvider(options, interactiveMode);
+    if (!templateName) {
+      return null;
+    }
+    const supportedProviders = supportedProvidersForTemplate(templateName);
+    if (supportedProviders.length === 0) {
+      return reportNoProvidersForTemplate(templateName);
+    }
+    const defaultProvider = supportedProviders.includes("aws-lambda")
+      ? "aws-lambda"
+      : supportedProviders[0];
+    const provider = await resolveProviderName(options, interactiveMode, supportedProviders, defaultProvider);
+    if (!provider) {
+      return null;
+    }
+    const validatedTemplate = validateTemplateSupport(templateName, provider);
+    if (!validatedTemplate) {
+      return null;
+    }
+    return { provider, templateName: validatedTemplate };
+  }
+
   const provider = await resolveProviderName(options, interactiveMode);
   if (!provider) {
     return null;
@@ -200,6 +274,17 @@ async function resolveSelections(options: InitCommandOptions): Promise<InitSelec
   if (!templateName) {
     return null;
   }
+  return { provider, templateName };
+}
+
+async function resolveSelections(options: InitCommandOptions): Promise<InitSelections | null> {
+  const interactiveMode = options.interactive !== false && canPromptInteractively();
+  const providerTemplate = await resolveProviderAndTemplate(options, interactiveMode);
+  if (!providerTemplate) {
+    return null;
+  }
+  const { provider, templateName } = providerTemplate;
+
   const language = await resolveLanguage(options, interactiveMode);
   if (!language) {
     return null;
@@ -492,7 +577,7 @@ export const registerInitCommand: CommandRegistrar = (program) => {
     .command("init")
     .description("Initialize a runfabric project scaffold")
     .option("--dir <path>", "Directory to initialize", ".")
-    .option("--template <name>", "Template: api, worker, queue, cron")
+    .option("--template <name>", `Template: ${SUPPORTED_TEMPLATE_NAMES.join(", ")}`)
     .option("--provider <name>", "Primary provider for generated config")
     .option("--state-backend <name>", "State backend: local, postgres, s3, gcs, azblob")
     .option("--lang <name>", "Source language: ts or js")

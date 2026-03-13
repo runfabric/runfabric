@@ -231,43 +231,92 @@ function buildLocalCallReadmeSection(params: {
       "```"
     ];
   }
-  return params.template.name === "queue"
-    ? buildQueueLocalCallReadmeSection(params.commandPrefix, params.provider)
-    : buildCronLocalCallReadmeSection(params.commandPrefix, params.provider);
+  return buildEventDrivenLocalCallReadmeSection(
+    params.commandPrefix,
+    params.provider,
+    params.template.name
+  );
 }
 
-function buildQueueLocalCallReadmeSection(commandPrefix: string, provider: string): string[] {
+const EVENT_TEMPLATE_EXAMPLES: Record<
+  Exclude<InitTemplateDefinition["name"], "api" | "worker">,
+  {
+    fileName: string;
+    payload: string;
+    description: string;
+  }
+> = {
+  queue: {
+    fileName: "event.queue.json",
+    payload: '{ "records": [ { "body": { "jobId": "demo-1" } } ] }',
+    description: "Queue scaffolds are event-driven."
+  },
+  cron: {
+    fileName: "event.cron.json",
+    payload: '{ "source": "runfabric.dev", "detail-type": "scheduled", "time": "2026-01-01T00:00:00.000Z" }',
+    description: "Cron scaffolds are event-driven."
+  },
+  storage: {
+    fileName: "event.storage.json",
+    payload:
+      '{ "records": [ { "eventName": "s3:ObjectCreated:Put", "s3": { "bucket": { "name": "uploads" }, "object": { "key": "demo.txt" } } } ] }',
+    description: "Storage scaffolds are event-driven."
+  },
+  eventbridge: {
+    fileName: "event.eventbridge.json",
+    payload:
+      '{ "source": "com.example.orders", "detail-type": "order.created", "detail": { "orderId": "demo-1" } }',
+    description: "EventBridge scaffolds are event-driven."
+  },
+  pubsub: {
+    fileName: "event.pubsub.json",
+    payload:
+      '{ "message": { "messageId": "demo-1", "data": "eyJvcmRlcklkIjoiZGVtby0xIn0=", "attributes": { "source": "runfabric" } } }',
+    description: "Pub/Sub scaffolds are event-driven."
+  },
+  kafka: {
+    fileName: "event.kafka.json",
+    payload:
+      '{ "records": [ { "topic": "events", "partition": 0, "offset": 1, "value": { "eventId": "demo-1" } } ] }',
+    description: "Kafka scaffolds are event-driven."
+  },
+  rabbitmq: {
+    fileName: "event.rabbitmq.json",
+    payload:
+      '{ "records": [ { "routingKey": "jobs.created", "body": { "jobId": "demo-1" } } ] }',
+    description: "RabbitMQ scaffolds are event-driven."
+  }
+};
+
+function eventTemplateExample(
+  templateName: Exclude<InitTemplateDefinition["name"], "api" | "worker">
+): {
+  fileName: string;
+  payload: string;
+  description: string;
+} {
+  return EVENT_TEMPLATE_EXAMPLES[templateName];
+}
+
+function buildEventDrivenLocalCallReadmeSection(
+  commandPrefix: string,
+  provider: string,
+  templateName: Exclude<InitTemplateDefinition["name"], "api" | "worker">
+): string[] {
+  const example = eventTemplateExample(templateName);
   return [
     "## Local Call (Provider-mimic)",
     "",
-    "Queue scaffolds are event-driven. Use `--event` payload simulation for local calls.",
+    `${example.description} Use \`--event\` payload simulation for local calls.`,
     "",
-    "Example `event.queue.json`:",
+    `Example \`${example.fileName}\`:`,
     "",
     "```json",
-    '{ "records": [ { "body": { "jobId": "demo-1" } } ] }',
+    example.payload,
     "```",
     "",
     "```bash",
-    `${commandPrefix} call:local -- --provider ${provider} --event ./event.queue.json`,
-    "```"
-  ];
-}
-
-function buildCronLocalCallReadmeSection(commandPrefix: string, provider: string): string[] {
-  return [
-    "## Local Call (Provider-mimic)",
-    "",
-    "Cron scaffolds are event-driven. Use `--event` payload simulation for local calls.",
-    "",
-    "Example `event.cron.json`:",
-    "",
-    "```json",
-    '{ "source": "runfabric.dev", "detail-type": "scheduled", "time": "2026-01-01T00:00:00.000Z" }',
-    "```",
-    "",
-    "```bash",
-    `${commandPrefix} call:local -- --provider ${provider} --event ./event.cron.json`,
+    `${commandPrefix} call:local -- --provider ${provider} --event ./${example.fileName}`,
     "```"
   ];
 }

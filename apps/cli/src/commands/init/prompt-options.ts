@@ -2,45 +2,85 @@ import { PROVIDER_IDS } from "@runfabric/core";
 import type { PromptOption } from "./prompt-option";
 import type { InitTemplateName } from "./types";
 
+const TEMPLATE_PROMPT_OPTIONS: PromptOption[] = [
+  {
+    value: "api",
+    label: "api",
+    group: "HTTP",
+    description: "GET /hello endpoint",
+    keywords: ["http", "rest", "endpoint", "web"]
+  },
+  {
+    value: "worker",
+    label: "worker",
+    group: "HTTP",
+    description: "POST /work endpoint",
+    keywords: ["http", "background", "job", "webhook"]
+  },
+  {
+    value: "queue",
+    label: "queue",
+    group: "Event",
+    description: "Queue consumer (jobs)",
+    keywords: ["event", "async", "consumer", "jobs"]
+  },
+  {
+    value: "cron",
+    label: "cron",
+    group: "Event",
+    description: "Scheduled task template",
+    keywords: ["schedule", "timer", "periodic"]
+  },
+  {
+    value: "storage",
+    label: "storage",
+    group: "Event",
+    description: "Object storage event trigger",
+    keywords: ["bucket", "s3", "gcs", "blob"]
+  },
+  {
+    value: "eventbridge",
+    label: "eventbridge",
+    group: "Event",
+    description: "EventBridge bus event trigger",
+    keywords: ["aws", "event bus", "rule"]
+  },
+  {
+    value: "pubsub",
+    label: "pubsub",
+    group: "Event",
+    description: "Pub/Sub topic subscriber",
+    keywords: ["gcp", "topic", "message"]
+  },
+  {
+    value: "kafka",
+    label: "kafka",
+    group: "Streaming",
+    description: "Kafka topic consumer",
+    keywords: ["broker", "stream", "event"]
+  },
+  {
+    value: "rabbitmq",
+    label: "rabbitmq",
+    group: "Messaging",
+    description: "RabbitMQ queue consumer",
+    keywords: ["amqp", "queue", "message"]
+  }
+];
+
 export function templatePromptOptions(allowedTemplates?: readonly InitTemplateName[]): PromptOption[] {
-  const options: PromptOption[] = [
-    {
-      value: "api",
-      label: "api",
-      group: "HTTP",
-      description: "GET /hello endpoint",
-      keywords: ["http", "rest", "endpoint", "web"]
-    },
-    {
-      value: "worker",
-      label: "worker",
-      group: "HTTP",
-      description: "POST /work endpoint",
-      keywords: ["http", "background", "job", "webhook"]
-    },
-    {
-      value: "queue",
-      label: "queue",
-      group: "Event",
-      description: "Queue consumer (jobs)",
-      keywords: ["event", "async", "consumer", "jobs"]
-    },
-    {
-      value: "cron",
-      label: "cron",
-      group: "Event",
-      description: "Scheduled task template",
-      keywords: ["schedule", "timer", "periodic"]
-    }
-  ];
   if (!allowedTemplates) {
-    return options;
+    return TEMPLATE_PROMPT_OPTIONS;
   }
   const allowed = new Set(allowedTemplates);
-  return options.filter((option) => allowed.has(option.value as InitTemplateName));
+  return TEMPLATE_PROMPT_OPTIONS.filter((option) =>
+    allowed.has(option.value as InitTemplateName)
+  );
 }
 
-export function providerPromptOptions(): PromptOption[] {
+export function providerPromptOptions(
+  allowedProviders?: readonly (typeof PROVIDER_IDS)[number][]
+): PromptOption[] {
   const metadata: Record<(typeof PROVIDER_IDS)[number], Omit<PromptOption, "value" | "label">> = {
     "aws-lambda": { group: "Cloud", description: "AWS Lambda", keywords: ["amazon", "aws"] },
     "gcp-functions": { group: "Cloud", description: "Google Cloud Functions", keywords: ["google", "gcp"] },
@@ -58,13 +98,20 @@ export function providerPromptOptions(): PromptOption[] {
     "fly-machines": { group: "Other", description: "Fly Machines", keywords: ["flyio"] },
     "ibm-openwhisk": { group: "Other", description: "IBM OpenWhisk", keywords: ["ibm", "openwhisk"] }
   };
-  return PROVIDER_IDS.map((provider) => ({
+  const options = PROVIDER_IDS.map((provider) => ({
     value: provider,
     label: provider,
     group: metadata[provider].group,
     description: metadata[provider].description,
     keywords: metadata[provider].keywords
   }));
+  if (!allowedProviders) {
+    return options;
+  }
+  const allowed = new Set(allowedProviders);
+  return options.filter((option) =>
+    allowed.has(option.value as (typeof PROVIDER_IDS)[number])
+  );
 }
 
 export function languagePromptOptions(): PromptOption[] {

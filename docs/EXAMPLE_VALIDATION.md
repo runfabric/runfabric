@@ -10,15 +10,19 @@ If directory name follows `runfabric-<provider>-<trigger>-state-<backend>`, veri
 - `<trigger>` matches `triggers[0].type` in `runfabric.yml`.
 - `<backend>` matches `state.backend` in `runfabric.yml`.
 
-## 2. Scaffold Template Limits
+## 2. Scaffold Template Coverage
 
-`init` scaffolds `api|worker|queue|cron` only.
+`init` scaffolds provider-supported trigger families:
 
-For examples named `storage|eventbridge|pubsub`:
+- `api`
+- `worker`
+- `queue`
+- `cron`
+- `storage`
+- `eventbridge`
+- `pubsub`
 
-- scaffold from `worker`
-- replace `triggers` in `runfabric.yml` with intended trigger type
-- rerun `runfabric plan` to validate
+`kafka` and `rabbitmq` remain valid trigger schema types but are hidden from `init` until provider capability support exists.
 
 ## 3. Provider ID Consistency
 

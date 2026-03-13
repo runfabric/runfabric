@@ -36,12 +36,63 @@ function normalizeServiceName(value: string): string {
     .replace(/-+$/, "") || "runfabric-service";
 }
 
-test("init supports api/worker/queue/cron templates", async () => {
-  const templateChecks: Array<{ template: string; expected: string }> = [
-    { template: "api", expected: "type: http" },
-    { template: "worker", expected: "path: /work" },
-    { template: "queue", expected: "type: queue" },
-    { template: "cron", expected: "type: cron" }
+test("init supports all built-in templates", async () => {
+  const templateChecks: Array<{
+    template: string;
+    expected: string;
+    provider: string;
+    providerPackage: string;
+    credentialEnvVar: string;
+  }> = [
+    {
+      template: "api",
+      expected: "type: http",
+      provider: "aws-lambda",
+      providerPackage: "@runfabric/provider-aws-lambda",
+      credentialEnvVar: "AWS_ACCESS_KEY_ID"
+    },
+    {
+      template: "worker",
+      expected: "path: /work",
+      provider: "aws-lambda",
+      providerPackage: "@runfabric/provider-aws-lambda",
+      credentialEnvVar: "AWS_ACCESS_KEY_ID"
+    },
+    {
+      template: "queue",
+      expected: "type: queue",
+      provider: "aws-lambda",
+      providerPackage: "@runfabric/provider-aws-lambda",
+      credentialEnvVar: "AWS_ACCESS_KEY_ID"
+    },
+    {
+      template: "cron",
+      expected: "type: cron",
+      provider: "aws-lambda",
+      providerPackage: "@runfabric/provider-aws-lambda",
+      credentialEnvVar: "AWS_ACCESS_KEY_ID"
+    },
+    {
+      template: "storage",
+      expected: "type: storage",
+      provider: "aws-lambda",
+      providerPackage: "@runfabric/provider-aws-lambda",
+      credentialEnvVar: "AWS_ACCESS_KEY_ID"
+    },
+    {
+      template: "eventbridge",
+      expected: "type: eventbridge",
+      provider: "aws-lambda",
+      providerPackage: "@runfabric/provider-aws-lambda",
+      credentialEnvVar: "AWS_ACCESS_KEY_ID"
+    },
+    {
+      template: "pubsub",
+      expected: "type: pubsub",
+      provider: "gcp-functions",
+      providerPackage: "@runfabric/provider-gcp-functions",
+      credentialEnvVar: "GCP_PROJECT_ID"
+    }
   ];
 
   for (const check of templateChecks) {
@@ -53,7 +104,7 @@ test("init supports api/worker/queue/cron templates", async () => {
       "--template",
       check.template,
       "--provider",
-      "aws-lambda",
+      check.provider,
       "--lang",
       "ts",
       "--skip-install"
@@ -79,7 +130,7 @@ test("init supports api/worker/queue/cron templates", async () => {
 
     const packageJson = JSON.parse(await readFile(join(projectDir, "package.json"), "utf8"));
     assert.equal(packageJson.dependencies?.["@runfabric/core"], "^0.1.0");
-    assert.equal(packageJson.dependencies?.["@runfabric/provider-aws-lambda"], "^0.1.0");
+    assert.equal(packageJson.dependencies?.[check.providerPackage], "^0.1.0");
     assert.equal(packageJson.dependencies?.["@runfabric/runtime-node"], undefined);
     assert.equal(
       packageJson.scripts?.["call:local"],
@@ -91,9 +142,7 @@ test("init supports api/worker/queue/cron templates", async () => {
     assert.equal(existsSync(join(projectDir, ".env.example")), true);
 
     const envExample = await readFile(join(projectDir, ".env.example"), "utf8");
-    assert.ok(envExample.includes("AWS_ACCESS_KEY_ID=your-value"));
-    assert.ok(envExample.includes("AWS_SECRET_ACCESS_KEY=your-value"));
-    assert.ok(envExample.includes("AWS_REGION=your-value"));
+    assert.ok(envExample.includes(`${check.credentialEnvVar}=your-value`));
     assert.ok(envExample.includes("local backend selected"));
 
     const readme = await readFile(join(projectDir, "README.md"), "utf8");
@@ -101,7 +150,7 @@ test("init supports api/worker/queue/cron templates", async () => {
     assert.ok(readme.includes("## Local Call (Provider-mimic)"));
     assert.ok(readme.includes("## Credentials"));
     assert.ok(readme.includes("cp .env.example .env"));
-    assert.ok(readme.includes("export AWS_ACCESS_KEY_ID"));
+    assert.ok(readme.includes(`export ${check.credentialEnvVar}`));
   }
 });
 
@@ -145,6 +194,29 @@ test("init supports js language scaffold", async () => {
   const envExample = await readFile(join(projectDir, ".env.example"), "utf8");
   assert.ok(envExample.includes("CLOUDFLARE_API_TOKEN=your-value"));
   assert.ok(envExample.includes("CLOUDFLARE_ACCOUNT_ID=your-value"));
+});
+
+test("init selects a template-compatible provider when template is specified without provider", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-init-template-provider-auto-"));
+  const result = runCli([
+    "init",
+    "--dir",
+    projectDir,
+    "--template",
+    "pubsub",
+    "--lang",
+    "ts",
+    "--skip-install"
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+
+  const config = await readFile(join(projectDir, "runfabric.yml"), "utf8");
+  assert.ok(config.includes("type: pubsub"));
+  assert.ok(config.includes("providers:"));
+  assert.ok(config.includes("  - gcp-functions"));
+
+  const packageJson = JSON.parse(await readFile(join(projectDir, "package.json"), "utf8"));
+  assert.equal(packageJson.dependencies?.["@runfabric/provider-gcp-functions"], "^0.1.0");
 });
 
 test("init supports explicit state backend selection", async () => {
@@ -234,4 +306,22 @@ test("init rejects template not supported by selected provider", async () => {
     combinedOutput,
     /template "queue" is not supported by provider "cloudflare-workers"/
   );
+});
+
+test("init rejects template not supported by any provider", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-init-template-unsupported-"));
+  const result = runCli([
+    "init",
+    "--dir",
+    projectDir,
+    "--template",
+    "kafka",
+    "--lang",
+    "ts",
+    "--skip-install",
+    "--no-interactive"
+  ]);
+  assert.notEqual(result.status, 0);
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  assert.match(combinedOutput, /no providers support template "kafka"/);
 });

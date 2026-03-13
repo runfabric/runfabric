@@ -26,13 +26,16 @@ Available templates:
 - `worker`
 - `queue`
 - `cron`
+- `storage`
+- `eventbridge`
+- `pubsub`
 
 `init` supports interactive prompts for template, provider, state backend, and language.
 
 Template scope note:
 
-- `init` currently scaffolds only `api|worker|queue|cron`.
-- For `storage|eventbridge|pubsub` flows, scaffold with `worker` and then edit `triggers` in `runfabric.yml`.
+- `init` scaffolds trigger families with at least one provider capability (`api|worker|queue|cron|storage|eventbridge|pubsub`).
+- `kafka` and `rabbitmq` remain valid trigger schema types but are hidden from `init` until provider capability support is available.
 
 Provider IDs (copy/paste):
 
