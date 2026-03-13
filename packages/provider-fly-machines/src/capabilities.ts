@@ -15,6 +15,7 @@ export const flyMachinesCapabilities: ProviderCapabilities = {
   customRuntime: true,
   backgroundJobs: true,
   websockets: true,
+  supportedRuntimes: ["nodejs", "python", "go", "java", "rust", "dotnet"],
   maxTimeoutSeconds: 3600,
   maxMemoryMB: 8192
 };

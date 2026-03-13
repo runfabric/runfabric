@@ -15,6 +15,7 @@ export const ibmOpenWhiskCapabilities: ProviderCapabilities = {
   customRuntime: true,
   backgroundJobs: false,
   websockets: false,
+  supportedRuntimes: ["nodejs", "python", "go", "java", "rust", "dotnet"],
   maxTimeoutSeconds: 600,
   maxMemoryMB: 512
 };

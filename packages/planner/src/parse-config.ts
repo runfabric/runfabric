@@ -19,6 +19,7 @@ import { readStateConfigAtPath } from "./parse-config/state-config";
 import { readTriggerArray } from "./parse-config/triggers";
 import { parseYamlDocument } from "./parse-config/yaml";
 import { readDeployConfigAtPath } from "./parse-config/deploy-config";
+import { readRequiredRuntimeAtPath } from "./parse-config/runtime";
 
 export interface ParseProjectConfigOptions {
   stage?: string;
@@ -85,14 +86,14 @@ function validateProjectConfigShape(raw: unknown, options: ParseProjectConfigOpt
   }
 
   const service = readRequiredString(sourceCandidate, "service", errors);
-  const runtime = readRequiredString(sourceCandidate, "runtime", errors);
+  const runtime = readRequiredRuntimeAtPath(readRequiredString(sourceCandidate, "runtime", errors), "runtime", errors);
   const entry = readRequiredString(sourceCandidate, "entry", errors);
   const selectedStage = resolveSelectedStage(options);
   const sections = readProjectSections(sourceCandidate, errors);
 
   let project: ProjectConfig = {
     service,
-    runtime,
+    runtime: runtime || "nodejs",
     entry,
     ...sections,
     stage: selectedStage

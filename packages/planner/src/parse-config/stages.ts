@@ -1,4 +1,9 @@
-import type { FunctionConfig, ProjectConfig, TriggerConfig } from "@runfabric/core";
+import type {
+  FunctionConfig,
+  ProjectConfig,
+  RuntimeFamily,
+  TriggerConfig
+} from "@runfabric/core";
 import { mergeExtensions, mergeStateConfig, readExtensionsAtPath } from "./extensions";
 import {
   isRecord,
@@ -15,9 +20,10 @@ import {
   readWorkflowsAtPath
 } from "./project-readers";
 import { readTriggerArrayAtPath } from "./triggers";
+import { readOptionalRuntimeAtPath } from "./runtime";
 
 export interface StageOverride {
-  runtime?: string;
+  runtime?: RuntimeFamily;
   entry?: string;
   providers?: string[];
   triggers?: TriggerConfig[];
@@ -68,7 +74,7 @@ export function readStageOverride(
 ): StageOverride {
   const override: StageOverride = {};
 
-  const runtime = readOptionalString(source, "runtime", errors);
+  const runtime = readOptionalRuntimeAtPath(source.runtime, `${path}.runtime`, errors);
   if (runtime) {
     override.runtime = runtime;
   }

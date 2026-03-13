@@ -14,5 +14,6 @@ export const vercelCapabilities: ProviderCapabilities = {
   containerImage: false,
   customRuntime: false,
   backgroundJobs: false,
-  websockets: false
+  websockets: false,
+  supportedRuntimes: ["nodejs"]
 };

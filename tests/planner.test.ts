@@ -824,7 +824,7 @@ test("parseProjectConfig rejects invalid secrets schema value", () => {
   assert.throws(() => parseProjectConfig(config), /secrets\.DB_PASSWORD must use secret:\/\/<ref> format/);
 });
 
-test("createPlan validates support for new trigger types and warns on non-node runtime", () => {
+test("createPlan validates support for new trigger types with supported non-node runtime", () => {
   const config = [
     "service: non-node-advanced",
     "runtime: python",
@@ -846,9 +846,56 @@ test("createPlan validates support for new trigger types and warns on non-node r
 
   const plan = createPlan(parseProjectConfig(config));
   assert.equal(plan.ok, false);
-  assert.ok(plan.warnings.some((warning) => warning.includes("runtime python is not production-ready")));
+  assert.equal(plan.warnings.some((warning) => warning.includes("runtime")), false);
   assert.ok(plan.errors.some((error) => error.includes("gcp-functions: eventbridge trigger is not supported")));
   assert.ok(plan.errors.some((error) => error.includes("aws-lambda: pubsub trigger is not supported")));
   assert.ok(plan.portability.partiallySupportedTriggerTypes.includes("eventbridge"));
   assert.ok(plan.portability.partiallySupportedTriggerTypes.includes("pubsub"));
+});
+
+test("createPlan reports provider-specific unsupported runtime errors", () => {
+  const config = [
+    "service: runtime-mismatch",
+    "runtime: python",
+    "entry: src/index.py",
+    "",
+    "providers:",
+    "  - cloudflare-workers",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /",
+    ""
+  ].join("\n");
+
+  const plan = createPlan(parseProjectConfig(config));
+  assert.equal(plan.ok, false);
+  assert.ok(
+    plan.errors.some((error) =>
+      error.includes("cloudflare-workers: runtime python is not supported")
+    )
+  );
+});
+
+test("parseProjectConfig rejects unsupported runtime family", () => {
+  const config = [
+    "service: invalid-runtime",
+    "runtime: ruby",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /",
+    ""
+  ].join("\n");
+
+  assert.throws(
+    () => parseProjectConfig(config),
+    /runtime must be one of: nodejs \| python \| go \| java \| rust \| dotnet/
+  );
 });
