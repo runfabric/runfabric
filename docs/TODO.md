@@ -2,6 +2,10 @@
 
 Only pending work is listed here. Completed items are removed.
 
+## Active
+
+No active P0/P1 items.
+
 ## Backlog
 
 ### P8 - Multi-Runtime Support (Post Node-First GA)
