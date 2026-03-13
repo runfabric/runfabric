@@ -25,6 +25,26 @@ interface RemoveOptions {
   json?: boolean;
 }
 
+export interface RemoveWorkflowInput {
+  projectDir: string;
+  configPath?: string;
+  stage?: string;
+  provider?: string;
+}
+
+export interface RemoveWorkflowResult {
+  service: string;
+  stage: string;
+  providers: string[];
+  destroyedProviders: string[];
+  removedPaths: string[];
+  failures: RemoveFailure[];
+  recoveryArtifacts: RemoveRecoveryArtifact[];
+  summary: {
+    exitCode: number;
+  };
+}
+
 interface RemoveCollections {
   removedPaths: string[];
   destroyedProviders: string[];
@@ -209,17 +229,15 @@ function printRemoveResult(
   }
 }
 
-async function executeRemoveCommand(options: RemoveOptions): Promise<void> {
-  const configPath = options.config ? resolve(process.cwd(), options.config) : undefined;
-  const projectDir = await resolveProjectDir(process.cwd(), options.config);
-  const context = await loadPlanningContext(projectDir, configPath, options.stage);
+export async function executeRemoveWorkflow(input: RemoveWorkflowInput): Promise<RemoveWorkflowResult> {
+  const context = await loadPlanningContext(input.projectDir, input.configPath, input.stage);
   const stage = context.project.stage || "default";
-  const providers = resolveProviderTargets(context.project.providers, options.provider);
-  const registry = createProviderRegistry(projectDir, providers);
-  const stateBackend = createStateBackend({ projectDir, state: context.project.state });
+  const providers = resolveProviderTargets(context.project.providers, input.provider);
+  const registry = createProviderRegistry(input.projectDir, providers);
+  const stateBackend = createStateBackend({ projectDir: input.projectDir, state: context.project.state });
 
   const collections = createCollections();
-  const recoveryDir = resolve(projectDir, ".runfabric", "recovery", "remove");
+  const recoveryDir = resolve(input.projectDir, ".runfabric", "recovery", "remove");
   await mkdir(recoveryDir, { recursive: true });
 
   await processProviderRemovals({
@@ -227,27 +245,40 @@ async function executeRemoveCommand(options: RemoveOptions): Promise<void> {
     registry,
     context,
     stage,
-    projectDir,
+    projectDir: input.projectDir,
     stateBackend,
     recoveryDir,
     collections
   });
 
-  const payload = {
+  return {
     service: context.project.service,
     stage,
     providers,
     destroyedProviders: collections.destroyedProviders,
     removedPaths: collections.removedPaths,
     failures: collections.failures,
-    recoveryArtifacts: collections.recoveryArtifacts
+    recoveryArtifacts: collections.recoveryArtifacts,
+    summary: {
+      exitCode: collections.failures.length > 0 ? 1 : 0
+    }
   };
+}
 
-  if (collections.failures.length > 0) {
-    process.exitCode = 1;
+async function executeRemoveCommand(options: RemoveOptions): Promise<void> {
+  const projectDir = await resolveProjectDir(process.cwd(), options.config);
+  const result = await executeRemoveWorkflow({
+    projectDir,
+    configPath: options.config ? resolve(process.cwd(), options.config) : undefined,
+    stage: options.stage,
+    provider: options.provider
+  });
+
+  if (result.summary.exitCode !== 0) {
+    process.exitCode = result.summary.exitCode;
   }
 
-  printRemoveResult(payload, options.json);
+  printRemoveResult(result, options.json);
 }
 
 async function processProviderRemovals(input: {

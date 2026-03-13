@@ -109,9 +109,61 @@ export function sortComposeServices(config: ComposeConfig): ComposeServiceConfig
   return ordered;
 }
 
+export function composeServiceLevels(config: ComposeConfig): ComposeServiceConfig[][] {
+  const byName = new Map(config.services.map((service) => [service.name, service]));
+  const indexByName = new Map(config.services.map((service, index) => [service.name, index]));
+  const indegree = new Map<string, number>();
+  const dependents = new Map<string, string[]>();
+
+  for (const service of config.services) {
+    indegree.set(service.name, service.dependsOn.length);
+    for (const dependency of service.dependsOn) {
+      if (!byName.has(dependency)) {
+        throw new Error(`compose service ${service.name} depends on unknown service ${dependency}`);
+      }
+      const items = dependents.get(dependency) || [];
+      items.push(service.name);
+      dependents.set(dependency, items);
+    }
+  }
+
+  const levels: ComposeServiceConfig[][] = [];
+  let frontier = config.services.filter((service) => (indegree.get(service.name) || 0) === 0);
+  let visitedCount = 0;
+
+  while (frontier.length > 0) {
+    const currentLevel = [...frontier];
+    levels.push(currentLevel);
+    visitedCount += currentLevel.length;
+    const nextNames: string[] = [];
+
+    for (const service of currentLevel) {
+      const downstream = dependents.get(service.name) || [];
+      for (const childName of downstream) {
+        const nextDegree = (indegree.get(childName) || 0) - 1;
+        indegree.set(childName, nextDegree);
+        if (nextDegree === 0) {
+          nextNames.push(childName);
+        }
+      }
+    }
+
+    frontier = nextNames
+      .sort((left, right) => (indexByName.get(left) || 0) - (indexByName.get(right) || 0))
+      .map((name) => byName.get(name))
+      .filter((value): value is ComposeServiceConfig => Boolean(value));
+  }
+
+  if (visitedCount !== config.services.length) {
+    const unresolved = config.services.find((service) => (indegree.get(service.name) || 0) > 0);
+    throw new Error(`compose dependency cycle detected at ${unresolved?.name || "unknown service"}`);
+  }
+
+  return levels;
+}
+
 export function toComposeOutputEnvKey(service: string, provider: string): string {
   const normalizedService = service.toUpperCase().replace(/[^A-Z0-9]/g, "_");
   const normalizedProvider = provider.toUpperCase().replace(/[^A-Z0-9]/g, "_");
   return `RUNFABRIC_OUTPUT_${normalizedService}_${normalizedProvider}_ENDPOINT`;
 }
-
