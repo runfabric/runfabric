@@ -46,3 +46,41 @@ test("provider registry uses *_TRACES_CMD and *_METRICS_CMD when configured", as
     }
   );
 });
+
+test("provider registry rejects unsafe *_TRACES_CMD shell operators", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-observability-unsafe-"));
+
+  await withEnv(
+    {
+      RUNFABRIC_AWS_TRACES_CMD:
+        "printf '%s' '[{\"timestamp\":\"2026-01-01T00:00:00.000Z\",\"message\":\"ok\"}]' && printf '%s' '[]'"
+    },
+    async () => {
+      const providers = createProviderRegistry(projectDir);
+      const aws = providers["aws-lambda"];
+      await assert.rejects(
+        aws.traces?.({ provider: "aws-lambda" }) as Promise<unknown>,
+        /unsafe command in RUNFABRIC_AWS_TRACES_CMD/
+      );
+    }
+  );
+});
+
+test("provider registry rejects unsafe *_TRACES_CMD background operator", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-observability-unsafe-bg-"));
+
+  await withEnv(
+    {
+      RUNFABRIC_AWS_TRACES_CMD:
+        "printf '%s' '[{\"timestamp\":\"2026-01-01T00:00:00.000Z\",\"message\":\"ok\"}]' & printf '%s' '[]'"
+    },
+    async () => {
+      const providers = createProviderRegistry(projectDir);
+      const aws = providers["aws-lambda"];
+      await assert.rejects(
+        aws.traces?.({ provider: "aws-lambda" }) as Promise<unknown>,
+        /unsafe command in RUNFABRIC_AWS_TRACES_CMD/
+      );
+    }
+  );
+});

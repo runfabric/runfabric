@@ -1,7 +1,8 @@
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { createInterface } from "node:readline";
 import type {
   InvokeInput,
   InvokeResult,
@@ -14,9 +15,7 @@ import type {
   TracesResult
 } from "./provider";
 import type { ProviderCredentialSchema } from "./credentials";
-
 export type DeploymentMode = "simulated" | "api" | "cli";
-
 export interface DeploymentReceipt {
   provider: string;
   service: string;
@@ -42,13 +41,6 @@ export interface ProviderDeployPaths {
   deployDir: string;
   receiptPath: string;
   logPath: string;
-}
-
-export interface CommandResult {
-  command: string;
-  code: number;
-  stdout: string;
-  stderr: string;
 }
 
 function toBooleanFlag(value: string | undefined): boolean {
@@ -145,11 +137,9 @@ function parseLogLineToTrace(provider: string, line: string): TraceRecord {
   const firstSpace = line.indexOf(" ");
   const timestamp = firstSpace > 0 ? line.slice(0, firstSpace) : new Date().toISOString();
   const message = firstSpace > 0 ? line.slice(firstSpace + 1) : line;
-
   const deploymentMatch = message.match(/deploymentId=([^\s]+)/);
   const invokeMatch = message.match(/invokeId=([^\s]+)/);
   const correlationMatch = message.match(/correlationId=([^\s]+)/);
-
   return {
     timestamp,
     provider,
@@ -160,44 +150,100 @@ function parseLogLineToTrace(provider: string, line: string): TraceRecord {
   };
 }
 
+function shouldIncludeLogLine(line: string, threshold: number): boolean {
+  if (Number.isNaN(threshold)) {
+    return true;
+  }
+  const firstSpace = line.indexOf(" ");
+  if (firstSpace <= 0) {
+    return true;
+  }
+  const timestamp = Date.parse(line.slice(0, firstSpace));
+  if (Number.isNaN(timestamp)) {
+    return true;
+  }
+  return timestamp >= threshold;
+}
+
+async function iterateProviderLogLines(
+  projectDir: string,
+  provider: string,
+  since: string | undefined,
+  onLine: (line: string) => void | Promise<void>
+): Promise<void> {
+  const paths = providerDeployPaths(projectDir, provider);
+  const threshold = since ? Date.parse(since) : Number.NaN;
+  const input = createReadStream(paths.logPath, { encoding: "utf8" });
+  const reader = createInterface({
+    input,
+    crlfDelay: Infinity
+  });
+  try {
+    for await (const rawLine of reader) {
+      const line = rawLine.trim();
+      if (!line || !shouldIncludeLogLine(line, threshold)) {
+        continue;
+      }
+      await onLine(line);
+    }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      return;
+    }
+    throw error;
+  } finally {
+    reader.close();
+  }
+}
+
+function normalizeTraceLimit(limit: number | undefined): number {
+  if (typeof limit !== "number" || !Number.isFinite(limit) || limit <= 0) {
+    return 0;
+  }
+  return Math.floor(limit);
+}
+
+function createTraceCollector(limit: number): {
+  add(trace: TraceRecord): void;
+  finish(): TraceRecord[];
+} {
+  const traces: TraceRecord[] = [];
+  let ringCursor = 0;
+  let acceptedCount = 0;
+  return {
+    add(trace: TraceRecord): void {
+      acceptedCount += 1;
+      if (limit <= 0) {
+        traces.push(trace);
+        return;
+      }
+      if (traces.length < limit) {
+        traces.push(trace);
+        return;
+      }
+      traces[ringCursor] = trace;
+      ringCursor = (ringCursor + 1) % limit;
+    },
+    finish(): TraceRecord[] {
+      if (limit > 0 && acceptedCount > limit) {
+        return [...traces.slice(ringCursor), ...traces.slice(0, ringCursor)];
+      }
+      return traces;
+    }
+  };
+}
+
 export async function readProviderLogLines(
   projectDir: string,
   provider: string,
   since?: string
 ): Promise<string[]> {
-  const paths = providerDeployPaths(projectDir, provider);
-  let content: string;
-  try {
-    content = await readFile(paths.logPath, "utf8");
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") {
-      return [];
-    }
-    throw error;
-  }
-
-  const threshold = since ? Date.parse(since) : Number.NaN;
-  const lines = content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-
-  if (Number.isNaN(threshold)) {
-    return lines;
-  }
-
-  return lines.filter((line) => {
-    const firstSpace = line.indexOf(" ");
-    if (firstSpace <= 0) {
-      return true;
-    }
-    const timestamp = Date.parse(line.slice(0, firstSpace));
-    if (Number.isNaN(timestamp)) {
-      return true;
-    }
-    return timestamp >= threshold;
+  const lines: string[] = [];
+  await iterateProviderLogLines(projectDir, provider, since, (line) => {
+    lines.push(line);
   });
+  return lines;
 }
 
 export async function buildProviderLogsFromLocalArtifacts(
@@ -232,19 +278,17 @@ export async function buildProviderTracesFromLocalArtifacts(
   provider: string,
   input: TracesInput
 ): Promise<TracesResult> {
-  const logs = await readProviderLogLines(projectDir, provider, input.since);
-  let traces = logs.map((line) => parseLogLineToTrace(provider, line));
+  const traceCollector = createTraceCollector(normalizeTraceLimit(input.limit));
 
-  if (input.correlationId) {
-    traces = traces.filter((trace) =>
-      trace.message.includes(input.correlationId || "")
-    );
-  }
+  await iterateProviderLogLines(projectDir, provider, input.since, (line) => {
+    const trace = parseLogLineToTrace(provider, line);
+    if (input.correlationId && !trace.message.includes(input.correlationId)) {
+      return;
+    }
+    traceCollector.add(trace);
+  });
 
-  if (typeof input.limit === "number" && Number.isFinite(input.limit) && input.limit > 0) {
-    traces = traces.slice(-Math.floor(input.limit));
-  }
-
+  const traces = traceCollector.finish();
   if (traces.length > 0) {
     return { traces };
   }
@@ -272,10 +316,23 @@ export async function buildProviderMetricsFromLocalArtifacts(
   provider: string,
   input: MetricsInput
 ): Promise<MetricsResult> {
-  const logs = await readProviderLogLines(projectDir, provider, input.since);
-  const invokeLines = logs.filter((line) => line.includes(" invoke "));
-  const invokeFailures = logs.filter((line) => line.includes("invoke failed")).length;
-  const deployLines = logs.filter((line) => line.includes("deploy deploymentId=")).length;
+  let logLineCount = 0;
+  let invokeCount = 0;
+  let invokeFailures = 0;
+  let deployCount = 0;
+
+  await iterateProviderLogLines(projectDir, provider, input.since, (line) => {
+    logLineCount += 1;
+    if (line.includes(" invoke ")) {
+      invokeCount += 1;
+    }
+    if (line.includes("invoke failed")) {
+      invokeFailures += 1;
+    }
+    if (line.includes("deploy deploymentId=")) {
+      deployCount += 1;
+    }
+  });
 
   const receipt = await readDeploymentReceipt(projectDir, provider);
   const now = Date.now();
@@ -285,10 +342,10 @@ export async function buildProviderMetricsFromLocalArtifacts(
       : NaN;
 
   const metrics: MetricsResult["metrics"] = [
-    { name: "log_lines_total", value: logs.length, unit: "count" },
-    { name: "invoke_total", value: invokeLines.length, unit: "count" },
+    { name: "log_lines_total", value: logLineCount, unit: "count" },
+    { name: "invoke_total", value: invokeCount, unit: "count" },
     { name: "invoke_failures_total", value: invokeFailures, unit: "count" },
-    { name: "deploy_total", value: deployLines, unit: "count" }
+    { name: "deploy_total", value: deployCount, unit: "count" }
   ];
 
   if (!Number.isNaN(deployAgeSeconds)) {
@@ -461,66 +518,12 @@ export async function destroyProviderArtifacts(projectDir: string, provider: str
   await rm(paths.deployDir, { recursive: true, force: true });
 }
 
-export async function runShellCommand(
-  command: string,
-  options?: { cwd?: string; env?: Record<string, string | undefined> }
-): Promise<CommandResult> {
-  return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn("sh", ["-lc", command], {
-      cwd: options?.cwd,
-      env: {
-        ...process.env,
-        ...(options?.env || {})
-      },
-      stdio: ["ignore", "pipe", "pipe"]
-    });
+export {
+  runJsonCommand,
+  runShellCommand
+} from "./provider-ops/command-runner";
 
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (chunk: Buffer | string) => {
-      stdout += String(chunk);
-    });
-    child.stderr.on("data", (chunk: Buffer | string) => {
-      stderr += String(chunk);
-    });
-    child.on("error", (error) => {
-      rejectPromise(error);
-    });
-    child.on("close", (code) => {
-      resolvePromise({
-        command,
-        code: code ?? 1,
-        stdout,
-        stderr
-      });
-    });
-  });
-}
-
-export async function runJsonCommand(
-  command: string,
-  options?: { cwd?: string; env?: Record<string, string | undefined> }
-): Promise<unknown> {
-  const result = await runShellCommand(command, options);
-  if (result.code !== 0) {
-    throw new Error(
-      `command failed (${result.code}): ${command}\n${result.stderr || result.stdout || "no output"}`
-    );
-  }
-
-  const output = result.stdout.trim();
-  if (!output) {
-    throw new Error(`command produced empty output: ${command}`);
-  }
-
-  try {
-    return JSON.parse(output) as unknown;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`command output is not valid JSON: ${message}`);
-  }
-}
+export type { CommandResult } from "./provider-ops/command-runner";
 
 export {
   parseProviderMetricsPayload,

@@ -4,10 +4,8 @@ import type { ProviderAdapter } from "@runfabric/core";
 import {
   buildProviderMetricsFromLocalArtifacts,
   buildProviderTracesFromLocalArtifacts,
-  runJsonCommand,
-  type MetricsResult,
-  type TraceRecord,
-  type TracesResult
+  runProviderMetricsCommand,
+  runProviderTracesCommand
 } from "@runfabric/core";
 
 interface ProviderModuleSpec {
@@ -151,77 +149,6 @@ export function getProviderPackageName(provider: string): string | undefined {
   return PROVIDER_MODULE_SPECS[provider]?.packageName;
 }
 
-function parseTraceRecord(entry: Record<string, unknown>, provider: string): TraceRecord {
-  return {
-    timestamp:
-      typeof entry.timestamp === "string" && entry.timestamp.trim().length > 0
-        ? entry.timestamp
-        : new Date().toISOString(),
-    provider,
-    message:
-      typeof entry.message === "string" && entry.message.trim().length > 0
-        ? entry.message
-        : JSON.stringify(entry),
-    deploymentId:
-      typeof entry.deploymentId === "string" && entry.deploymentId.trim().length > 0
-        ? entry.deploymentId
-        : undefined,
-    invokeId:
-      typeof entry.invokeId === "string" && entry.invokeId.trim().length > 0
-        ? entry.invokeId
-        : undefined,
-    correlationId:
-      typeof entry.correlationId === "string" && entry.correlationId.trim().length > 0
-        ? entry.correlationId
-        : undefined
-  };
-}
-
-function parseTracesPayload(raw: unknown, provider: string): TracesResult {
-  if (Array.isArray(raw)) {
-    return {
-      traces: raw
-        .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
-        .map((entry) => parseTraceRecord(entry, provider))
-    };
-  }
-
-  if (raw && typeof raw === "object") {
-    const payload = raw as Record<string, unknown>;
-    if (Array.isArray(payload.traces)) {
-      return parseTracesPayload(payload.traces, provider);
-    }
-  }
-
-  throw new Error("trace command output must be { traces: [...] } or an array");
-}
-
-function parseMetricsPayload(raw: unknown): MetricsResult {
-  if (Array.isArray(raw)) {
-    const metrics = raw
-      .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
-      .map((entry) => ({
-        name: typeof entry.name === "string" ? entry.name : "",
-        value: typeof entry.value === "number" ? entry.value : Number.NaN,
-        unit:
-          typeof entry.unit === "string" && entry.unit.trim().length > 0
-            ? entry.unit
-            : undefined
-      }))
-      .filter((entry) => entry.name.trim().length > 0 && Number.isFinite(entry.value));
-    return { metrics };
-  }
-
-  if (raw && typeof raw === "object") {
-    const payload = raw as Record<string, unknown>;
-    if (Array.isArray(payload.metrics)) {
-      return parseMetricsPayload(payload.metrics);
-    }
-  }
-
-  throw new Error("metrics command output must be { metrics: [...] } or an array");
-}
-
 function envCommand(envName: string | undefined): string | undefined {
   if (!envName) {
     return undefined;
@@ -243,7 +170,7 @@ function withObservability(adapter: ProviderAdapter, projectDir: string): Provid
   adapter.traces = async (input) => {
     const command = envCommand(tracesEnvName);
     if (command) {
-      return parseTracesPayload(await runJsonCommand(command, { cwd: projectDir }), adapter.name);
+      return runProviderTracesCommand(command, adapter.name, { cwd: projectDir });
     }
     if (nativeTraces) {
       return nativeTraces(input);
@@ -254,7 +181,7 @@ function withObservability(adapter: ProviderAdapter, projectDir: string): Provid
   adapter.metrics = async (input) => {
     const command = envCommand(metricsEnvName);
     if (command) {
-      return parseMetricsPayload(await runJsonCommand(command, { cwd: projectDir }));
+      return runProviderMetricsCommand(command, { cwd: projectDir });
     }
     if (nativeMetrics) {
       return nativeMetrics(input);
