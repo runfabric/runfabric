@@ -34,7 +34,7 @@ export const registerCallLocalCommand: CommandRegistrar = (program) => {
     .option("--header <key:value>", "Header pair (repeatable)", collectHeader, [])
     .option("--entry <path>", "Handler entry override")
     .option("--serve", "Start local HTTP server mode")
-    .option("--watch", "Reload handler on each request (for TS entry also runs tsc --watch)")
+    .option("--watch", "Reload handler when compiled module changes (for TS entry also runs tsc --watch)")
     .option("--host <host>", "Host for local HTTP server", "127.0.0.1")
     .option("--port <number>", "Port for local HTTP server", parsePort, 8787)
     .action(async (options: LocalCallOptions) => {

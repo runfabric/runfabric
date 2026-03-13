@@ -1,5 +1,5 @@
 import { constants, existsSync } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
@@ -192,13 +192,17 @@ function withExtensions(basePath: string): string[] {
   return [`${basePath}.js`, `${basePath}.mjs`, `${basePath}.cjs`];
 }
 
+function isTypeScriptSourceEntry(entryPath: string): boolean {
+  return /\.(ts|tsx)$/i.test(entryPath);
+}
+
 function resolveHandlerCandidates(projectDir: string, entry: string): string[] {
   const normalizedEntry = normalizeEntryPath(entry);
   const candidates: string[] = [];
   const allowTypeScriptFallback = shouldAllowTypeScriptFallback();
 
-  if (normalizedEntry.endsWith(".ts")) {
-    const withoutExtension = normalizedEntry.slice(0, -3);
+  if (isTypeScriptSourceEntry(normalizedEntry)) {
+    const withoutExtension = normalizedEntry.replace(/\.(ts|tsx)$/i, "");
     candidates.push(
       ...withExtensions(resolve(projectDir, withoutExtension)),
       ...withExtensions(resolve(projectDir, "dist", withoutExtension))
@@ -218,8 +222,11 @@ function resolveHandlerCandidates(projectDir: string, entry: string): string[] {
       (normalizedEntry.endsWith(".js") || normalizedEntry.endsWith(".mjs") || normalizedEntry.endsWith(".cjs")) &&
       normalizedEntry.startsWith("dist/")
     ) {
-      const tsSource = normalizedEntry.slice(5).replace(/\.(js|mjs|cjs)$/i, ".ts");
-      candidates.push(resolve(projectDir, "src", tsSource));
+      const sourceWithoutExtension = normalizedEntry.slice(5).replace(/\.(js|mjs|cjs)$/i, "");
+      candidates.push(
+        resolve(projectDir, "src", `${sourceWithoutExtension}.ts`),
+        resolve(projectDir, "src", `${sourceWithoutExtension}.tsx`)
+      );
     }
   }
 
@@ -307,7 +314,7 @@ async function runTypeScriptBuild(projectDir: string): Promise<void> {
 
 export async function ensureTypeScriptArtifacts(projectDir: string, entry: string): Promise<void> {
   const normalizedEntry = normalizeEntryPath(entry);
-  if (!normalizedEntry.endsWith(".ts") || shouldAllowTypeScriptFallback()) {
+  if (!isTypeScriptSourceEntry(normalizedEntry) || shouldAllowTypeScriptFallback()) {
     return;
   }
   if (await hasBuiltHandlerArtifact(projectDir, normalizedEntry)) {
@@ -316,17 +323,29 @@ export async function ensureTypeScriptArtifacts(projectDir: string, entry: strin
   await runTypeScriptBuild(projectDir);
 }
 
+async function freshModuleVersion(handlerPath: string): Promise<string> {
+  const metadata = await stat(handlerPath);
+  return `${Math.trunc(metadata.mtimeMs)}-${metadata.size}`;
+}
+
+export async function resolveHandlerSnapshot(
+  projectDir: string,
+  entry: string
+): Promise<{ handlerPath: string; version: string }> {
+  const handlerPath = await resolveHandlerPath(projectDir, entry);
+  return {
+    handlerPath,
+    version: await freshModuleVersion(handlerPath)
+  };
+}
+
 export async function loadHandler(projectDir: string, entry: string, fresh = false): Promise<UniversalHandler> {
   const handlerPath = await resolveHandlerPath(projectDir, entry);
   const moduleUrl = pathToFileURL(handlerPath).href;
-  const dynamicImport = new Function(
-    "specifier",
-    "return import(specifier);"
-  ) as (specifier: string) => Promise<Record<string, unknown>>;
   const moduleSpecifier = fresh
-    ? `${moduleUrl}${moduleUrl.includes("?") ? "&" : "?"}v=${Date.now()}-${Math.random().toString(36).slice(2)}`
+    ? `${moduleUrl}${moduleUrl.includes("?") ? "&" : "?"}v=${await freshModuleVersion(handlerPath)}`
     : moduleUrl;
-  const loadedModule = await dynamicImport(moduleSpecifier);
+  const loadedModule = (await import(moduleSpecifier)) as Record<string, unknown>;
   const directHandler = loadedModule.handler;
   const defaultExport = loadedModule.default;
   const defaultHandler =

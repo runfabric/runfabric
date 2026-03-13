@@ -11,8 +11,40 @@ import {
   normalizeNodeHeaders,
   parseHeaders,
   resolveExecutionContext,
+  resolveHandlerSnapshot,
   resolveTypeScriptCompiler
 } from "./runtime";
+
+const DEFAULT_MAX_REQUEST_BODY_BYTES = 1024 * 1024;
+
+class RequestBodyTooLargeError extends Error {
+  readonly statusCode: number;
+
+  constructor(maxBytes: number) {
+    super(
+      `request body exceeds ${maxBytes} bytes. Set RUNFABRIC_CALL_LOCAL_MAX_BODY_BYTES to increase the limit.`
+    );
+    this.statusCode = 413;
+    this.name = "RequestBodyTooLargeError";
+  }
+}
+
+function resolveMaxRequestBodyBytes(): number {
+  const raw = process.env.RUNFABRIC_CALL_LOCAL_MAX_BODY_BYTES;
+  if (!raw || raw.trim().length === 0) {
+    return DEFAULT_MAX_REQUEST_BODY_BYTES;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isInteger(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  warn(
+    `invalid RUNFABRIC_CALL_LOCAL_MAX_BODY_BYTES=${JSON.stringify(raw)}; using default ${DEFAULT_MAX_REQUEST_BODY_BYTES}`
+  );
+  return DEFAULT_MAX_REQUEST_BODY_BYTES;
+}
 
 function startTypeScriptWatch(projectDir: string): ChildProcess | undefined {
   const tsconfigPath = resolve(projectDir, "tsconfig.json");
@@ -67,10 +99,19 @@ async function stopChildProcess(child: ChildProcess, timeoutMs = 1500): Promise<
   ]);
 }
 
-async function readRequestBody(request: AsyncIterable<string | Buffer>): Promise<string | undefined> {
+async function readRequestBody(
+  request: AsyncIterable<string | Buffer>,
+  maxBytes: number
+): Promise<string | undefined> {
   const chunks: Buffer[] = [];
+  let totalBytes = 0;
   for await (const chunk of request) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    const chunkBuffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+    totalBytes += chunkBuffer.byteLength;
+    if (totalBytes > maxBytes) {
+      throw new RequestBodyTooLargeError(maxBytes);
+    }
+    chunks.push(chunkBuffer);
   }
   if (chunks.length === 0) {
     return undefined;
@@ -80,19 +121,63 @@ async function readRequestBody(request: AsyncIterable<string | Buffer>): Promise
 
 function writeServerError(response: ServerResponse, serverError: unknown): void {
   const message = serverError instanceof Error ? serverError.message : String(serverError);
-  response.statusCode = 500;
+  const statusCode =
+    serverError && typeof serverError === "object" && "statusCode" in serverError
+      ? Number((serverError as { statusCode?: unknown }).statusCode) || 500
+      : 500;
+  response.statusCode = statusCode;
   response.setHeader("content-type", "application/json");
   response.end(JSON.stringify({ error: message }));
+}
+
+type LoadedHandler = NonNullable<Awaited<ReturnType<typeof resolveExecutionContext>>["handler"]>;
+
+export function createHandlerResolver<T>(options: {
+  watchMode: boolean;
+  initialHandler?: T;
+  loadFreshHandler: () => Promise<T>;
+  readWatchVersion: () => Promise<string>;
+}): () => Promise<T> {
+  if (!options.watchMode) {
+    if (options.initialHandler === undefined) {
+      throw new Error("handler is not loaded");
+    }
+    return async () => options.initialHandler as T;
+  }
+
+  let cachedVersion: string | undefined;
+  let cachedHandler = options.initialHandler;
+  let pendingLoad: Promise<T> | undefined;
+
+  return async () => {
+    if (pendingLoad) {
+      return pendingLoad;
+    }
+
+    pendingLoad = (async () => {
+      const nextVersion = await options.readWatchVersion();
+      if (cachedHandler === undefined || nextVersion !== cachedVersion) {
+        cachedHandler = await options.loadFreshHandler();
+        cachedVersion = nextVersion;
+      }
+      return cachedHandler;
+    })();
+
+    try {
+      return await pendingLoad;
+    } finally {
+      pendingLoad = undefined;
+    }
+  };
 }
 
 async function invokeServeRequest(
   projectDir: string,
   provider: string,
-  entry: string,
-  watchMode: boolean,
-  handler: Awaited<ReturnType<typeof resolveExecutionContext>>["handler"],
+  resolveHandler: () => Promise<LoadedHandler>,
   host: string,
   port: number,
+  maxRequestBodyBytes: number,
   extraHeaders: Record<string, string>,
   request: IncomingMessage
 ) {
@@ -102,28 +187,24 @@ async function invokeServeRequest(
     method: (request.method || "GET").toUpperCase(),
     path: requestUrl.pathname,
     query: requestUrl.search.startsWith("?") ? requestUrl.search.slice(1) : requestUrl.search,
-    body: await readRequestBody(request),
+    body: await readRequestBody(request, maxRequestBodyBytes),
     headers: {
       ...normalizeNodeHeaders(request.headers),
       ...extraHeaders
     }
   };
   const event = createEventFromOptions(parsed);
-  const requestHandler = watchMode ? await loadHandler(projectDir, entry, true) : handler;
-  if (!requestHandler) {
-    throw new Error("handler is not loaded");
-  }
+  const requestHandler = await resolveHandler();
   return invokeWithProvider(provider, requestHandler, event);
 }
 
 function createServeServer(params: {
   projectDir: string;
   provider: string;
-  entry: string;
-  watchMode: boolean;
-  handler: Awaited<ReturnType<typeof resolveExecutionContext>>["handler"];
+  resolveHandler: () => Promise<LoadedHandler>;
   host: string;
   port: number;
+  maxRequestBodyBytes: number;
   extraHeaders: Record<string, string>;
 }) {
   return createServer(async (request, response) => {
@@ -131,11 +212,10 @@ function createServeServer(params: {
       const invokeResult = await invokeServeRequest(
         params.projectDir,
         params.provider,
-        params.entry,
-        params.watchMode,
-        params.handler,
+        params.resolveHandler,
         params.host,
         params.port,
+        params.maxRequestBodyBytes,
         params.extraHeaders,
         request
       );
@@ -229,14 +309,38 @@ export async function serveLocalCalls(projectDir: string, options: LocalCallOpti
   const { provider, entry, handler } = await resolveExecutionContext(projectDir, options);
   const host = options.host || "127.0.0.1";
   const port = options.port ?? 8787;
+  const maxRequestBodyBytes = resolveMaxRequestBodyBytes();
   const watchMode = Boolean(options.watch);
   const extraHeaders = parseHeaders(options.header || []);
-  const server = createServeServer({ projectDir, provider, entry, watchMode, handler, host, port, extraHeaders });
+  const resolveHandler = createHandlerResolver<LoadedHandler>({
+    watchMode,
+    initialHandler: handler || undefined,
+    loadFreshHandler: async () => {
+      const loaded = await loadHandler(projectDir, entry, true);
+      if (!loaded) {
+        throw new Error("handler is not loaded");
+      }
+      return loaded;
+    },
+    readWatchVersion: async () => {
+      const snapshot = await resolveHandlerSnapshot(projectDir, entry);
+      return snapshot.version;
+    }
+  });
+  const server = createServeServer({
+    projectDir,
+    provider,
+    resolveHandler,
+    host,
+    port,
+    maxRequestBodyBytes,
+    extraHeaders
+  });
   await listenServeServer(server, host, port);
 
   const serverAddress = server.address();
   const resolvedPort = serverAddress && typeof serverAddress === "object" ? serverAddress.port : port;
-  const tscWatch = watchMode && entry.endsWith(".ts") ? startTypeScriptWatch(projectDir) : undefined;
+  const tscWatch = watchMode && /\.(ts|tsx)$/i.test(entry) ? startTypeScriptWatch(projectDir) : undefined;
   logServeStartup(host, resolvedPort, provider, entry, watchMode);
   await waitForServeShutdown(server, tscWatch);
 }

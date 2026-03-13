@@ -179,7 +179,10 @@ test("call-local --serve starts localhost server", async () => {
     ["--tsconfig", runtimeTsConfig, cliEntry, "call-local", "-c", configPath, "--provider", "aws-lambda", "--serve", "--port", "0"],
     {
       cwd: repoRoot,
-      env: process.env,
+      env: {
+        ...process.env,
+        RUNFABRIC_CALL_LOCAL_MAX_BODY_BYTES: "16"
+      },
       stdio: ["ignore", "pipe", "pipe"]
     }
   );
@@ -230,6 +233,14 @@ test("call-local --serve starts localhost server", async () => {
     const body = await response.text();
     assert.equal(response.status, 200, body);
     assert.ok(body.includes("\"source\":\"serve\""), body);
+
+    const oversizedResponse = await fetch(`http://127.0.0.1:${port}/hello`, {
+      method: "POST",
+      body: "abcdefghijklmnopqrstuvwxyz"
+    });
+    const oversizedBody = await oversizedResponse.text();
+    assert.equal(oversizedResponse.status, 413, oversizedBody);
+    assert.ok(oversizedBody.includes("request body exceeds 16 bytes"), oversizedBody);
   } finally {
     child.kill("SIGTERM");
     await once(child, "exit");
