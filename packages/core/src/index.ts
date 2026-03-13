@@ -5,6 +5,7 @@ export * from "./credentials";
 export * from "./hooks";
 export * from "./project";
 export * from "./provider";
+export * from "./provider-adapter-utils";
 export * from "./provider-ops";
 export * from "./provider-ids";
 export * from "./primitives";
