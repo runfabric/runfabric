@@ -16,6 +16,15 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     customRuntime: true,
     backgroundJobs: true,
     websockets: true,
+    supportedRuntimes: [
+      "nodejs",
+      "python",
+      "go",
+      "java",
+      "rust",
+      "dotnet"
+    ],
+    engineRuntime: "custom-runtime",
     maxTimeoutSeconds: 900,
     maxMemoryMB: 10240
   },
@@ -34,6 +43,14 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     customRuntime: true,
     backgroundJobs: true,
     websockets: false,
+    supportedRuntimes: [
+      "nodejs",
+      "python",
+      "go",
+      "java",
+      "dotnet"
+    ],
+    engineRuntime: "custom-runtime",
     maxTimeoutSeconds: 3600,
     maxMemoryMB: 32768
   },
@@ -52,6 +69,13 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     customRuntime: false,
     backgroundJobs: true,
     websockets: false,
+    supportedRuntimes: [
+      "nodejs",
+      "python",
+      "java",
+      "dotnet"
+    ],
+    engineRuntime: "unsupported",
     maxTimeoutSeconds: 600,
     maxMemoryMB: 4096
   },
@@ -69,7 +93,16 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     containerImage: true,
     customRuntime: true,
     backgroundJobs: true,
-    websockets: true
+    websockets: true,
+    supportedRuntimes: [
+      "nodejs",
+      "python",
+      "go",
+      "java",
+      "rust",
+      "dotnet"
+    ],
+    engineRuntime: "container"
   },
   "cloudflare-workers": {
     http: true,
@@ -85,7 +118,11 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     containerImage: false,
     customRuntime: false,
     backgroundJobs: false,
-    websockets: false
+    websockets: false,
+    supportedRuntimes: [
+      "nodejs"
+    ],
+    engineRuntime: "unsupported"
   },
   vercel: {
     http: true,
@@ -101,7 +138,11 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     containerImage: false,
     customRuntime: false,
     backgroundJobs: false,
-    websockets: false
+    websockets: false,
+    supportedRuntimes: [
+      "nodejs"
+    ],
+    engineRuntime: "unsupported"
   },
   netlify: {
     http: true,
@@ -117,7 +158,11 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     containerImage: false,
     customRuntime: false,
     backgroundJobs: false,
-    websockets: false
+    websockets: false,
+    supportedRuntimes: [
+      "nodejs"
+    ],
+    engineRuntime: "unsupported"
   },
   "alibaba-fc": {
     http: true,
@@ -134,6 +179,15 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     customRuntime: true,
     backgroundJobs: true,
     websockets: false,
+    supportedRuntimes: [
+      "nodejs",
+      "python",
+      "go",
+      "java",
+      "rust",
+      "dotnet"
+    ],
+    engineRuntime: "custom-runtime",
     maxTimeoutSeconds: 3600,
     maxMemoryMB: 32768
   },
@@ -152,6 +206,10 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     customRuntime: false,
     backgroundJobs: false,
     websockets: false,
+    supportedRuntimes: [
+      "nodejs"
+    ],
+    engineRuntime: "unsupported",
     maxTimeoutSeconds: 900,
     maxMemoryMB: 3072
   },
@@ -170,6 +228,15 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     customRuntime: true,
     backgroundJobs: true,
     websockets: true,
+    supportedRuntimes: [
+      "nodejs",
+      "python",
+      "go",
+      "java",
+      "rust",
+      "dotnet"
+    ],
+    engineRuntime: "container",
     maxTimeoutSeconds: 3600,
     maxMemoryMB: 8192
   },
@@ -188,6 +255,15 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     customRuntime: true,
     backgroundJobs: false,
     websockets: false,
+    supportedRuntimes: [
+      "nodejs",
+      "python",
+      "go",
+      "java",
+      "rust",
+      "dotnet"
+    ],
+    engineRuntime: "custom-runtime",
     maxTimeoutSeconds: 600,
     maxMemoryMB: 512
   }

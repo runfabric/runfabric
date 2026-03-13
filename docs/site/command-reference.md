@@ -2,7 +2,7 @@
 
 ## Core
 
-- `runfabric init [--dir <path>] [--template <api|worker|queue|cron|storage|eventbridge|pubsub>] [--provider <name>] [--state-backend <local|postgres|s3|gcs|azblob>] [--lang <ts|js>] [--service <name>] [--pm <npm|pnpm|yarn|bun>] [--skip-install] [--call-local] [--no-interactive]`
+- `runfabric init [--dir <path>] [--template <api|worker|queue|cron|storage|eventbridge|pubsub>] [--provider <name>] [--runtime <nodejs|python|go|java|rust|dotnet>] [--state-backend <local|postgres|s3|gcs|azblob>] [--lang <ts|js>] [--service <name>] [--pm <npm|pnpm|yarn|bun>] [--skip-install] [--call-local] [--no-interactive]`
 - `runfabric docs check [--config <path>] [--stage <name>] [--readme <path>] [--json]`
 - `runfabric docs sync [--config <path>] [--stage <name>] [--readme <path>] [--dry-run] [--json]`
 - `runfabric doctor -c <config> [--stage <name>]`

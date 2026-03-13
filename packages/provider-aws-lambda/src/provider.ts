@@ -113,12 +113,28 @@ function resolveRoleArn(project: ProjectConfig): string | undefined {
   );
 }
 
+function defaultAwsRuntime(projectRuntime: ProjectConfig["runtime"]): Runtime {
+  if (projectRuntime === "python") {
+    return "python3.12";
+  }
+  if (projectRuntime === "go" || projectRuntime === "rust") {
+    return "provided.al2023";
+  }
+  if (projectRuntime === "java") {
+    return "java21";
+  }
+  if (projectRuntime === "dotnet") {
+    return "dotnet8";
+  }
+  return "nodejs20.x";
+}
+
 function resolveLambdaRuntime(project: ProjectConfig): Runtime {
   const extension = awsExtension(project);
   const runtime =
     readNonEmptyString(extension.runtime) ||
     readNonEmptyString(process.env.RUNFABRIC_AWS_LAMBDA_RUNTIME) ||
-    "nodejs20.x";
+    defaultAwsRuntime(project.runtime);
   return runtime as Runtime;
 }
 
@@ -180,6 +196,7 @@ function buildCliDeployEnv(input: {
   project: ProjectConfig;
   plan: DeployPlan;
   stage: string;
+  runtime: Runtime;
   metadata: ReturnType<typeof createAwsDeployMetadata>;
 }): Record<string, string> {
   return {
@@ -187,6 +204,7 @@ function buildCliDeployEnv(input: {
     RUNFABRIC_STAGE: input.stage,
     RUNFABRIC_ARTIFACT_PATH: input.plan.artifactPath || "",
     RUNFABRIC_ARTIFACT_MANIFEST_PATH: input.plan.artifactManifestPath || "",
+    RUNFABRIC_AWS_RUNTIME: input.runtime,
     RUNFABRIC_AWS_QUEUE_EVENT_SOURCES_JSON: JSON.stringify(input.metadata.queueEventSources),
     RUNFABRIC_AWS_STORAGE_EVENTS_JSON: JSON.stringify(input.metadata.storageEvents),
     RUNFABRIC_AWS_EVENTBRIDGE_RULES_JSON: JSON.stringify(input.metadata.eventBridgeRules),
@@ -203,6 +221,7 @@ async function runAwsCliDeploy(input: {
   project: ProjectConfig;
   plan: DeployPlan;
   stage: string;
+  runtime: Runtime;
   metadata: ReturnType<typeof createAwsDeployMetadata>;
 }): Promise<AwsDeployExecution> {
   const command = process.env.RUNFABRIC_AWS_DEPLOY_CMD;
@@ -232,6 +251,7 @@ async function runAwsApiDeploy(input: {
   plan: DeployPlan;
   stage: string;
   region: string;
+  runtime: Runtime;
   metadata: ReturnType<typeof createAwsDeployMetadata>;
   projectDir: string;
 }): Promise<AwsDeployExecution> {
@@ -249,7 +269,7 @@ async function runAwsApiDeploy(input: {
     region: input.region,
     roleArn,
     functionName: resolveFunctionName(input.project, input.stage),
-    runtime: resolveLambdaRuntime(input.project),
+    runtime: input.runtime,
     timeout: resolveLambdaTimeout(input.project),
     memory: resolveLambdaMemory(input.project),
     functionEnv: input.metadata.functionEnv
@@ -291,14 +311,15 @@ async function executeAwsDeploy(
 ): Promise<AwsDeploySummary> {
   const stage = resolveStage(project);
   const region = resolveRegion(project);
+  const runtime = resolveLambdaRuntime(project);
   const metadata = createAwsDeployMetadata(project, region, stage);
   const deploymentId = createDeploymentId("aws-lambda", project.service, stage);
 
   const execution = !isRealDeployModeEnabled("RUNFABRIC_AWS_REAL_DEPLOY")
     ? { endpoint: simulatedEndpoint(project, stage, region), mode: "simulated" as const }
     : process.env.RUNFABRIC_AWS_DEPLOY_CMD
-      ? await runAwsCliDeploy({ options, project, plan, stage, metadata })
-      : await runAwsApiDeploy({ project, plan, stage, region, metadata, projectDir: options.projectDir });
+      ? await runAwsCliDeploy({ options, project, plan, stage, runtime, metadata })
+      : await runAwsApiDeploy({ project, plan, stage, region, runtime, metadata, projectDir: options.projectDir });
 
   return {
     stage,

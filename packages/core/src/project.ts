@@ -3,6 +3,7 @@ import type {
   AwsQueueFunctionResponseTypeEnum,
   TriggerEnum
 } from "./enums";
+import type { RuntimeFamily } from "./runtime";
 
 export interface ProjectResources {
   memory?: number;
@@ -138,7 +139,7 @@ export interface ProjectDeployConfig {
 export interface FunctionConfig {
   name: string;
   entry?: string;
-  runtime?: string;
+  runtime?: RuntimeFamily;
   triggers?: TriggerConfig[];
   resources?: ProjectResources;
   env?: Record<string, string>;
@@ -191,7 +192,8 @@ export interface WorkflowConfig {
 
 export interface ProjectConfig {
   service: string;
-  runtime: string;
+  runtime: RuntimeFamily;
+  runtimeMode?: "native-compat" | "engine";
   entry: string;
   stage?: string;
   providers: string[];

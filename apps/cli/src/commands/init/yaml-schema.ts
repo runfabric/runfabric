@@ -1,4 +1,4 @@
-import { PROVIDER_IDS } from "@runfabric/core";
+import { PROVIDER_IDS, RUNTIME_FAMILIES, RUNTIME_MODES } from "@runfabric/core";
 
 const triggerTypes = [
   "http",
@@ -28,7 +28,8 @@ const runfabricSchema: Record<string, unknown> = {
   required: ["service", "runtime", "entry", "providers", "triggers"],
   properties: {
     service: { type: "string", minLength: 1, description: "Service name" },
-    runtime: { type: "string", examples: ["nodejs"], description: "Runtime identifier" },
+    runtime: { type: "string", enum: [...RUNTIME_FAMILIES], examples: ["nodejs"], description: "Runtime identifier" },
+    runtimeMode: { type: "string", enum: [...RUNTIME_MODES], examples: ["native-compat"] },
     entry: { type: "string", minLength: 1, description: "Handler entry file path" },
     stage: { type: "string", minLength: 1 },
     providers: {
@@ -136,7 +137,7 @@ const runfabricSchema: Record<string, unknown> = {
       properties: {
         name: { type: "string", minLength: 1 },
         entry: { type: "string" },
-        runtime: { type: "string" },
+        runtime: { type: "string", enum: [...RUNTIME_FAMILIES] },
         triggers: { type: "array", minItems: 1, items: { $ref: "#/$defs/trigger" } },
         resources: { $ref: "#/$defs/resources" },
         env: stringMapSchema
@@ -241,7 +242,8 @@ const runfabricSchema: Record<string, unknown> = {
       type: "object",
       additionalProperties: true,
       properties: {
-        runtime: { type: "string" },
+        runtime: { type: "string", enum: [...RUNTIME_FAMILIES] },
+        runtimeMode: { type: "string", enum: [...RUNTIME_MODES] },
         entry: { type: "string" },
         providers: {
           type: "array",

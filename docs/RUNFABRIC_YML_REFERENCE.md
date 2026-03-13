@@ -21,7 +21,8 @@ triggers:
 ## Top-Level Fields
 
 - `service` (`string`, required)
-- `runtime` (`string`, required)
+- `runtime` (`nodejs|python|go|java|rust|dotnet`, required)
+- `runtimeMode` (`native-compat|engine`, optional; default behavior is `native-compat`)
 - `entry` (`string`, required)
 - `providers` (`string[]`, required)
 - `triggers` (`trigger[]`, required)
@@ -36,6 +37,27 @@ triggers:
 - `deploy` (`object`, optional)
 - `state` (`object`, optional)
 - `stages` (`Record<string, override>`, optional)
+
+## Runtime Families
+
+Supported runtime families:
+
+- `nodejs`
+- `python`
+- `go`
+- `java`
+- `rust`
+- `dotnet`
+
+Runtime support is validated per provider during planning, based on each provider adapter capability matrix.
+
+Runtime mode:
+
+- `native-compat`: existing provider-native language runtime path.
+- `engine`: engine-first planning mode with provider feasibility checks.
+
+Engine feasibility reference: `docs/ENGINE_FEASIBILITY_MATRIX.md`.
+Engine contract compatibility reference: `docs/ENGINE_API_ABI.md`.
 
 ## Dynamic Env Bindings
 
@@ -163,7 +185,7 @@ Behavior precedence for rollback-on-failure:
 functions:
   - name: api
     entry: src/api.ts
-    runtime: nodejs # optional override
+    runtime: python # optional override (`nodejs|python|go|java|rust|dotnet`)
     triggers:
       - type: http
         method: POST

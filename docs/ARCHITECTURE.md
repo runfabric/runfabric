@@ -2,6 +2,69 @@
 
 runfabric is a CLI/serverless deployment framework with provider adapters. It is not a standalone compute scheduler/runtime fabric.
 
+Runtime model:
+
+- Canonical runtime families: `nodejs | python | go | java | rust | dotnet`.
+- Runtime mode supports `native-compat` and `engine` planning paths.
+- Planner enforces provider runtime compatibility from the capability matrix before deploy.
+- `call-local` and `dev` are currently Node-only (`runtime: nodejs`) until multi-runtime local emulation lands.
+
+## Engine-First Target Model (P8-R2)
+
+This is the target architecture for final multi-runtime support.
+Current behavior remains provider-runtime-first until P8-R2 phases land.
+
+```text
+            runfabric CLI / Planner / Builder
+                         │
+                  RunFabric Engine
+                  (Go or Rust core)
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+  Language Host    Language Host    Language Host
+    (Node.js)         (Python)          (Go)
+        │                │                │
+    Adapter/SDK      Adapter/SDK      Adapter/SDK
+        │                │                │
+        └───── Engine Contract RPC / IR ─┘
+                         │
+                  Provider Adapter
+                         │
+                      Cloud API
+```
+
+Model intent:
+
+- One compiled engine is the primary execution surface.
+- Language-specific layers are build-time adapters that emit a shared engine contract.
+- Deployed artifacts should avoid language-managed runtime dependency where provider custom-runtime or container paths allow.
+- Native provider runtime adapters stay as temporary compatibility mode during migration.
+
+Engine contract boundaries:
+
+- Inputs: normalized trigger/event envelope + stage/provider metadata + env/secrets snapshot.
+- Outputs: normalized response envelope (HTTP and async trigger semantics).
+- Errors: stable typed error classes for deterministic provider mapping.
+- Telemetry: structured logs, metrics, and trace correlation hooks.
+
+Provider adapter responsibilities in engine mode:
+
+- Validate provider capability support for engine bundles.
+- Map engine bundle runtime metadata to provider-native deploy/runtime fields.
+- Reject unsupported engine runtime paths with explicit planner/deploy diagnostics.
+- Keep deploy/invoke/remove behavior deterministic with no silent fallback to native mode.
+
+Phase 1 decision artifacts:
+
+- ADR: `docs/adr/0001-engine-first-multi-runtime.md`
+- Provider feasibility matrix: `docs/ENGINE_FEASIBILITY_MATRIX.md`
+
+Phase 2 contract artifacts:
+
+- Engine API/ABI + compatibility policy: `docs/ENGINE_API_ABI.md`
+- Artifact manifest v2 fixtures: `tests/fixtures/artifact-manifest-v2/matrix.json`
+
 ## Repo Layout
 
 - `apps/cli`: command entrypoints and workflow orchestration.

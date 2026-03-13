@@ -8,7 +8,7 @@ Project scope (current):
 
 - CLI/serverless deployment framework, not a standalone scheduler/runtime fabric.
 - Uses `runfabric.yml`; not a drop-in config replacement for `serverless.yml`.
-- Node-first beta (`runtime: nodejs` production-ready path in current release train).
+- Runtime families: `nodejs | python | go | java | rust | dotnet` (provider-dependent support).
 
 ## Why runfabric
 
@@ -28,7 +28,8 @@ Project scope (current):
 - Compose orchestration (`plan|deploy|remove`) with dependency ordering and bounded concurrency
 - Stage-aware local state and deployment receipts
 - Dynamic env interpolation in config values (`${env:VAR}` and `${env:VAR,default}`)
-- Node-first runtime guardrails for current beta (`runtime: nodejs` production-ready path)
+- Per-provider runtime capability guardrails with clear unsupported-runtime planner errors
+- Local `call-local` and `dev` loops currently support `runtime: nodejs` projects
 - Extended trigger model: `http`, `cron`, `queue`, `storage`, `eventbridge`, `pubsub`, `kafka`, `rabbitmq`
 - Workflow/resources/secrets schema support in `runfabric.yml`
 
@@ -211,6 +212,7 @@ Full command reference: `docs/site/command-reference.md`
 - `docs/CREDENTIALS_MATRIX.md`
 - `docs/PROVIDER-SETUP.md`
 - `docs/ARCHITECTURE.md`
+- `docs/ENGINE_API_ABI.md`
 - `docs/REPO_DEVELOPMENT.md`
 - `docs/CI_TEMPLATES.md`
 - `docs/PLUGIN_API.md`

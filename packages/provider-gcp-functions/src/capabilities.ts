@@ -15,6 +15,8 @@ export const gcpFunctionsCapabilities: ProviderCapabilities = {
   customRuntime: true,
   backgroundJobs: true,
   websockets: false,
+  supportedRuntimes: ["nodejs", "python", "go", "java", "dotnet"],
+  engineRuntime: "custom-runtime",
   maxTimeoutSeconds: 3600,
   maxMemoryMB: 32768
 };

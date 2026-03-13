@@ -1,4 +1,4 @@
-import { PROVIDER_IDS } from "@runfabric/core";
+import { PROVIDER_IDS, RUNTIME_FAMILIES } from "@runfabric/core";
 import type { PromptOption } from "./prompt-option";
 import type { InitTemplateName } from "./types";
 
@@ -131,6 +131,15 @@ export function languagePromptOptions(): PromptOption[] {
       keywords: ["javascript", "plain js"]
     }
   ];
+}
+
+export function runtimePromptOptions(): PromptOption[] {
+  return RUNTIME_FAMILIES.map((runtime) => ({
+    value: runtime,
+    label: runtime,
+    group: runtime === "nodejs" ? "General" : "Additional",
+    description: runtime === "nodejs" ? "Default runtime family" : `Use ${runtime} runtime family`
+  }));
 }
 
 export function stateBackendPromptOptions(): PromptOption[] {

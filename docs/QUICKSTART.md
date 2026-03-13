@@ -9,7 +9,7 @@ This guide gives two easy onboarding paths:
 
 - Node.js `>= 20`
 - pnpm via Corepack
-- Current beta runtime target: `runtime: nodejs`
+- Runtime families: `nodejs | python | go | java | rust | dotnet` (provider-dependent support)
 
 Install:
 
@@ -60,6 +60,7 @@ Interactive `init` prompts for:
 
 - template (`api`, `worker`, `queue`, `cron`, `storage`, `eventbridge`, `pubsub`)
 - provider
+- runtime (`nodejs`, `python`, `go`, `java`, `rust`, `dotnet`)
 - state backend (`local`, `postgres`, `s3`, `gcs`, `azblob`) with default `local`
 - language (`ts` or `js`)
 
@@ -113,6 +114,12 @@ Non-interactive example:
 
 ```bash
 pnpm run runfabric -- init --dir ./my-api --template api --provider aws-lambda --lang ts --skip-install
+```
+
+Non-interactive with explicit runtime family:
+
+```bash
+pnpm run runfabric -- init --dir ./my-api --template api --provider aws-lambda --runtime python --lang ts --skip-install
 ```
 
 Non-interactive with explicit state backend:
@@ -172,6 +179,8 @@ pnpm run call:local -- --provider aws-lambda --event ./event.eventbridge.json
 pnpm run call:local -- --provider gcp-functions --event ./event.pubsub.json
 ```
 
+`call-local` currently supports `runtime: nodejs` projects only.
+
 For TypeScript entries, `call-local` now runs an initial `tsc -p tsconfig.json` automatically when no built handler artifact is found (published CLI mode). Keep `typescript` installed in your project dev dependencies.
 
 Or use the unified dev loop:
@@ -182,6 +191,8 @@ pnpm run runfabric -- dev -c ./my-api/runfabric.yml --preset queue --once
 pnpm run runfabric -- dev -c ./my-api/runfabric.yml --preset storage --once
 # additional presets: cron | eventbridge | pubsub | kafka | rabbitmq
 ```
+
+`dev` currently supports `runtime: nodejs` projects only.
 
 Compose-style multi-service orchestration:
 

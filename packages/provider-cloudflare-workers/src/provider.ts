@@ -266,9 +266,10 @@ function validateCloudflareProvider(project: ProjectConfig): ValidationResult {
   const warnings: string[] = [];
   const errors: string[] = [];
 
-  const runtime = project.runtime.trim().toLowerCase();
-  if (!["nodejs", "javascript", "typescript", "edge"].includes(runtime)) {
-    warnings.push("cloudflare-workers works best with nodejs/javascript/typescript/edge runtimes");
+  if (!cloudflareWorkersCapabilities.supportedRuntimes.includes(project.runtime)) {
+    warnings.push(
+      `cloudflare-workers works best with runtimes: ${cloudflareWorkersCapabilities.supportedRuntimes.join(", ")}`
+    );
   }
 
   errors.push(...missingRequiredCredentialErrors(cloudflareCredentialSchema));

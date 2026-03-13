@@ -469,6 +469,15 @@ export async function invokeWithProvider(
   throw new Error(`unsupported provider for local call: ${provider}`);
 }
 
+function ensureLocalRuntimeSupported(runtime: string): void {
+  if (runtime === "nodejs") {
+    return;
+  }
+  throw new Error(
+    `call-local currently supports runtime nodejs only. project runtime is ${runtime}`
+  );
+}
+
 export async function executeLocalCall(projectDir: string, options: LocalCallOptions): Promise<{
   provider: string;
   entry: string;
@@ -476,6 +485,7 @@ export async function executeLocalCall(projectDir: string, options: LocalCallOpt
   response: LocalInvokeResponse;
 }> {
   const planning = await loadPlanningContext(projectDir, options.config);
+  ensureLocalRuntimeSupported(planning.project.runtime);
   const provider = options.provider || planning.project.providers[0] || "aws-lambda";
 
   if (!PROVIDER_IDS.includes(provider as (typeof PROVIDER_IDS)[number])) {
@@ -506,6 +516,7 @@ export async function resolveExecutionContext(
   options: Pick<LocalCallOptions, "config" | "provider" | "entry" | "watch">
 ): Promise<LocalExecutionContext> {
   const planning = await loadPlanningContext(projectDir, options.config);
+  ensureLocalRuntimeSupported(planning.project.runtime);
   const provider = options.provider || planning.project.providers[0] || "aws-lambda";
   if (!PROVIDER_IDS.includes(provider as (typeof PROVIDER_IDS)[number])) {
     throw new Error(`unknown provider: ${provider}`);

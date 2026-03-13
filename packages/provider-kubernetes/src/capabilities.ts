@@ -14,5 +14,7 @@ export const kubernetesCapabilities: ProviderCapabilities = {
   containerImage: true,
   customRuntime: true,
   backgroundJobs: true,
-  websockets: true
+  websockets: true,
+  supportedRuntimes: ["nodejs", "python", "go", "java", "rust", "dotnet"],
+  engineRuntime: "container"
 };

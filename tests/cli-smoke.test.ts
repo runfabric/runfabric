@@ -44,6 +44,38 @@ test("cli supports version subcommand", () => {
   assert.equal(result.stdout.trim(), cliPackageVersion);
 });
 
+test("call-local rejects non-node runtime projects", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-call-local-runtime-check-"));
+  await mkdir(join(projectDir, "src"), { recursive: true });
+  await writeFile(join(projectDir, "src", "index.py"), "def handler(event, context):\n    return {}\n", "utf8");
+  await writeFile(
+    join(projectDir, "runfabric.yml"),
+    [
+      "service: runtime-check",
+      "runtime: python",
+      "entry: src/index.py",
+      "",
+      "providers:",
+      "  - aws-lambda",
+      "",
+      "triggers:",
+      "  - type: http",
+      "    method: GET",
+      "    path: /hello",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const configPath = join(projectDir, "runfabric.yml");
+  const result = runCli(["call-local", "-c", configPath, "--provider", "aws-lambda", "--method", "GET", "--path", "/hello"], {});
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stdout}\n${result.stderr}`,
+    /call-local currently supports runtime nodejs only\. project runtime is python/
+  );
+});
+
 test("cli smoke: doctor/plan/build/deploy complete for cloudflare fixture", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "runfabric-cli-smoke-"));
   await mkdir(join(projectDir, "src"), { recursive: true });

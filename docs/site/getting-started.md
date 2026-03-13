@@ -4,7 +4,7 @@ Scope note:
 
 - runfabric is a CLI-first serverless framework.
 - It uses `runfabric.yml` (not `serverless.yml`).
-- Current release train is Node-first (`runtime: nodejs`).
+- Runtime families: `nodejs | python | go | java | rust | dotnet` (provider-dependent support).
 
 1. Install dependencies:
 
@@ -30,7 +30,7 @@ Available templates:
 - `eventbridge`
 - `pubsub`
 
-`init` supports interactive prompts for template, provider, state backend, and language.
+`init` supports interactive prompts for template, provider, runtime, state backend, and language.
 
 Template scope note:
 

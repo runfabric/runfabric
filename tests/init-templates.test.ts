@@ -196,6 +196,28 @@ test("init supports js language scaffold", async () => {
   assert.ok(envExample.includes("CLOUDFLARE_ACCOUNT_ID=your-value"));
 });
 
+test("init supports explicit runtime family selection", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-init-runtime-"));
+  const result = runCli([
+    "init",
+    "--dir",
+    projectDir,
+    "--template",
+    "api",
+    "--provider",
+    "aws-lambda",
+    "--runtime",
+    "python",
+    "--lang",
+    "ts",
+    "--skip-install"
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+
+  const config = await readFile(join(projectDir, "runfabric.yml"), "utf8");
+  assert.ok(config.includes("runtime: python"));
+});
+
 test("init selects a template-compatible provider when template is specified without provider", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "runfabric-init-template-provider-auto-"));
   const result = runCli([

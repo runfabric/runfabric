@@ -1,3 +1,5 @@
+import type { RuntimeFamily } from "./runtime";
+
 export interface ProviderCapabilities {
   http: boolean;
   cron: boolean;
@@ -13,6 +15,8 @@ export interface ProviderCapabilities {
   customRuntime: boolean;
   backgroundJobs: boolean;
   websockets: boolean;
+  supportedRuntimes: RuntimeFamily[];
+  engineRuntime: "custom-runtime" | "container" | "unsupported";
   maxTimeoutSeconds?: number;
   maxMemoryMB?: number;
 }

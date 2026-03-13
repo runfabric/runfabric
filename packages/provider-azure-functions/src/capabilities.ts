@@ -15,6 +15,8 @@ export const azureFunctionsCapabilities: ProviderCapabilities = {
   customRuntime: false,
   backgroundJobs: true,
   websockets: false,
+  supportedRuntimes: ["nodejs", "python", "java", "dotnet"],
+  engineRuntime: "unsupported",
   maxTimeoutSeconds: 600,
   maxMemoryMB: 4096
 };

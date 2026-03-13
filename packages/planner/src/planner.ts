@@ -39,11 +39,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isNodeRuntime(runtime: string): boolean {
-  const normalized = runtime.trim().toLowerCase();
-  return normalized === "nodejs" || normalized === "node" || normalized.startsWith("node");
-}
-
 function validateTriggerShape(trigger: TriggerConfig): string | null {
   if (trigger.type === TriggerEnum.Queue) {
     if (!isNonEmptyString(trigger.queue)) {
@@ -121,23 +116,6 @@ function validateTriggerSupport(trigger: TriggerConfig, capabilities: ProviderCa
   return null;
 }
 
-function collectRuntimeWarnings(project: ProjectConfig): string[] {
-  const warnings: string[] = [];
-  if (!isNodeRuntime(project.runtime)) {
-    warnings.push(
-      `runtime ${project.runtime} is not production-ready in this release train; use runtime: nodejs for beta deployments`
-    );
-  }
-  for (const fn of project.functions || []) {
-    if (fn.runtime && !isNodeRuntime(fn.runtime)) {
-      warnings.push(
-        `function ${fn.name} runtime ${fn.runtime} is not production-ready in this release train; use runtime: nodejs`
-      );
-    }
-  }
-  return warnings;
-}
-
 function pushProviderError(
   providerPlan: ProviderPlan,
   provider: string,
@@ -195,23 +173,61 @@ function evaluateProviderResources(
   }
 }
 
-function evaluateProviderRuntimeWarnings(
+function evaluateProviderRuntimeSupport(
   project: ProjectConfig,
   provider: string,
+  capabilities: ProviderCapabilities,
   providerPlan: ProviderPlan,
-  warnings: string[]
+  errors: string[]
 ): void {
-  if (!isNodeRuntime(project.runtime)) {
-    const message = `${provider}: runtime ${project.runtime} is not production-ready in this release train`;
-    providerPlan.warnings.push(message);
-    warnings.push(message);
+  const supported = capabilities.supportedRuntimes;
+  const supportedLabel = supported.join(", ");
+  if (!supported.includes(project.runtime)) {
+    pushProviderError(
+      providerPlan,
+      provider,
+      `runtime ${project.runtime} is not supported (supported: ${supportedLabel})`,
+      errors
+    );
   }
+
+  for (const fn of project.functions || []) {
+    if (!fn.runtime || supported.includes(fn.runtime)) {
+      continue;
+    }
+    pushProviderError(
+      providerPlan,
+      provider,
+      `function ${fn.name} runtime ${fn.runtime} is not supported (supported: ${supportedLabel})`,
+      errors
+    );
+  }
+}
+
+function evaluateProviderEngineModeSupport(
+  project: ProjectConfig,
+  provider: string,
+  capabilities: ProviderCapabilities,
+  providerPlan: ProviderPlan,
+  errors: string[]
+): void {
+  if (project.runtimeMode !== "engine") {
+    return;
+  }
+  if (capabilities.engineRuntime !== "unsupported") {
+    return;
+  }
+  pushProviderError(
+    providerPlan,
+    provider,
+    "runtimeMode engine is not supported for this provider (engineRuntime=unsupported)",
+    errors
+  );
 }
 
 function createProviderPlanEntry(
   project: ProjectConfig,
   provider: string,
-  warnings: string[],
   errors: string[]
 ): ProviderPlan {
   const capabilities = capabilityMatrix[provider];
@@ -231,7 +247,8 @@ function createProviderPlanEntry(
 
   evaluateProviderTriggers(project, provider, capabilities, providerPlan, errors);
   evaluateProviderResources(project, provider, capabilities, providerPlan, errors);
-  evaluateProviderRuntimeWarnings(project, provider, providerPlan, warnings);
+  evaluateProviderRuntimeSupport(project, provider, capabilities, providerPlan, errors);
+  evaluateProviderEngineModeSupport(project, provider, capabilities, providerPlan, errors);
   return providerPlan;
 }
 
@@ -254,11 +271,11 @@ function appendPortabilityWarnings(
 
 export function createPlan(project: ProjectConfig): PlanningResult {
   const providerPlans: ProviderPlan[] = [];
-  const warnings: string[] = collectRuntimeWarnings(project);
+  const warnings: string[] = [];
   const errors: string[] = [];
 
   for (const provider of project.providers) {
-    providerPlans.push(createProviderPlanEntry(project, provider, warnings, errors));
+    providerPlans.push(createProviderPlanEntry(project, provider, errors));
   }
 
   const portability = createPortabilityDiagnostics(

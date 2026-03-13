@@ -72,3 +72,26 @@ for (const configPath of configs) {
 }
 
 console.log(`schema compatibility OK for ${configs.length} example config(s)`);
+
+const manifestSchemaTests = ["tests/artifact-manifest-schema.test.ts"];
+const manifestSchemaResult = spawnSync(
+  tsxBin,
+  ["--tsconfig", runtimeTsConfig, "--test", ...manifestSchemaTests],
+  {
+    cwd: repoRoot,
+    encoding: "utf8"
+  }
+);
+
+if (manifestSchemaResult.status !== 0) {
+  console.error("artifact manifest schema compatibility checks failed");
+  if (manifestSchemaResult.stderr) {
+    console.error(manifestSchemaResult.stderr.trim());
+  }
+  if (manifestSchemaResult.stdout) {
+    console.error(manifestSchemaResult.stdout.trim());
+  }
+  process.exit(manifestSchemaResult.status ?? 1);
+}
+
+console.log("artifact manifest schema compatibility OK");

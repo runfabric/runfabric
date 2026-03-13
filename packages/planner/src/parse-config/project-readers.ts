@@ -7,6 +7,7 @@ import {
   readRequiredString,
   readStringRecordAtPath
 } from "./shared";
+import { readOptionalRuntimeAtPath } from "./runtime";
 import { readTriggerArrayAtPath } from "./triggers";
 
 function cloneSupportedValueAtPath(value: unknown, path: string, errors: string[]): unknown {
@@ -143,7 +144,7 @@ export function readFunctionsAtPath(
     functions.push({
       name,
       entry: readOptionalString(item, "entry", errors),
-      runtime: readOptionalString(item, "runtime", errors),
+      runtime: readOptionalRuntimeAtPath(item.runtime, `${path}[${index}].runtime`, errors),
       triggers: "triggers" in item
         ? readTriggerArrayAtPath(item.triggers, `${path}[${index}].triggers`, errors, 1)
         : undefined,

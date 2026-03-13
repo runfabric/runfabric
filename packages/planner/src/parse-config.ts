@@ -14,11 +14,18 @@ import {
   readStringRecord,
   resolveDynamicBindingsAtPath
 } from "./parse-config/shared";
-import { readStageOverrides, applyStageOverride } from "./parse-config/stages";
+import { readStageOverrides, applyStageOverride, type StageOverride } from "./parse-config/stages";
 import { readStateConfigAtPath } from "./parse-config/state-config";
 import { readTriggerArray } from "./parse-config/triggers";
 import { parseYamlDocument } from "./parse-config/yaml";
 import { readDeployConfigAtPath } from "./parse-config/deploy-config";
+import { readOptionalRuntimeModeAtPath, readRequiredRuntimeAtPath } from "./parse-config/runtime";
+import {
+  applyRuntimeEntryOverride,
+  createRuntimeEntryContext,
+  validateFunctionRuntimeEntries,
+  validateRuntimeEntryContext
+} from "./parse-config/runtime-entry";
 
 export interface ParseProjectConfigOptions {
   stage?: string;
@@ -47,11 +54,10 @@ function readProjectSections(source: Record<string, unknown>, errors: string[]) 
 
 function applySelectedStageOverride(
   project: ProjectConfig,
-  source: Record<string, unknown>,
+  stageOverrides: Record<string, StageOverride> | undefined,
   selectedStage: string,
   errors: string[]
 ): ProjectConfig {
-  const stageOverrides = readStageOverrides(source, errors);
   if (!stageOverrides) {
     return project;
   }
@@ -73,6 +79,56 @@ function applySelectedStageOverride(
   return nextProject;
 }
 
+function validateRootRuntimeEntries(project: ProjectConfig, errors: string[]): void {
+  const rootContext = createRuntimeEntryContext(project.runtime, project.entry, "runtime", "entry");
+  validateRuntimeEntryContext(rootContext, errors);
+  validateFunctionRuntimeEntries(project.functions, "functions", rootContext, errors);
+}
+
+function validateStageRuntimeEntries(
+  project: ProjectConfig,
+  stageOverrides: Record<string, StageOverride> | undefined,
+  errors: string[]
+): void {
+  if (!stageOverrides) {
+    return;
+  }
+
+  const rootContext = createRuntimeEntryContext(project.runtime, project.entry, "runtime", "entry");
+  const defaultOverride = stageOverrides.default;
+  const defaultContext = defaultOverride
+    ? applyRuntimeEntryOverride({
+        base: rootContext,
+        runtime: defaultOverride.runtime,
+        entry: defaultOverride.entry,
+        runtimePath: "stages.default.runtime",
+        entryPath: "stages.default.entry"
+      })
+    : rootContext;
+
+  if (defaultOverride) {
+    validateRuntimeEntryContext(defaultContext, errors);
+    validateFunctionRuntimeEntries(defaultOverride.functions, "stages.default.functions", defaultContext, errors);
+  }
+
+  for (const [stageName, override] of Object.entries(stageOverrides)) {
+    if (stageName === "default") {
+      continue;
+    }
+    const stageContext = applyRuntimeEntryOverride({
+      base: defaultContext,
+      runtime: override.runtime,
+      entry: override.entry,
+      runtimePath: `stages.${stageName}.runtime`,
+      entryPath: `stages.${stageName}.entry`
+    });
+    if (override.runtime || override.entry) {
+      validateRuntimeEntryContext(stageContext, errors);
+    }
+    validateFunctionRuntimeEntries(override.functions, `stages.${stageName}.functions`, stageContext, errors);
+  }
+}
+
 function validateProjectConfigShape(raw: unknown, options: ParseProjectConfigOptions = {}): ProjectConfig {
   if (!isRecord(raw)) {
     throw new Error("Invalid runfabric.yml: root document must be an object");
@@ -85,20 +141,25 @@ function validateProjectConfigShape(raw: unknown, options: ParseProjectConfigOpt
   }
 
   const service = readRequiredString(sourceCandidate, "service", errors);
-  const runtime = readRequiredString(sourceCandidate, "runtime", errors);
+  const runtime = readRequiredRuntimeAtPath(readRequiredString(sourceCandidate, "runtime", errors), "runtime", errors);
+  const runtimeMode = readOptionalRuntimeModeAtPath(sourceCandidate.runtimeMode, "runtimeMode", errors);
   const entry = readRequiredString(sourceCandidate, "entry", errors);
   const selectedStage = resolveSelectedStage(options);
+  const stageOverrides = readStageOverrides(sourceCandidate, errors);
   const sections = readProjectSections(sourceCandidate, errors);
 
   let project: ProjectConfig = {
     service,
-    runtime,
+    runtime: runtime || "nodejs",
+    runtimeMode,
     entry,
     ...sections,
     stage: selectedStage
   };
 
-  project = applySelectedStageOverride(project, sourceCandidate, selectedStage, errors);
+  validateRootRuntimeEntries(project, errors);
+  validateStageRuntimeEntries(project, stageOverrides, errors);
+  project = applySelectedStageOverride(project, stageOverrides, selectedStage, errors);
   validateExtensionTypes(project.extensions, project.providers, errors);
 
   if (errors.length > 0) {
