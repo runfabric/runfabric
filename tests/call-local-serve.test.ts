@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHandlerResolver } from "../apps/cli/src/commands/call-local/serve.ts";
+import {
+  createHandlerResolver,
+  mergeServeEventTemplate
+} from "../apps/cli/src/commands/call-local/serve.ts";
 
 test("createHandlerResolver returns static handler when watch mode is disabled", async () => {
   const resolver = createHandlerResolver<string>({
@@ -51,4 +54,34 @@ test("createHandlerResolver coalesces concurrent watch loads", async () => {
   assert.equal(first, "handler");
   assert.equal(second, "handler");
   assert.equal(loadCount, 1);
+});
+
+test("mergeServeEventTemplate keeps template fields and overrides request keys", () => {
+  const merged = mergeServeEventTemplate(
+    {
+      requestContext: {
+        authorizer: {
+          principalId: "template-user"
+        },
+        http: {
+          method: "POST"
+        }
+      },
+      rawPath: "/from-template"
+    },
+    {
+      requestContext: {
+        http: {
+          method: "GET"
+        }
+      },
+      rawPath: "/from-request"
+    }
+  ) as Record<string, unknown>;
+
+  assert.equal((merged.rawPath as string), "/from-request");
+  assert.deepEqual(merged.requestContext, {
+    authorizer: { principalId: "template-user" },
+    http: { method: "GET" }
+  });
 });

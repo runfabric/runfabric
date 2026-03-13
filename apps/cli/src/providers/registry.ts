@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { ProviderAdapter } from "@runfabric/core";
 import {
   buildProviderMetricsFromLocalArtifacts,
@@ -78,6 +78,17 @@ const OBSERVABILITY_ENV_PREFIX: Record<string, string> = {
   "ibm-openwhisk": "IBM"
 };
 
+const providerModuleCache = new Map<string, Record<string, unknown> | null>();
+const providerFactoryCache = new Map<string, ProviderFactory | null>();
+
+function moduleCacheKey(projectDir: string, packageName: string): string {
+  return `${resolve(projectDir)}::${packageName}`;
+}
+
+function factoryCacheKey(projectDir: string, spec: ProviderModuleSpec): string {
+  return `${moduleCacheKey(projectDir, spec.packageName)}::${spec.factoryExport}`;
+}
+
 function isModuleNotFoundError(error: unknown, packageName: string): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -104,6 +115,12 @@ function loadProviderModule(
   spec: ProviderModuleSpec,
   projectDir: string
 ): Record<string, unknown> | undefined {
+  const cacheKey = moduleCacheKey(projectDir, spec.packageName);
+  const cachedModule = providerModuleCache.get(cacheKey);
+  if (cachedModule !== undefined) {
+    return cachedModule || undefined;
+  }
+
   const projectRequire = createProjectRequire(projectDir);
   const requireChain: NodeJS.Require[] = [];
   if (projectRequire) {
@@ -113,7 +130,9 @@ function loadProviderModule(
 
   for (const loader of requireChain) {
     try {
-      return loader(spec.packageName) as Record<string, unknown>;
+      const loaded = loader(spec.packageName) as Record<string, unknown>;
+      providerModuleCache.set(cacheKey, loaded);
+      return loaded;
     } catch (error) {
       if (isModuleNotFoundError(error, spec.packageName)) {
         continue;
@@ -122,6 +141,7 @@ function loadProviderModule(
     }
   }
 
+  providerModuleCache.set(cacheKey, null);
   return undefined;
 }
 
@@ -131,8 +151,15 @@ function loadProviderFactory(provider: string, projectDir: string): ProviderFact
     return undefined;
   }
 
+  const cacheKey = factoryCacheKey(projectDir, spec);
+  const cachedFactory = providerFactoryCache.get(cacheKey);
+  if (cachedFactory !== undefined) {
+    return cachedFactory || undefined;
+  }
+
   const providerModule = loadProviderModule(spec, projectDir);
   if (!providerModule) {
+    providerFactoryCache.set(cacheKey, null);
     return undefined;
   }
 
@@ -142,6 +169,7 @@ function loadProviderFactory(provider: string, projectDir: string): ProviderFact
       `${spec.packageName} is installed but does not export ${spec.factoryExport}; upgrade the provider package`
     );
   }
+  providerFactoryCache.set(cacheKey, factory as ProviderFactory);
   return factory as ProviderFactory;
 }
 
@@ -207,4 +235,16 @@ export function createProviderRegistry(
   }
 
   return registry;
+}
+
+export function clearProviderRegistryCacheForTests(): void {
+  providerModuleCache.clear();
+  providerFactoryCache.clear();
+}
+
+export function providerRegistryCacheSnapshotForTests(): { moduleEntries: number; factoryEntries: number } {
+  return {
+    moduleEntries: providerModuleCache.size,
+    factoryEntries: providerFactoryCache.size
+  };
 }

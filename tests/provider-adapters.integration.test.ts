@@ -176,6 +176,8 @@ for (const testCase of providerCases) {
 
       const project = createProject(testCase.provider);
       const provider = testCase.createProvider(projectDir);
+      assert.equal(typeof provider.traces, "function");
+      assert.equal(typeof provider.metrics, "function");
 
       const validation = await provider.validate(project);
       assert.equal(validation.ok, true, `${testCase.provider} validation should pass`);

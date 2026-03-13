@@ -11,7 +11,7 @@ import { loadPlanningContext } from "../utils/load-config";
 import { resolveProjectDir } from "../utils/resolve-project";
 import { error, info, warn } from "../utils/logger";
 
-type DevPreset = "http" | "queue" | "storage";
+type DevPreset = "http" | "queue" | "storage" | "cron" | "eventbridge" | "pubsub" | "kafka" | "rabbitmq";
 
 interface DevCommandOptions {
   config?: string;
@@ -55,10 +55,21 @@ function collectHeader(value: string, previous: string[]): string[] {
 function parsePreset(value: string | undefined, project: ProjectConfig): DevPreset {
   if (value) {
     const normalized = value.trim().toLowerCase();
-    if (normalized === "http" || normalized === "queue" || normalized === "storage") {
+    if (
+      normalized === "http" ||
+      normalized === "queue" ||
+      normalized === "storage" ||
+      normalized === "cron" ||
+      normalized === "eventbridge" ||
+      normalized === "pubsub" ||
+      normalized === "kafka" ||
+      normalized === "rabbitmq"
+    ) {
       return normalized;
     }
-    throw new Error(`unsupported preset: ${value}. expected one of: http, queue, storage`);
+    throw new Error(
+      `unsupported preset: ${value}. expected one of: http, queue, storage, cron, eventbridge, pubsub, kafka, rabbitmq`
+    );
   }
 
   const firstType = project.triggers[0]?.type;
@@ -67,6 +78,21 @@ function parsePreset(value: string | undefined, project: ProjectConfig): DevPres
   }
   if (firstType === TriggerEnum.Storage) {
     return "storage";
+  }
+  if (firstType === TriggerEnum.Cron) {
+    return "cron";
+  }
+  if (firstType === TriggerEnum.EventBridge) {
+    return "eventbridge";
+  }
+  if (firstType === TriggerEnum.PubSub) {
+    return "pubsub";
+  }
+  if (firstType === TriggerEnum.Kafka) {
+    return "kafka";
+  }
+  if (firstType === TriggerEnum.RabbitMq) {
+    return "rabbitmq";
   }
   return "http";
 }
@@ -110,6 +136,42 @@ function extractStorageTarget(project: ProjectConfig): { bucket: string; eventNa
       ? trigger.events[0]
       : "ObjectCreated:Put";
   return { bucket, eventName };
+}
+
+function extractSchedule(project: ProjectConfig): string {
+  const trigger = project.triggers.find((item) => item.type === TriggerEnum.Cron);
+  return typeof trigger?.schedule === "string" && trigger.schedule.trim().length > 0
+    ? trigger.schedule.trim()
+    : "*/5 * * * *";
+}
+
+function extractPubSubTopic(project: ProjectConfig): string {
+  const trigger = project.triggers.find((item) => item.type === TriggerEnum.PubSub);
+  return typeof trigger?.topic === "string" && trigger.topic.trim().length > 0
+    ? trigger.topic.trim()
+    : "dev-topic";
+}
+
+function extractKafkaTarget(project: ProjectConfig): { topic: string; groupId: string } {
+  const trigger = project.triggers.find((item) => item.type === TriggerEnum.Kafka);
+  const topic =
+    typeof trigger?.topic === "string" && trigger.topic.trim().length > 0 ? trigger.topic.trim() : "dev-topic";
+  const groupId =
+    typeof trigger?.groupId === "string" && trigger.groupId.trim().length > 0
+      ? trigger.groupId.trim()
+      : "dev-group";
+  return { topic, groupId };
+}
+
+function extractRabbitMqTarget(project: ProjectConfig): { queue: string; routingKey: string } {
+  const trigger = project.triggers.find((item) => item.type === TriggerEnum.RabbitMq);
+  const queue =
+    typeof trigger?.queue === "string" && trigger.queue.trim().length > 0 ? trigger.queue.trim() : "jobs";
+  const routingKey =
+    typeof trigger?.routingKey === "string" && trigger.routingKey.trim().length > 0
+      ? trigger.routingKey.trim()
+      : "jobs.created";
+  return { queue, routingKey };
 }
 
 function createQueuePresetEvent(provider: string, project: ProjectConfig): unknown {
@@ -184,6 +246,106 @@ function createStoragePresetEvent(provider: string, project: ProjectConfig): unk
     key: "dev/object.json",
     event: target.eventName
   };
+}
+
+function createCronPresetEvent(provider: string, project: ProjectConfig): unknown {
+  const schedule = extractSchedule(project);
+  if (provider === "aws-lambda") {
+    return {
+      version: "0",
+      id: `dev-cron-${Date.now()}`,
+      "detail-type": "Scheduled Event",
+      source: "aws.events",
+      time: new Date().toISOString(),
+      resources: [`arn:aws:events:us-east-1:000000000000:rule/${project.service}`],
+      detail: { schedule }
+    };
+  }
+  return {
+    schedule,
+    triggeredAt: new Date().toISOString()
+  };
+}
+
+function createEventBridgePresetEvent(project: ProjectConfig): unknown {
+  return {
+    version: "0",
+    id: `dev-eventbridge-${Date.now()}`,
+    source: "runfabric.dev",
+    "detail-type": "dev.event",
+    time: new Date().toISOString(),
+    detail: {
+      service: project.service,
+      message: "eventbridge preset simulation"
+    }
+  };
+}
+
+function createPubSubPresetEvent(provider: string, project: ProjectConfig): unknown {
+  const topic = extractPubSubTopic(project);
+  const message = { source: "runfabric-dev", topic };
+  if (provider === "gcp-functions") {
+    return {
+      message: {
+        data: Buffer.from(JSON.stringify(message)).toString("base64"),
+        attributes: { topic }
+      },
+      subscription: `projects/dev/subscriptions/${topic}-sub`
+    };
+  }
+  return { topic, message };
+}
+
+function createKafkaPresetEvent(project: ProjectConfig): unknown {
+  const target = extractKafkaTarget(project);
+  return {
+    topic: target.topic,
+    groupId: target.groupId,
+    records: [
+      {
+        key: "dev-key",
+        value: { source: "runfabric-dev", topic: target.topic, groupId: target.groupId },
+        partition: 0,
+        offset: 1
+      }
+    ]
+  };
+}
+
+function createRabbitMqPresetEvent(project: ProjectConfig): unknown {
+  const target = extractRabbitMqTarget(project);
+  return {
+    queue: target.queue,
+    routingKey: target.routingKey,
+    contentType: "application/json",
+    body: {
+      source: "runfabric-dev",
+      queue: target.queue,
+      routingKey: target.routingKey
+    }
+  };
+}
+
+function createEventPresetEvent(provider: string, project: ProjectConfig, preset: Exclude<DevPreset, "http">): unknown {
+  if (preset === "queue") {
+    return createQueuePresetEvent(provider, project);
+  }
+  if (preset === "storage") {
+    return createStoragePresetEvent(provider, project);
+  }
+  if (preset === "cron") {
+    return createCronPresetEvent(provider, project);
+  }
+  if (preset === "eventbridge") {
+    return createEventBridgePresetEvent(project);
+  }
+  if (preset === "pubsub") {
+    return createPubSubPresetEvent(provider, project);
+  }
+  if (preset === "kafka") {
+    return createKafkaPresetEvent(project);
+  }
+  return createRabbitMqPresetEvent(project);
 }
 
 async function runBuildCycle(
@@ -368,10 +530,7 @@ async function simulateEventPreset(
 ): Promise<void> {
   const context = await loadPlanningContext(projectDir, options.config, options.stage);
   const provider = defaultProvider(context.project, options.provider);
-  const event =
-    preset === "queue"
-      ? createQueuePresetEvent(provider, context.project)
-      : createStoragePresetEvent(provider, context.project);
+  const event = createEventPresetEvent(provider, context.project, preset);
 
   const tempRoot = await mkdir(join(tmpdir(), "runfabric-dev"), { recursive: true }).then(() =>
     join(tmpdir(), "runfabric-dev")
@@ -562,7 +721,10 @@ export const registerDevCommand: CommandRegistrar = (program) => {
     .option("-c, --config <path>", "Path to runfabric config")
     .option("-s, --stage <name>", "Stage name override")
     .option("-p, --provider <name>", "Provider to emulate")
-    .option("--preset <http|queue|storage>", "Dev preset; defaults from first configured trigger")
+    .option(
+      "--preset <http|queue|storage|cron|eventbridge|pubsub|kafka|rabbitmq>",
+      "Dev preset; defaults from first configured trigger"
+    )
     .option("--watch", "Watch files and rebuild/simulate on changes", true)
     .option("--no-watch", "Disable watch mode")
     .option("--once", "Run one simulation and exit (queue/storage presets)")
@@ -577,7 +739,7 @@ export const registerDevCommand: CommandRegistrar = (program) => {
     .option("-o, --out <path>", "Output directory for build artifacts")
     .option(
       "--interval-seconds <number>",
-      "For queue/storage presets, auto-simulate on interval (0 disables)",
+      "For event presets, auto-simulate on interval (0 disables)",
       parseIntervalSeconds,
       0
     );

@@ -29,6 +29,13 @@ program
   .description("Multi-provider serverless deployment framework")
   .version(cliVersion);
 
+program
+  .command("version")
+  .description("Print CLI version")
+  .action(() => {
+    process.stdout.write(`${cliVersion}\n`);
+  });
+
 registerInitCommand(program);
 registerDocsCommand(program);
 registerDoctorCommand(program);

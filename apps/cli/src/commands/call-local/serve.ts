@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -16,6 +17,10 @@ import {
 } from "./runtime";
 
 const DEFAULT_MAX_REQUEST_BODY_BYTES = 1024 * 1024;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 class RequestBodyTooLargeError extends Error {
   readonly statusCode: number;
@@ -119,6 +124,45 @@ async function readRequestBody(
   return Buffer.concat(chunks).toString("utf8");
 }
 
+function mergeTemplateObject(
+  template: Record<string, unknown>,
+  requestEvent: Record<string, unknown>
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...template };
+  for (const [key, value] of Object.entries(requestEvent)) {
+    const templateValue = merged[key];
+    if (isRecord(templateValue) && isRecord(value)) {
+      merged[key] = mergeTemplateObject(templateValue, value);
+      continue;
+    }
+    merged[key] = value;
+  }
+  return merged;
+}
+
+export function mergeServeEventTemplate(templateEvent: unknown, requestEvent: unknown): unknown {
+  if (!isRecord(templateEvent) || !isRecord(requestEvent)) {
+    return requestEvent;
+  }
+  return mergeTemplateObject(templateEvent, requestEvent);
+}
+
+async function loadServeEventTemplate(
+  projectDir: string,
+  eventPath: string | undefined
+): Promise<Record<string, unknown> | undefined> {
+  if (!eventPath) {
+    return undefined;
+  }
+
+  const raw = await readFile(resolve(projectDir, eventPath), "utf8");
+  const parsed = JSON.parse(raw) as unknown;
+  if (!isRecord(parsed)) {
+    throw new Error("--event must point to a JSON object when used with --serve");
+  }
+  return parsed;
+}
+
 function writeServerError(response: ServerResponse, serverError: unknown): void {
   const message = serverError instanceof Error ? serverError.message : String(serverError);
   const statusCode =
@@ -179,6 +223,7 @@ async function invokeServeRequest(
   port: number,
   maxRequestBodyBytes: number,
   extraHeaders: Record<string, string>,
+  eventTemplate: Record<string, unknown> | undefined,
   request: IncomingMessage
 ) {
   const requestUrl = new URL(request.url || "/", `http://${host}:${port}`);
@@ -193,7 +238,10 @@ async function invokeServeRequest(
       ...extraHeaders
     }
   };
-  const event = createEventFromOptions(parsed);
+  const generatedEvent = createEventFromOptions(parsed);
+  const event = eventTemplate
+    ? mergeServeEventTemplate(eventTemplate, generatedEvent)
+    : generatedEvent;
   const requestHandler = await resolveHandler();
   return invokeWithProvider(provider, requestHandler, event);
 }
@@ -206,6 +254,7 @@ function createServeServer(params: {
   port: number;
   maxRequestBodyBytes: number;
   extraHeaders: Record<string, string>;
+  eventTemplate: Record<string, unknown> | undefined;
 }) {
   return createServer(async (request, response) => {
     try {
@@ -217,6 +266,7 @@ function createServeServer(params: {
         params.port,
         params.maxRequestBodyBytes,
         params.extraHeaders,
+        params.eventTemplate,
         request
       );
       response.statusCode = invokeResult.statusCode;
@@ -302,16 +352,13 @@ async function waitForServeShutdown(
 }
 
 export async function serveLocalCalls(projectDir: string, options: LocalCallOptions): Promise<void> {
-  if (options.event) {
-    throw new Error("--event is not supported with --serve");
-  }
-
   const { provider, entry, handler } = await resolveExecutionContext(projectDir, options);
   const host = options.host || "127.0.0.1";
   const port = options.port ?? 8787;
   const maxRequestBodyBytes = resolveMaxRequestBodyBytes();
   const watchMode = Boolean(options.watch);
   const extraHeaders = parseHeaders(options.header || []);
+  const eventTemplate = await loadServeEventTemplate(projectDir, options.event);
   const resolveHandler = createHandlerResolver<LoadedHandler>({
     watchMode,
     initialHandler: handler || undefined,
@@ -334,7 +381,8 @@ export async function serveLocalCalls(projectDir: string, options: LocalCallOpti
     host,
     port,
     maxRequestBodyBytes,
-    extraHeaders
+    extraHeaders,
+    eventTemplate
   });
   await listenServeServer(server, host, port);
 

@@ -1,5 +1,4 @@
 import type { CommandRegistrar } from "../types/cli";
-import { buildProviderTracesFromLocalArtifacts } from "@runfabric/core";
 import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { printJson } from "../utils/output";
 import { resolveProjectDir } from "../utils/resolve-project";
@@ -30,19 +29,18 @@ async function executeTracesCommand(options: TracesOptions): Promise<void> {
     return;
   }
 
-  const result = provider.traces
-    ? await provider.traces({
-        provider: provider.name,
-        since: options.since,
-        correlationId: options.correlationId,
-        limit: options.limit
-      })
-    : await buildProviderTracesFromLocalArtifacts(projectDir, provider.name, {
-        provider: provider.name,
-        since: options.since,
-        correlationId: options.correlationId,
-        limit: options.limit
-      });
+  if (!provider.traces) {
+    error(`provider ${provider.name} does not implement traces()`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const result = await provider.traces({
+    provider: provider.name,
+    since: options.since,
+    correlationId: options.correlationId,
+    limit: options.limit
+  });
 
   if (options.json) {
     printJson(result);

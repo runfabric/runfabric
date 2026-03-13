@@ -38,6 +38,12 @@ test("cli supports --version", () => {
   assert.equal(result.stdout.trim(), cliPackageVersion);
 });
 
+test("cli supports version subcommand", () => {
+  const result = runCli(["version"], {});
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), cliPackageVersion);
+});
+
 test("cli smoke: doctor/plan/build/deploy complete for cloudflare fixture", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "runfabric-cli-smoke-"));
   await mkdir(join(projectDir, "src"), { recursive: true });
@@ -241,6 +247,138 @@ test("call-local --serve starts localhost server", async () => {
     const oversizedBody = await oversizedResponse.text();
     assert.equal(oversizedResponse.status, 413, oversizedBody);
     assert.ok(oversizedBody.includes("request body exceeds 16 bytes"), oversizedBody);
+  } finally {
+    child.kill("SIGTERM");
+    await once(child, "exit");
+  }
+});
+
+test("call-local --serve supports --event template payload", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-call-local-serve-event-template-"));
+  await mkdir(join(projectDir, "src"), { recursive: true });
+  await writeFile(
+    join(projectDir, "src", "index.ts"),
+    [
+      "export const handler = async (request) => ({",
+      "  status: 200,",
+      "  headers: { \"content-type\": \"application/json\" },",
+      "  body: JSON.stringify({",
+      "    path: request.path,",
+      "    principalId: request.raw?.requestContext?.authorizer?.principalId || null",
+      "  })",
+      "});",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  await writeFile(
+    join(projectDir, "event.template.json"),
+    JSON.stringify(
+      {
+        requestContext: {
+          authorizer: {
+            principalId: "template-user"
+          }
+        },
+        rawPath: "/template-default"
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  await writeFile(
+    join(projectDir, "runfabric.yml"),
+    [
+      "service: call-local-serve-template",
+      "runtime: nodejs",
+      "entry: src/index.ts",
+      "",
+      "providers:",
+      "  - aws-lambda",
+      "",
+      "triggers:",
+      "  - type: http",
+      "    method: GET",
+      "    path: /hello",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  const configPath = join(projectDir, "runfabric.yml");
+  const child = spawn(
+    tsxBin,
+    [
+      "--tsconfig",
+      runtimeTsConfig,
+      cliEntry,
+      "call-local",
+      "-c",
+      configPath,
+      "--provider",
+      "aws-lambda",
+      "--serve",
+      "--event",
+      join(projectDir, "event.template.json"),
+      "--port",
+      "0"
+    ],
+    {
+      cwd: repoRoot,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    }
+  );
+
+  let combinedOutput = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => {
+    combinedOutput += chunk;
+  });
+  child.stderr.on("data", (chunk: string) => {
+    combinedOutput += chunk;
+  });
+
+  const port = await new Promise<number>((resolvePromise, rejectPromise) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      rejectPromise(new Error(`timed out waiting for call-local server\n${combinedOutput}`));
+    }, 10_000);
+
+    const onData = (): void => {
+      const match = combinedOutput.match(/local call server listening on http:\/\/127\.0\.0\.1:(\d+)/);
+      if (!match) {
+        return;
+      }
+      cleanup();
+      resolvePromise(Number(match[1]));
+    };
+
+    const onExit = (code: number | null): void => {
+      cleanup();
+      rejectPromise(new Error(`call-local server exited early (${code ?? "unknown"})\n${combinedOutput}`));
+    };
+
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      child.stdout.off("data", onData);
+      child.off("exit", onExit);
+    };
+
+    child.stdout.on("data", onData);
+    child.on("exit", onExit);
+    onData();
+  });
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/template-check`);
+    const payload = (await response.json()) as { path: string; principalId: string | null };
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.path, "/template-check");
+    assert.equal(payload.principalId, "template-user");
   } finally {
     child.kill("SIGTERM");
     await once(child, "exit");

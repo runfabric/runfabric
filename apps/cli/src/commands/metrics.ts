@@ -1,5 +1,4 @@
 import type { CommandRegistrar } from "../types/cli";
-import { buildProviderMetricsFromLocalArtifacts } from "@runfabric/core";
 import { createProviderRegistry, getProviderPackageName } from "../providers/registry";
 import { printJson } from "../utils/output";
 import { resolveProjectDir } from "../utils/resolve-project";
@@ -28,15 +27,16 @@ export const registerMetricsCommand: CommandRegistrar = (program) => {
         return;
       }
 
-      const result = provider.metrics
-        ? await provider.metrics({
-            provider: provider.name,
-            since: options.since
-          })
-        : await buildProviderMetricsFromLocalArtifacts(projectDir, provider.name, {
-            provider: provider.name,
-            since: options.since
-          });
+      if (!provider.metrics) {
+        error(`provider ${provider.name} does not implement metrics()`);
+        process.exitCode = 1;
+        return;
+      }
+
+      const result = await provider.metrics({
+        provider: provider.name,
+        since: options.since
+      });
 
       if (options.json) {
         printJson(result);
