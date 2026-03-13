@@ -5,6 +5,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { ARTIFACT_MANIFEST_SCHEMA_VERSION, validateArtifactManifest } from "../packages/core/src/index.ts";
 import { parseProjectConfig } from "../packages/planner/src/parse-config.ts";
 import { createPlan } from "../packages/planner/src/planner.ts";
 import { buildProject } from "../packages/builder/src/index.ts";
@@ -16,6 +17,16 @@ function sha256(input: string): string {
 function hasCommand(command: string, args: string[] = ["--version"]): boolean {
   const result = spawnSync(command, args, { encoding: "utf8" });
   return result.status === 0;
+}
+
+async function readManifest(path: string): Promise<Record<string, unknown>> {
+  return JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+}
+
+function assertManifestV2(manifest: unknown): void {
+  assert.deepEqual(validateArtifactManifest(manifest), []);
+  const record = manifest as Record<string, unknown>;
+  assert.equal(record.schemaVersion, ARTIFACT_MANIFEST_SCHEMA_VERSION);
 }
 
 test("artifact manifest does not self-reference and file hashes match content", async () => {
@@ -46,11 +57,11 @@ test("artifact manifest does not self-reference and file hashes match content", 
   });
 
   assert.equal(build.artifacts.length, 1);
-  const manifestPath = build.artifacts[0].outputPath;
-  const manifestRaw = await readFile(manifestPath, "utf8");
-  const manifest = JSON.parse(manifestRaw) as {
+  const manifest = (await readManifest(build.artifacts[0].outputPath)) as {
+    schemaVersion: number;
     files: Array<{ path: string; bytes: number; sha256: string; role: string }>;
   };
+  assertManifestV2(manifest);
 
   assert.equal(
     manifest.files.some((file) => file.role === "manifest"),
@@ -94,10 +105,11 @@ test("python runtime build keeps source entry without node runtime wrapper", asy
   assert.equal(build.artifacts.length, 1);
   assert.ok(build.artifacts[0].entry.endsWith("/src/src.py"));
 
-  const manifestRaw = await readFile(build.artifacts[0].outputPath, "utf8");
-  const manifest = JSON.parse(manifestRaw) as {
+  const manifest = (await readManifest(build.artifacts[0].outputPath)) as {
+    schemaVersion: number;
     files: Array<{ role: string }>;
   };
+  assertManifestV2(manifest);
   assert.equal(
     manifest.files.some((file) => file.role === "runtime-wrapper"),
     false
@@ -133,14 +145,50 @@ test("nodejs runtime build generates runtime wrapper entry", async () => {
   assert.equal(build.artifacts.length, 1);
   assert.ok(build.artifacts[0].entry.endsWith("/runtime/lambda-handler.mjs"));
 
-  const manifestRaw = await readFile(build.artifacts[0].outputPath, "utf8");
-  const manifest = JSON.parse(manifestRaw) as {
+  const manifest = (await readManifest(build.artifacts[0].outputPath)) as {
+    schemaVersion: number;
     files: Array<{ role: string }>;
   };
+  assertManifestV2(manifest);
   assert.equal(
     manifest.files.some((file) => file.role === "runtime-wrapper"),
     true
   );
+});
+
+test("artifact manifest records engine runtime mode when configured", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-builder-node-engine-mode-"));
+  await writeFile(
+    join(projectDir, "src.ts"),
+    "export const handler = async () => ({ statusCode: 200, body: \"ok\" });\n",
+    "utf8"
+  );
+
+  const config = [
+    "service: node-engine-mode-check",
+    "runtime: nodejs",
+    "runtimeMode: engine",
+    "entry: src.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /health",
+    ""
+  ].join("\n");
+
+  const project = parseProjectConfig(config);
+  const planning = createPlan(project);
+  const build = await buildProject({ planning, project, projectDir });
+  assert.equal(build.artifacts.length, 1);
+
+  const manifest = (await readManifest(build.artifacts[0].outputPath)) as Record<string, unknown>;
+  assertManifestV2(manifest);
+  assert.equal(manifest.runtimeMode, "engine");
+  assert.equal(manifest.runtimeFamily, "nodejs");
 });
 
 test("python runtime packages dependencies when requirements.txt is present", async (t) => {
@@ -178,10 +226,11 @@ test("python runtime packages dependencies when requirements.txt is present", as
   assert.equal(build.artifacts.length, 1);
   assert.ok(build.artifacts[0].entry.endsWith("/src/src.py"));
 
-  const manifestRaw = await readFile(build.artifacts[0].outputPath, "utf8");
-  const manifest = JSON.parse(manifestRaw) as {
+  const manifest = (await readManifest(build.artifacts[0].outputPath)) as {
+    schemaVersion: number;
     files: Array<{ path: string; role: string }>;
   };
+  assertManifestV2(manifest);
   assert.equal(
     manifest.files.some((file) => file.role === "runtime-package"),
     true
@@ -230,10 +279,11 @@ test("go runtime build emits compiled runtime binary", async (t) => {
   assert.equal(build.artifacts.length, 1);
   assert.ok(build.artifacts[0].entry.endsWith("/runtime/go/bootstrap"));
 
-  const manifestRaw = await readFile(build.artifacts[0].outputPath, "utf8");
-  const manifest = JSON.parse(manifestRaw) as {
+  const manifest = (await readManifest(build.artifacts[0].outputPath)) as {
+    schemaVersion: number;
     files: Array<{ path: string; role: string }>;
   };
+  assertManifestV2(manifest);
   assert.equal(
     manifest.files.some((file) => file.role === "runtime-package"),
     true
@@ -285,10 +335,11 @@ test("java runtime build emits packaged jar artifact", async (t) => {
   assert.equal(build.artifacts.length, 1);
   assert.ok(build.artifacts[0].entry.endsWith("/runtime/java/app.jar"));
 
-  const manifestRaw = await readFile(build.artifacts[0].outputPath, "utf8");
-  const manifest = JSON.parse(manifestRaw) as {
+  const manifest = (await readManifest(build.artifacts[0].outputPath)) as {
+    schemaVersion: number;
     files: Array<{ path: string; role: string }>;
   };
+  assertManifestV2(manifest);
   assert.equal(
     manifest.files.some((file) => file.role === "runtime-package"),
     true
@@ -338,10 +389,11 @@ test("rust runtime build emits compiled runtime binary", async (t) => {
   assert.equal(build.artifacts.length, 1);
   assert.ok(build.artifacts[0].entry.endsWith("/runtime/rust/bootstrap"));
 
-  const manifestRaw = await readFile(build.artifacts[0].outputPath, "utf8");
-  const manifest = JSON.parse(manifestRaw) as {
+  const manifest = (await readManifest(build.artifacts[0].outputPath)) as {
+    schemaVersion: number;
     files: Array<{ path: string; role: string }>;
   };
+  assertManifestV2(manifest);
   assert.equal(
     manifest.files.some((file) => file.role === "runtime-package"),
     true
@@ -404,10 +456,11 @@ test("dotnet runtime build publishes runtime output", async (t) => {
   assert.equal(build.artifacts.length, 1);
   assert.ok(build.artifacts[0].entry.includes("/runtime/dotnet/publish"));
 
-  const manifestRaw = await readFile(build.artifacts[0].outputPath, "utf8");
-  const manifest = JSON.parse(manifestRaw) as {
+  const manifest = (await readManifest(build.artifacts[0].outputPath)) as {
+    schemaVersion: number;
     files: Array<{ path: string; role: string }>;
   };
+  assertManifestV2(manifest);
   assert.equal(
     manifest.files.some((file) => file.role === "runtime-package"),
     true

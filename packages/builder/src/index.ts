@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import { access, constants, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
-import type { BuildArtifact, BuildResult, ProjectConfig, RuntimeFamily } from "@runfabric/core";
+import { ARTIFACT_MANIFEST_SCHEMA_VERSION, ENGINE_CONTRACT_ABI_VERSION, ENGINE_CONTRACT_API_VERSION, ENGINE_CONTRACT_COMPATIBILITY_POLICY, assertArtifactManifest, type BuildArtifact, type BuildResult, type ProjectConfig, type RuntimeFamily } from "@runfabric/core";
 import type { PlanningResult } from "@runfabric/planner";
 
 export interface BuildProjectInput {
@@ -495,14 +495,26 @@ async function writeArtifactManifest(
 ): Promise<void> {
   const files = [...generatedFiles];
   const manifestContent = {
+    schemaVersion: ARTIFACT_MANIFEST_SCHEMA_VERSION,
     provider,
     service: project.service,
-    runtime: project.runtime,
-    entry: project.entry,
-    buildVersion: 1,
-    generatedAt: new Date().toISOString(),
+    runtimeFamily: project.runtime,
+    runtimeMode: project.runtimeMode || "native-compat",
+    source: {
+      entry: project.entry
+    },
+    engineContract: {
+      apiVersion: ENGINE_CONTRACT_API_VERSION,
+      abiVersion: ENGINE_CONTRACT_ABI_VERSION,
+      compatibilityPolicy: ENGINE_CONTRACT_COMPATIBILITY_POLICY
+    },
+    build: {
+      manifestVersion: ARTIFACT_MANIFEST_SCHEMA_VERSION,
+      generatedAt: new Date().toISOString()
+    },
     files
   };
+  assertArtifactManifest(manifestContent);
   const manifestJson = JSON.stringify(manifestContent, null, 2);
   await writeFile(manifestPath, manifestJson, "utf8");
   generatedFiles.push({
