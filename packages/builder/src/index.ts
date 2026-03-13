@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import type { BuildArtifact, BuildResult, ProjectConfig } from "@runfabric/core";
 import type { PlanningResult } from "@runfabric/planner";
@@ -11,6 +11,8 @@ export interface BuildProjectInput {
   projectDir: string;
   outputRoot?: string;
 }
+
+const MAX_PARALLEL_PROVIDER_ARTIFACTS = 4;
 
 interface GeneratedFile {
   path: string;
@@ -49,8 +51,12 @@ interface SourceEntryInfo {
   sourceEntryPath: string;
   sourceEntryName: string;
   copiedEntryName: string;
-  copiedEntryPath: string;
   shouldTranspile: boolean;
+}
+
+interface MaterializedSourceEntry {
+  copiedEntryName: string;
+  content: string;
 }
 
 function toProviderSlug(provider: string): string {
@@ -205,7 +211,7 @@ function transpileTypeScriptSource(source: string, fileName: string): string {
   return result.outputText;
 }
 
-function resolveSourceEntryInfo(project: ProjectConfig, projectDir: string, sourceDir: string): SourceEntryInfo {
+function resolveSourceEntryInfo(project: ProjectConfig, projectDir: string): SourceEntryInfo {
   const sourceEntryPath = resolve(projectDir, project.entry);
   const sourceEntryName = basename(project.entry);
   const sourceEntryExt = extname(sourceEntryName).toLowerCase();
@@ -218,21 +224,23 @@ function resolveSourceEntryInfo(project: ProjectConfig, projectDir: string, sour
     sourceEntryPath,
     sourceEntryName,
     copiedEntryName,
-    copiedEntryPath: join(sourceDir, copiedEntryName),
     shouldTranspile
   };
 }
 
-async function materializeSourceEntry(entryInfo: SourceEntryInfo): Promise<string> {
+async function materializeSourceEntry(entryInfo: SourceEntryInfo): Promise<MaterializedSourceEntry> {
+  const sourceContent = await readFileAsUtf8(entryInfo.sourceEntryPath);
   if (entryInfo.shouldTranspile) {
-    const sourceContent = await readFileAsUtf8(entryInfo.sourceEntryPath);
-    const transpiledContent = transpileTypeScriptSource(sourceContent, entryInfo.sourceEntryName);
-    await writeFile(entryInfo.copiedEntryPath, transpiledContent, "utf8");
-    return transpiledContent;
+    return {
+      copiedEntryName: entryInfo.copiedEntryName,
+      content: transpileTypeScriptSource(sourceContent, entryInfo.sourceEntryName)
+    };
   }
 
-  await copyFile(entryInfo.sourceEntryPath, entryInfo.copiedEntryPath);
-  return readFileAsUtf8(entryInfo.copiedEntryPath);
+  return {
+    copiedEntryName: entryInfo.copiedEntryName,
+    content: sourceContent
+  };
 }
 
 function createGeneratedEntrySource(path: string, content: string): GeneratedFile {
@@ -276,6 +284,7 @@ async function writeArtifactManifest(
   manifestPath: string,
   generatedFiles: GeneratedFile[]
 ): Promise<void> {
+  const files = [...generatedFiles];
   const manifestContent = {
     provider,
     service: project.service,
@@ -283,66 +292,81 @@ async function writeArtifactManifest(
     entry: project.entry,
     buildVersion: 1,
     generatedAt: new Date().toISOString(),
-    files: generatedFiles
+    files
   };
   const manifestJson = JSON.stringify(manifestContent, null, 2);
+  await writeFile(manifestPath, manifestJson, "utf8");
   generatedFiles.push({
     path: manifestPath,
     bytes: Buffer.byteLength(manifestJson, "utf8"),
     sha256: hashContent(manifestJson),
     role: "manifest"
   });
-  await writeFile(manifestPath, JSON.stringify({ ...manifestContent, files: generatedFiles }, null, 2), "utf8");
 }
 
 async function buildProviderArtifact(
   provider: string,
   project: ProjectConfig,
-  projectDir: string,
-  outputRoot: string
+  outputRoot: string,
+  sourceEntry: MaterializedSourceEntry
 ): Promise<BuildArtifact> {
   const providerRoot = join(outputRoot, provider, project.service);
   const sourceDir = join(providerRoot, "src");
   const runtimeDir = join(providerRoot, "runtime");
   const manifestPath = join(providerRoot, "artifact.json");
-  const entryInfo = resolveSourceEntryInfo(project, projectDir, sourceDir);
+  const copiedEntryPath = join(sourceDir, sourceEntry.copiedEntryName);
 
   await mkdir(sourceDir, { recursive: true });
-  const copiedEntryContent = await materializeSourceEntry(entryInfo);
-  const generatedFiles: GeneratedFile[] = [createGeneratedEntrySource(entryInfo.copiedEntryPath, copiedEntryContent)];
+  await writeFile(copiedEntryPath, sourceEntry.content, "utf8");
+  const generatedFiles: GeneratedFile[] = [createGeneratedEntrySource(copiedEntryPath, sourceEntry.content)];
   const runtimeEntry = await addRuntimeWrapperFile(
     provider,
     project,
     runtimeDir,
-    entryInfo.copiedEntryName,
+    sourceEntry.copiedEntryName,
     generatedFiles
   );
   await writeArtifactManifest(provider, project, manifestPath, generatedFiles);
 
   return {
     provider,
-    entry: runtimeEntry || entryInfo.copiedEntryPath,
+    entry: runtimeEntry || copiedEntryPath,
     outputPath: manifestPath
   };
 }
 
 export async function buildProject(input: BuildProjectInput): Promise<BuildResult> {
   const outputRoot = input.outputRoot || resolve(input.projectDir, ".runfabric", "build");
-  const artifacts: BuildArtifact[] = [];
+  const activePlans = input.planning.providerPlans.filter((providerPlan) => providerPlan.errors.length === 0);
 
-  for (const providerPlan of input.planning.providerPlans) {
-    if (providerPlan.errors.length > 0) {
-      continue;
-    }
-
-    const artifact = await buildProviderArtifact(
-      providerPlan.provider,
-      input.project,
-      input.projectDir,
-      outputRoot
-    );
-    artifacts.push(artifact);
+  if (activePlans.length === 0) {
+    return { artifacts: [] };
   }
 
-  return { artifacts };
+  const entryInfo = resolveSourceEntryInfo(input.project, input.projectDir);
+  const materializedEntry = await materializeSourceEntry(entryInfo);
+  const artifacts: Array<BuildArtifact | undefined> = new Array(activePlans.length);
+  const workerCount = Math.min(MAX_PARALLEL_PROVIDER_ARTIFACTS, activePlans.length);
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      if (currentIndex >= activePlans.length) {
+        return;
+      }
+
+      const providerPlan = activePlans[currentIndex];
+      artifacts[currentIndex] = await buildProviderArtifact(
+        providerPlan.provider,
+        input.project,
+        outputRoot,
+        materializedEntry
+      );
+    }
+  });
+
+  await Promise.all(workers);
+  return { artifacts: artifacts.filter((artifact): artifact is BuildArtifact => Boolean(artifact)) };
 }
