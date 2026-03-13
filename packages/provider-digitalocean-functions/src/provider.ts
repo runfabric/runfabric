@@ -12,12 +12,16 @@ import type {
 import {
   appendProviderLog,
   buildProviderLogsFromLocalArtifacts,
+  createProviderNativeObservabilityOperations,
+  createStandardProviderPlanOperations,
   createDeploymentId,
   destroyProviderArtifacts,
   invokeProviderViaDeployedEndpoint,
+  isRecordLike,
   isRealDeployModeEnabled,
   missingRequiredCredentialErrors,
-  runJsonCommand,
+  readNonEmptyString,
+  runStandardCliRealDeployIfEnabled,
   runShellCommand,
   writeDeploymentReceipt
 } from "@runfabric/core";
@@ -35,39 +39,34 @@ const digitalOceanCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
 function endpointFromDoResponse(response: unknown): string | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
-  const endpoint = readString(response.endpoint) || readString(response.url) || readString(response.webUrl);
+  const endpoint =
+    readNonEmptyString(response.endpoint) ||
+    readNonEmptyString(response.url) ||
+    readNonEmptyString(response.webUrl);
   if (endpoint) {
     return endpoint;
   }
 
-  if (isRecord(response.result)) {
-    return readString(response.result.url) || readString(response.result.endpoint);
+  if (isRecordLike(response.result)) {
+    return readNonEmptyString(response.result.url) || readNonEmptyString(response.result.endpoint);
   }
 
   return undefined;
 }
 
 function doResourceMetadata(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
   const metadata: Record<string, unknown> = {};
   for (const key of ["name", "namespace", "region", "id"]) {
-    const value = readString(response[key]);
+    const value = readNonEmptyString(response[key]);
     if (value) {
       metadata[key] = value;
     }
@@ -100,54 +99,6 @@ function defaultEndpoint(service: string, region: string, namespace: string): st
   return `https://faas-${region}.doserverless.co/api/v1/web/${namespace}/default/${service}`;
 }
 
-async function runRealDeployIfEnabled(
-  options: ProviderOptions,
-  project: ProjectConfig,
-  plan: DeployPlan,
-  stage: string,
-  region: string,
-  namespace: string
-): Promise<{
-  endpoint: string;
-  mode: "simulated" | "cli";
-  rawResponse?: unknown;
-  resource?: Record<string, unknown>;
-}> {
-  const initialEndpoint = defaultEndpoint(project.service, region, namespace);
-  if (!isRealDeployModeEnabled("RUNFABRIC_DIGITALOCEAN_REAL_DEPLOY")) {
-    return { endpoint: initialEndpoint, mode: "simulated" };
-  }
-
-  const deployCommand = process.env.RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD || defaultDigitalOceanDeployCommand();
-  const hasCommandOverride = Boolean(process.env.RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD);
-  const rawResponse = await runJsonCommand(deployCommand, {
-    cwd: options.projectDir,
-    env: {
-      RUNFABRIC_SERVICE: project.service,
-      RUNFABRIC_STAGE: stage,
-      RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
-      RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
-    }
-  });
-
-  const parsedEndpoint = endpointFromDoResponse(rawResponse);
-  if (!parsedEndpoint && hasCommandOverride) {
-    throw new Error("digitalocean-functions deploy response does not include endpoint");
-  }
-
-  return {
-    endpoint: parsedEndpoint || initialEndpoint,
-    mode: "cli",
-    rawResponse,
-    resource: {
-      ...(doResourceMetadata(rawResponse) || {}),
-      namespace,
-      region,
-      deployCommandSource: hasCommandOverride ? "override" : "builtin"
-    }
-  };
-}
-
 async function deployDigitalOceanFunctions(
   options: ProviderOptions,
   project: ProjectConfig,
@@ -157,7 +108,23 @@ async function deployDigitalOceanFunctions(
   const region = resolveRegion(project);
   const namespace = resolveNamespace(project);
   const deploymentId = createDeploymentId("digitalocean-functions", project.service, stage);
-  const deployState = await runRealDeployIfEnabled(options, project, plan, stage, region, namespace);
+  const deployState = await runStandardCliRealDeployIfEnabled({
+    projectDir: options.projectDir,
+    project,
+    plan,
+    stage,
+    realDeployEnv: "RUNFABRIC_DIGITALOCEAN_REAL_DEPLOY",
+    deployCommandEnv: "RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD",
+    defaultDeployCommand: defaultDigitalOceanDeployCommand(),
+    defaultEndpoint: defaultEndpoint(project.service, region, namespace),
+    parseEndpoint: endpointFromDoResponse,
+    missingEndpointError: "digitalocean-functions deploy response does not include endpoint",
+    buildResource: (rawResponse) => doResourceMetadata(rawResponse),
+    extraResource: {
+      namespace,
+      region
+    }
+  });
 
   await writeDeploymentReceipt(options.projectDir, "digitalocean-functions", {
     provider: "digitalocean-functions",
@@ -208,38 +175,36 @@ function validateDigitalOceanProvider(): ValidationResult {
   return { ok: errors.length === 0, warnings: [], errors };
 }
 
-function createBuildPlan(): BuildPlan {
-  return {
-    provider: "digitalocean-functions",
-    steps: ["prepare digitalocean functions metadata"]
-  };
-}
-
-function createDeployPlan(artifact: BuildArtifact): DeployPlan {
-  return {
-    provider: "digitalocean-functions",
-    artifactPath: artifact.entry,
-    artifactManifestPath: artifact.outputPath,
-    steps: [`deploy artifact from ${artifact.outputPath}`]
-  };
-}
+const digitalOceanPlanOperations = createStandardProviderPlanOperations(
+  "digitalocean-functions",
+  "prepare digitalocean functions metadata"
+);
 
 export function createDigitalOceanFunctionsProvider(options: ProviderOptions): ProviderAdapter {
+  const observabilityOperations = createProviderNativeObservabilityOperations({
+    projectDir: options.projectDir,
+    provider: "digitalocean-functions",
+    realDeployEnv: "RUNFABRIC_DIGITALOCEAN_REAL_DEPLOY",
+    tracesCommandEnv: "RUNFABRIC_DIGITALOCEAN_TRACES_CMD",
+    metricsCommandEnv: "RUNFABRIC_DIGITALOCEAN_METRICS_CMD"
+  });
+
   return {
     name: "digitalocean-functions",
     getCapabilities: () => digitalOceanFunctionsCapabilities,
     getCredentialSchema: () => digitalOceanCredentialSchema,
     validate: async (): Promise<ValidationResult> => validateDigitalOceanProvider(),
-    planBuild: async (): Promise<BuildPlan> => createBuildPlan(),
+    planBuild: digitalOceanPlanOperations.planBuild,
     build: async (): Promise<BuildResult> => ({ artifacts: [] }),
-    planDeploy: async (_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> =>
-      createDeployPlan(artifact),
+    planDeploy: digitalOceanPlanOperations.planDeploy,
     deploy: async (project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> =>
       deployDigitalOceanFunctions(options, project, plan),
     invoke: async (input) =>
       invokeProviderViaDeployedEndpoint(options.projectDir, "digitalocean-functions", input),
     logs: async (input) =>
       buildProviderLogsFromLocalArtifacts(options.projectDir, "digitalocean-functions", input),
+    traces: observabilityOperations.traces,
+    metrics: observabilityOperations.metrics,
     destroy: async (project: ProjectConfig) => destroyDigitalOceanFunctions(options, project)
   };
 }

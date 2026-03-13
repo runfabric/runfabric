@@ -4,7 +4,7 @@ import {
   createDeploymentId,
   destroyProviderArtifacts,
   isRealDeployModeEnabled,
-  runJsonCommand,
+  runStandardCliRealDeployIfEnabled,
   runShellCommand,
   writeDeploymentReceipt
 } from "@runfabric/core";
@@ -33,40 +33,24 @@ function buildProviderEnv(
   };
 }
 
-async function runRealDeployIfEnabled(input: {
-  projectDir: string;
-  project: ProjectConfig;
-  plan: DeployPlan;
-  settings: ReturnType<typeof resolveKubernetesSettings>;
-  realDeployEnv: string;
-  deployCommandEnv: string;
-}): Promise<{ endpoint: string; mode: "simulated" | "cli"; rawResponse?: unknown; resource?: Record<string, unknown> }> {
-  if (!isRealDeployModeEnabled(input.realDeployEnv)) {
-    return { endpoint: input.settings.defaultEndpoint, mode: "simulated" };
-  }
-
-  const deployCommand = process.env[input.deployCommandEnv] || defaultKubernetesDeployCommand;
-  const hasCommandOverride = Boolean(process.env[input.deployCommandEnv]);
-  const rawResponse = await runJsonCommand(deployCommand, {
-    cwd: input.projectDir,
-    env: buildProviderEnv(input.project, input.plan, input.settings)
-  });
-  const parsedEndpoint = endpointFromKubernetesResponse(rawResponse);
-  if (!parsedEndpoint && hasCommandOverride) {
-    throw new Error("kubernetes deploy response does not include endpoint");
-  }
-
+function buildKubernetesDeployContext(
+  settings: ReturnType<typeof resolveKubernetesSettings>
+): {
+  commandEnv: Record<string, string | undefined>;
+  resource: Record<string, string | undefined>;
+} {
   return {
-    endpoint: parsedEndpoint || input.settings.defaultEndpoint,
-    mode: "cli",
-    rawResponse,
+    commandEnv: {
+      RUNFABRIC_KUBE_NAMESPACE: settings.namespace,
+      RUNFABRIC_KUBE_CONTEXT: settings.context,
+      RUNFABRIC_K8S_DEPLOYMENT_NAME: settings.deploymentName,
+      RUNFABRIC_K8S_SERVICE_NAME: settings.serviceName
+    },
     resource: {
-      ...(kubernetesResourceMetadata(rawResponse) || {}),
-      namespace: input.settings.namespace,
-      context: input.settings.context,
-      deploymentName: input.settings.deploymentName,
-      serviceName: input.settings.serviceName,
-      deployCommandSource: hasCommandOverride ? "override" : "builtin"
+      namespace: settings.namespace,
+      context: settings.context,
+      deploymentName: settings.deploymentName,
+      serviceName: settings.serviceName
     }
   };
 }
@@ -78,13 +62,22 @@ export async function deployKubernetesProvider(
   envNames: { realDeployEnv: string; deployCommandEnv: string }
 ): Promise<DeployResult> {
   const settings = resolveKubernetesSettings(project);
+  const deployContext = buildKubernetesDeployContext(settings);
   const deploymentId = createDeploymentId("kubernetes", settings.deploymentName, settings.stage);
-  const deployState = await runRealDeployIfEnabled({
+  const deployState = await runStandardCliRealDeployIfEnabled({
     projectDir: options.projectDir,
     project,
     plan,
-    settings,
-    ...envNames
+    stage: settings.stage,
+    realDeployEnv: envNames.realDeployEnv,
+    deployCommandEnv: envNames.deployCommandEnv,
+    defaultDeployCommand: defaultKubernetesDeployCommand,
+    defaultEndpoint: settings.defaultEndpoint,
+    parseEndpoint: endpointFromKubernetesResponse,
+    missingEndpointError: "kubernetes deploy response does not include endpoint",
+    env: deployContext.commandEnv,
+    buildResource: (rawResponse) => kubernetesResourceMetadata(rawResponse),
+    extraResource: deployContext.resource
   });
 
   await writeDeploymentReceipt(options.projectDir, "kubernetes", {

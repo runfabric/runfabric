@@ -12,12 +12,16 @@ import type {
 import {
   appendProviderLog,
   buildProviderLogsFromLocalArtifacts,
+  createProviderNativeObservabilityOperations,
+  createStandardProviderPlanOperations,
   createDeploymentId,
   destroyProviderArtifacts,
   invokeProviderViaDeployedEndpoint,
+  isRecordLike,
   isRealDeployModeEnabled,
   missingRequiredCredentialErrors,
-  runJsonCommand,
+  readNonEmptyString,
+  runStandardCliRealDeployIfEnabled,
   runShellCommand,
   writeDeploymentReceipt
 } from "@runfabric/core";
@@ -35,39 +39,34 @@ const netlifyCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
 function endpointFromNetlifyResponse(response: unknown): string | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
-  const endpoint = readString(response.endpoint) || readString(response.url) || readString(response.deploy_url);
+  const endpoint =
+    readNonEmptyString(response.endpoint) ||
+    readNonEmptyString(response.url) ||
+    readNonEmptyString(response.deploy_url);
   if (endpoint) {
     return endpoint;
   }
 
-  if (isRecord(response.published_deploy)) {
-    return readString(response.published_deploy.url);
+  if (isRecordLike(response.published_deploy)) {
+    return readNonEmptyString(response.published_deploy.url);
   }
 
   return undefined;
 }
 
 function netlifyResourceMetadata(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
   const metadata: Record<string, unknown> = {};
   for (const key of ["id", "site_id", "state"]) {
-    const value = readString(response[key]);
+    const value = readNonEmptyString(response[key]);
     if (value) {
       metadata[key] = value;
     }
@@ -91,52 +90,6 @@ function resolveSiteName(project: ProjectConfig): string {
   return project.service;
 }
 
-async function runRealDeployIfEnabled(
-  options: ProviderOptions,
-  project: ProjectConfig,
-  plan: DeployPlan,
-  stage: string,
-  siteName: string
-): Promise<{
-  endpoint: string;
-  mode: "simulated" | "cli";
-  rawResponse?: unknown;
-  resource?: Record<string, unknown>;
-}> {
-  const defaultEndpoint = `https://${siteName}.netlify.app`;
-  if (!isRealDeployModeEnabled("RUNFABRIC_NETLIFY_REAL_DEPLOY")) {
-    return { endpoint: defaultEndpoint, mode: "simulated" };
-  }
-
-  const deployCommand = process.env.RUNFABRIC_NETLIFY_DEPLOY_CMD || defaultNetlifyDeployCommand();
-  const hasCommandOverride = Boolean(process.env.RUNFABRIC_NETLIFY_DEPLOY_CMD);
-  const rawResponse = await runJsonCommand(deployCommand, {
-    cwd: options.projectDir,
-    env: {
-      RUNFABRIC_SERVICE: project.service,
-      RUNFABRIC_STAGE: stage,
-      RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
-      RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
-    }
-  });
-
-  const parsedEndpoint = endpointFromNetlifyResponse(rawResponse);
-  if (!parsedEndpoint && hasCommandOverride) {
-    throw new Error("netlify deploy response does not include deployment URL");
-  }
-
-  return {
-    endpoint: parsedEndpoint || defaultEndpoint,
-    mode: "cli",
-    rawResponse,
-    resource: {
-      ...(netlifyResourceMetadata(rawResponse) || {}),
-      siteName,
-      deployCommandSource: hasCommandOverride ? "override" : "builtin"
-    }
-  };
-}
-
 async function deployNetlify(
   options: ProviderOptions,
   project: ProjectConfig,
@@ -145,7 +98,20 @@ async function deployNetlify(
   const stage = project.stage || "default";
   const siteName = resolveSiteName(project);
   const deploymentId = createDeploymentId("netlify", siteName, stage);
-  const deployState = await runRealDeployIfEnabled(options, project, plan, stage, siteName);
+  const deployState = await runStandardCliRealDeployIfEnabled({
+    projectDir: options.projectDir,
+    project,
+    plan,
+    stage,
+    realDeployEnv: "RUNFABRIC_NETLIFY_REAL_DEPLOY",
+    deployCommandEnv: "RUNFABRIC_NETLIFY_DEPLOY_CMD",
+    defaultDeployCommand: defaultNetlifyDeployCommand(),
+    defaultEndpoint: `https://${siteName}.netlify.app`,
+    parseEndpoint: endpointFromNetlifyResponse,
+    missingEndpointError: "netlify deploy response does not include deployment URL",
+    buildResource: (rawResponse) => netlifyResourceMetadata(rawResponse),
+    extraResource: { siteName }
+  });
 
   await writeDeploymentReceipt(options.projectDir, "netlify", {
     provider: "netlify",
@@ -195,36 +161,34 @@ function validateNetlifyProvider(): ValidationResult {
   return { ok: errors.length === 0, warnings: [], errors };
 }
 
-function createBuildPlan(): BuildPlan {
-  return {
-    provider: "netlify",
-    steps: ["prepare netlify function metadata"]
-  };
-}
-
-function createDeployPlan(artifact: BuildArtifact): DeployPlan {
-  return {
-    provider: "netlify",
-    artifactPath: artifact.entry,
-    artifactManifestPath: artifact.outputPath,
-    steps: [`deploy artifact from ${artifact.outputPath}`]
-  };
-}
+const netlifyPlanOperations = createStandardProviderPlanOperations(
+  "netlify",
+  "prepare netlify function metadata"
+);
 
 export function createNetlifyProvider(options: ProviderOptions): ProviderAdapter {
+  const observabilityOperations = createProviderNativeObservabilityOperations({
+    projectDir: options.projectDir,
+    provider: "netlify",
+    realDeployEnv: "RUNFABRIC_NETLIFY_REAL_DEPLOY",
+    tracesCommandEnv: "RUNFABRIC_NETLIFY_TRACES_CMD",
+    metricsCommandEnv: "RUNFABRIC_NETLIFY_METRICS_CMD"
+  });
+
   return {
     name: "netlify",
     getCapabilities: () => netlifyCapabilities,
     getCredentialSchema: () => netlifyCredentialSchema,
     validate: async (): Promise<ValidationResult> => validateNetlifyProvider(),
-    planBuild: async (): Promise<BuildPlan> => createBuildPlan(),
+    planBuild: netlifyPlanOperations.planBuild,
     build: async (): Promise<BuildResult> => ({ artifacts: [] }),
-    planDeploy: async (_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> =>
-      createDeployPlan(artifact),
+    planDeploy: netlifyPlanOperations.planDeploy,
     deploy: async (project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> =>
       deployNetlify(options, project, plan),
     invoke: async (input) => invokeProviderViaDeployedEndpoint(options.projectDir, "netlify", input),
     logs: async (input) => buildProviderLogsFromLocalArtifacts(options.projectDir, "netlify", input),
+    traces: observabilityOperations.traces,
+    metrics: observabilityOperations.metrics,
     destroy: async (project: ProjectConfig) => destroyNetlify(options, project)
   };
 }

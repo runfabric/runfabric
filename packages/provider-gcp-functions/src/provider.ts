@@ -12,12 +12,16 @@ import type {
 import {
   appendProviderLog,
   buildProviderLogsFromLocalArtifacts,
+  createProviderNativeObservabilityOperations,
+  createStandardProviderPlanOperations,
   createDeploymentId,
   destroyProviderArtifacts,
   invokeProviderViaDeployedEndpoint,
+  isRecordLike,
   isRealDeployModeEnabled,
   missingRequiredCredentialErrors,
-  runJsonCommand,
+  readNonEmptyString,
+  runStandardCliRealDeployIfEnabled,
   runShellCommand,
   writeDeploymentReceipt
 } from "@runfabric/core";
@@ -38,36 +42,28 @@ const gcpCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
 function endpointFromGcpResponse(response: unknown): string | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
   const directCandidates = [response.endpoint, response.url, response.uri];
   for (const candidate of directCandidates) {
-    const endpoint = readString(candidate);
+    const endpoint = readNonEmptyString(candidate);
     if (endpoint) {
       return endpoint;
     }
   }
 
-  if (isRecord(response.httpsTrigger)) {
-    const endpoint = readString(response.httpsTrigger.url);
+  if (isRecordLike(response.httpsTrigger)) {
+    const endpoint = readNonEmptyString(response.httpsTrigger.url);
     if (endpoint) {
       return endpoint;
     }
   }
 
-  if (isRecord(response.serviceConfig)) {
-    const endpoint = readString(response.serviceConfig.uri);
+  if (isRecordLike(response.serviceConfig)) {
+    const endpoint = readNonEmptyString(response.serviceConfig.uri);
     if (endpoint) {
       return endpoint;
     }
@@ -77,13 +73,13 @@ function endpointFromGcpResponse(response: unknown): string | undefined {
 }
 
 function gcpResourceMetadata(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
   const metadata: Record<string, unknown> = {};
   for (const key of ["name", "state", "updateTime", "buildId"]) {
-    const value = readString(response[key]);
+    const value = readNonEmptyString(response[key]);
     if (value) {
       metadata[key] = value;
     }
@@ -125,51 +121,6 @@ function defaultEndpoint(service: string, region: string): string {
   return `https://${region}-${projectId}.cloudfunctions.net/${service}`;
 }
 
-async function runRealDeployIfEnabled(
-  options: ProviderOptions,
-  project: ProjectConfig,
-  plan: DeployPlan,
-  region: string,
-  stage: string,
-  currentEndpoint: string
-): Promise<{
-  endpoint: string;
-  mode: "simulated" | "cli";
-  rawResponse?: unknown;
-  resource?: Record<string, unknown>;
-}> {
-  if (!isRealDeployModeEnabled("RUNFABRIC_GCP_REAL_DEPLOY")) {
-    return { endpoint: currentEndpoint, mode: "simulated" };
-  }
-
-  const deployCommand = process.env.RUNFABRIC_GCP_DEPLOY_CMD || defaultGcpDeployCommand(region);
-  const hasCommandOverride = Boolean(process.env.RUNFABRIC_GCP_DEPLOY_CMD);
-  const rawResponse = await runJsonCommand(deployCommand, {
-    cwd: options.projectDir,
-    env: {
-      RUNFABRIC_SERVICE: project.service,
-      RUNFABRIC_STAGE: stage,
-      RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
-      RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
-    }
-  });
-
-  const parsedEndpoint = endpointFromGcpResponse(rawResponse);
-  if (!parsedEndpoint && hasCommandOverride) {
-    throw new Error("gcp-functions deploy response does not include endpoint URL");
-  }
-
-  return {
-    endpoint: parsedEndpoint || currentEndpoint,
-    mode: "cli",
-    rawResponse,
-    resource: {
-      ...(gcpResourceMetadata(rawResponse) || {}),
-      deployCommandSource: hasCommandOverride ? "override" : "builtin"
-    }
-  };
-}
-
 async function deployGcpFunctions(
   options: ProviderOptions,
   project: ProjectConfig,
@@ -178,15 +129,19 @@ async function deployGcpFunctions(
   const stage = project.stage || "default";
   const region = resolveRegion(project);
   const deploymentId = createDeploymentId("gcp-functions", project.service, stage);
-
-  const deployState = await runRealDeployIfEnabled(
-    options,
+  const deployState = await runStandardCliRealDeployIfEnabled({
+    projectDir: options.projectDir,
     project,
     plan,
-    region,
     stage,
-    defaultEndpoint(project.service, region)
-  );
+    realDeployEnv: "RUNFABRIC_GCP_REAL_DEPLOY",
+    deployCommandEnv: "RUNFABRIC_GCP_DEPLOY_CMD",
+    defaultDeployCommand: defaultGcpDeployCommand(region),
+    defaultEndpoint: defaultEndpoint(project.service, region),
+    parseEndpoint: endpointFromGcpResponse,
+    missingEndpointError: "gcp-functions deploy response does not include endpoint URL",
+    buildResource: (rawResponse) => gcpResourceMetadata(rawResponse)
+  });
 
   await writeDeploymentReceipt(options.projectDir, "gcp-functions", {
     provider: "gcp-functions",
@@ -236,36 +191,34 @@ function validateGcpProvider(): ValidationResult {
   return { ok: errors.length === 0, warnings: [], errors };
 }
 
-function createPlanBuildResult(): BuildPlan {
-  return {
-    provider: "gcp-functions",
-    steps: ["prepare gcp function metadata"]
-  };
-}
-
-function createPlanDeployResult(artifact: BuildArtifact): DeployPlan {
-  return {
-    provider: "gcp-functions",
-    artifactPath: artifact.entry,
-    artifactManifestPath: artifact.outputPath,
-    steps: [`deploy artifact from ${artifact.outputPath}`]
-  };
-}
+const gcpPlanOperations = createStandardProviderPlanOperations(
+  "gcp-functions",
+  "prepare gcp function metadata"
+);
 
 export function createGcpFunctionsProvider(options: ProviderOptions): ProviderAdapter {
+  const observabilityOperations = createProviderNativeObservabilityOperations({
+    projectDir: options.projectDir,
+    provider: "gcp-functions",
+    realDeployEnv: "RUNFABRIC_GCP_REAL_DEPLOY",
+    tracesCommandEnv: "RUNFABRIC_GCP_TRACES_CMD",
+    metricsCommandEnv: "RUNFABRIC_GCP_METRICS_CMD"
+  });
+
   return {
     name: "gcp-functions",
     getCapabilities: () => gcpFunctionsCapabilities,
     getCredentialSchema: () => gcpCredentialSchema,
     validate: async (): Promise<ValidationResult> => validateGcpProvider(),
-    planBuild: async (): Promise<BuildPlan> => createPlanBuildResult(),
+    planBuild: gcpPlanOperations.planBuild,
     build: async (): Promise<BuildResult> => ({ artifacts: [] }),
-    planDeploy: async (_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> =>
-      createPlanDeployResult(artifact),
+    planDeploy: gcpPlanOperations.planDeploy,
     deploy: async (project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> =>
       deployGcpFunctions(options, project, plan),
     invoke: async (input) => invokeProviderViaDeployedEndpoint(options.projectDir, "gcp-functions", input),
     logs: async (input) => buildProviderLogsFromLocalArtifacts(options.projectDir, "gcp-functions", input),
+    traces: observabilityOperations.traces,
+    metrics: observabilityOperations.metrics,
     destroy: async (project: ProjectConfig) => destroyGcpFunctions(options, project)
   };
 }

@@ -12,12 +12,16 @@ import type {
 import {
   appendProviderLog,
   buildProviderLogsFromLocalArtifacts,
+  createProviderNativeObservabilityOperations,
+  createStandardProviderPlanOperations,
   createDeploymentId,
   destroyProviderArtifacts,
   invokeProviderViaDeployedEndpoint,
+  isRecordLike,
   isRealDeployModeEnabled,
   missingRequiredCredentialErrors,
-  runJsonCommand,
+  readNonEmptyString,
+  runStandardCliRealDeployIfEnabled,
   runShellCommand,
   writeDeploymentReceipt
 } from "@runfabric/core";
@@ -36,14 +40,6 @@ const alibabaCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
 function toHttpEndpoint(value: string): string {
   if (value.startsWith("http://") || value.startsWith("https://")) {
     return value;
@@ -52,17 +48,20 @@ function toHttpEndpoint(value: string): string {
 }
 
 function endpointFromAlibabaResponse(response: unknown): string | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
-  const direct = readString(response.endpoint) || readString(response.url) || readString(response.internetAddress);
+  const direct =
+    readNonEmptyString(response.endpoint) ||
+    readNonEmptyString(response.url) ||
+    readNonEmptyString(response.internetAddress);
   if (direct) {
     return toHttpEndpoint(direct);
   }
 
-  if (isRecord(response.result)) {
-    const nested = readString(response.result.url) || readString(response.result.endpoint);
+  if (isRecordLike(response.result)) {
+    const nested = readNonEmptyString(response.result.url) || readNonEmptyString(response.result.endpoint);
     return nested ? toHttpEndpoint(nested) : undefined;
   }
 
@@ -70,13 +69,13 @@ function endpointFromAlibabaResponse(response: unknown): string | undefined {
 }
 
 function alibabaResourceMetadata(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
   const metadata: Record<string, unknown> = {};
   for (const key of ["serviceName", "functionName", "region", "requestId"]) {
-    const value = readString(response[key]);
+    const value = readNonEmptyString(response[key]);
     if (value) {
       metadata[key] = value;
     }
@@ -100,52 +99,6 @@ function resolveRegion(project: ProjectConfig): string {
   return process.env.ALICLOUD_REGION || "cn-hangzhou";
 }
 
-async function runRealDeployIfEnabled(
-  options: ProviderOptions,
-  project: ProjectConfig,
-  plan: DeployPlan,
-  stage: string,
-  region: string
-): Promise<{
-  endpoint: string;
-  mode: "simulated" | "cli";
-  rawResponse?: unknown;
-  resource?: Record<string, unknown>;
-}> {
-  const defaultEndpoint = `https://${project.service}.${region}.fcapp.run`;
-  if (!isRealDeployModeEnabled("RUNFABRIC_ALIBABA_REAL_DEPLOY")) {
-    return { endpoint: defaultEndpoint, mode: "simulated" };
-  }
-
-  const deployCommand = process.env.RUNFABRIC_ALIBABA_DEPLOY_CMD || defaultAlibabaDeployCommand();
-  const hasCommandOverride = Boolean(process.env.RUNFABRIC_ALIBABA_DEPLOY_CMD);
-  const rawResponse = await runJsonCommand(deployCommand, {
-    cwd: options.projectDir,
-    env: {
-      RUNFABRIC_SERVICE: project.service,
-      RUNFABRIC_STAGE: stage,
-      RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
-      RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
-    }
-  });
-
-  const parsedEndpoint = endpointFromAlibabaResponse(rawResponse);
-  if (!parsedEndpoint && hasCommandOverride) {
-    throw new Error("alibaba-fc deploy response does not include endpoint");
-  }
-
-  return {
-    endpoint: parsedEndpoint || defaultEndpoint,
-    mode: "cli",
-    rawResponse,
-    resource: {
-      ...(alibabaResourceMetadata(rawResponse) || {}),
-      region,
-      deployCommandSource: hasCommandOverride ? "override" : "builtin"
-    }
-  };
-}
-
 async function deployAlibabaFc(
   options: ProviderOptions,
   project: ProjectConfig,
@@ -154,7 +107,20 @@ async function deployAlibabaFc(
   const stage = project.stage || "default";
   const region = resolveRegion(project);
   const deploymentId = createDeploymentId("alibaba-fc", project.service, stage);
-  const deployState = await runRealDeployIfEnabled(options, project, plan, stage, region);
+  const deployState = await runStandardCliRealDeployIfEnabled({
+    projectDir: options.projectDir,
+    project,
+    plan,
+    stage,
+    realDeployEnv: "RUNFABRIC_ALIBABA_REAL_DEPLOY",
+    deployCommandEnv: "RUNFABRIC_ALIBABA_DEPLOY_CMD",
+    defaultDeployCommand: defaultAlibabaDeployCommand(),
+    defaultEndpoint: `https://${project.service}.${region}.fcapp.run`,
+    parseEndpoint: endpointFromAlibabaResponse,
+    missingEndpointError: "alibaba-fc deploy response does not include endpoint",
+    buildResource: (rawResponse) => alibabaResourceMetadata(rawResponse),
+    extraResource: { region }
+  });
 
   await writeDeploymentReceipt(options.projectDir, "alibaba-fc", {
     provider: "alibaba-fc",
@@ -204,36 +170,34 @@ function validateAlibabaProvider(): ValidationResult {
   return { ok: errors.length === 0, warnings: [], errors };
 }
 
-function createBuildPlan(): BuildPlan {
-  return {
-    provider: "alibaba-fc",
-    steps: ["prepare alibaba fc metadata"]
-  };
-}
-
-function createDeployPlan(artifact: BuildArtifact): DeployPlan {
-  return {
-    provider: "alibaba-fc",
-    artifactPath: artifact.entry,
-    artifactManifestPath: artifact.outputPath,
-    steps: [`deploy artifact from ${artifact.outputPath}`]
-  };
-}
+const alibabaPlanOperations = createStandardProviderPlanOperations(
+  "alibaba-fc",
+  "prepare alibaba fc metadata"
+);
 
 export function createAlibabaFcProvider(options: ProviderOptions): ProviderAdapter {
+  const observabilityOperations = createProviderNativeObservabilityOperations({
+    projectDir: options.projectDir,
+    provider: "alibaba-fc",
+    realDeployEnv: "RUNFABRIC_ALIBABA_REAL_DEPLOY",
+    tracesCommandEnv: "RUNFABRIC_ALIBABA_TRACES_CMD",
+    metricsCommandEnv: "RUNFABRIC_ALIBABA_METRICS_CMD"
+  });
+
   return {
     name: "alibaba-fc",
     getCapabilities: () => alibabaFcCapabilities,
     getCredentialSchema: () => alibabaCredentialSchema,
     validate: async (): Promise<ValidationResult> => validateAlibabaProvider(),
-    planBuild: async (): Promise<BuildPlan> => createBuildPlan(),
+    planBuild: alibabaPlanOperations.planBuild,
     build: async (): Promise<BuildResult> => ({ artifacts: [] }),
-    planDeploy: async (_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> =>
-      createDeployPlan(artifact),
+    planDeploy: alibabaPlanOperations.planDeploy,
     deploy: async (project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> =>
       deployAlibabaFc(options, project, plan),
     invoke: async (input) => invokeProviderViaDeployedEndpoint(options.projectDir, "alibaba-fc", input),
     logs: async (input) => buildProviderLogsFromLocalArtifacts(options.projectDir, "alibaba-fc", input),
+    traces: observabilityOperations.traces,
+    metrics: observabilityOperations.metrics,
     destroy: async (project: ProjectConfig) => destroyAlibabaFc(options, project)
   };
 }

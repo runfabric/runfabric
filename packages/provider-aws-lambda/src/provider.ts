@@ -1,6 +1,5 @@
 import type { Runtime } from "@aws-sdk/client-lambda";
 import type {
-  BuildArtifact,
   BuildPlan,
   BuildResult,
   DeployPlan,
@@ -12,12 +11,18 @@ import type {
 } from "@runfabric/core";
 import {
   appendProviderLog,
+  buildProviderMetricsFromLocalArtifacts,
   buildProviderLogsFromLocalArtifacts,
+  buildProviderTracesFromLocalArtifacts,
+  createStandardProviderPlanOperations,
   createDeploymentId,
   destroyProviderArtifacts,
+  isRecordLike,
   invokeProviderViaDeployedEndpoint,
   isRealDeployModeEnabled,
   missingRequiredCredentialErrors,
+  readFiniteNumber,
+  readNonEmptyString,
   readDeploymentReceipt,
   runJsonCommand,
   runShellCommand,
@@ -74,31 +79,19 @@ const awsLambdaCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
-function readNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
 function awsExtension(project: ProjectConfig): AwsLambdaExtensionConfig {
   const extension = project.extensions?.["aws-lambda"];
-  return isRecord(extension) ? (extension as AwsLambdaExtensionConfig) : {};
+  return isRecordLike(extension) ? (extension as AwsLambdaExtensionConfig) : {};
 }
 
 function resolveStage(project: ProjectConfig): string {
   const extension = awsExtension(project);
-  return readString(extension.stage) || project.stage || "default";
+  return readNonEmptyString(extension.stage) || project.stage || "default";
 }
 
 function resolveRegion(project: ProjectConfig): string {
   const extension = awsExtension(project);
-  return readString(extension.region) || process.env.AWS_REGION || "us-east-1";
+  return readNonEmptyString(extension.region) || process.env.AWS_REGION || "us-east-1";
 }
 
 function sanitizeLambdaFunctionName(value: string): string {
@@ -108,30 +101,36 @@ function sanitizeLambdaFunctionName(value: string): string {
 
 function resolveFunctionName(project: ProjectConfig, stage: string): string {
   const extension = awsExtension(project);
-  const configured = readString(extension.functionName);
+  const configured = readNonEmptyString(extension.functionName);
   return configured ? sanitizeLambdaFunctionName(configured) : sanitizeLambdaFunctionName(`${project.service}-${stage}`);
 }
 
 function resolveRoleArn(project: ProjectConfig): string | undefined {
   const extension = awsExtension(project);
-  return readString(extension.roleArn) || readString(process.env.RUNFABRIC_AWS_LAMBDA_ROLE_ARN);
+  return (
+    readNonEmptyString(extension.roleArn) ||
+    readNonEmptyString(process.env.RUNFABRIC_AWS_LAMBDA_ROLE_ARN)
+  );
 }
 
 function resolveLambdaRuntime(project: ProjectConfig): Runtime {
   const extension = awsExtension(project);
-  const runtime = readString(extension.runtime) || readString(process.env.RUNFABRIC_AWS_LAMBDA_RUNTIME) || "nodejs20.x";
+  const runtime =
+    readNonEmptyString(extension.runtime) ||
+    readNonEmptyString(process.env.RUNFABRIC_AWS_LAMBDA_RUNTIME) ||
+    "nodejs20.x";
   return runtime as Runtime;
 }
 
 function resolveLambdaTimeout(project: ProjectConfig): number | undefined {
   const extension = awsExtension(project);
-  const timeout = readNumber(extension.timeout) || readNumber(project.resources?.timeout);
+  const timeout = readFiniteNumber(extension.timeout) || readFiniteNumber(project.resources?.timeout);
   return typeof timeout === "number" ? Math.max(1, Math.floor(timeout)) : undefined;
 }
 
 function resolveLambdaMemory(project: ProjectConfig): number | undefined {
   const extension = awsExtension(project);
-  const memory = readNumber(extension.memory) || readNumber(project.resources?.memory);
+  const memory = readFiniteNumber(extension.memory) || readFiniteNumber(project.resources?.memory);
   return typeof memory === "number" ? Math.max(128, Math.floor(memory)) : undefined;
 }
 
@@ -162,13 +161,6 @@ function validateAwsProject(project: ProjectConfig): ValidationResult {
   return { ok: errors.length === 0, warnings, errors };
 }
 
-function planAwsBuild(): BuildPlan {
-  return {
-    provider: "aws-lambda",
-    steps: ["validate config", "prepare aws-lambda artifact manifest"]
-  };
-}
-
 function buildAwsArtifacts(plan: BuildPlan): BuildResult {
   return {
     artifacts: plan.steps.map((step, index) => ({
@@ -179,14 +171,10 @@ function buildAwsArtifacts(plan: BuildPlan): BuildResult {
   };
 }
 
-function planAwsDeploy(artifact: BuildArtifact): DeployPlan {
-  return {
-    provider: "aws-lambda",
-    artifactPath: artifact.entry,
-    artifactManifestPath: artifact.outputPath,
-    steps: [`deploy artifact from ${artifact.outputPath}`]
-  };
-}
+const awsPlanOperations = createStandardProviderPlanOperations("aws-lambda", [
+  "validate config",
+  "prepare aws-lambda artifact manifest"
+]);
 
 function buildCliDeployEnv(input: {
   project: ProjectConfig;
@@ -397,9 +385,9 @@ function createAwsLambdaProviderAdapter(options: AwsProviderOptions): ProviderAd
       provider: "aws-lambda",
       secretReferences: collectSecretReferences(project, resolveRegion(project))
     }),
-    planBuild: async () => planAwsBuild(),
+    planBuild: awsPlanOperations.planBuild,
     build: async (_project, plan) => buildAwsArtifacts(plan),
-    planDeploy: async (_project, artifact) => planAwsDeploy(artifact),
+    planDeploy: awsPlanOperations.planDeploy,
     deploy: async (project, plan) => {
       const summary = await executeAwsDeploy(options, project, plan);
       await persistAwsDeployment(options, project, plan, summary);
@@ -413,6 +401,8 @@ function createAwsLambdaProviderAdapter(options: AwsProviderOptions): ProviderAd
     },
     invoke: async (input) => invokeProviderViaDeployedEndpoint(options.projectDir, "aws-lambda", input),
     logs: async (input) => buildProviderLogsFromLocalArtifacts(options.projectDir, "aws-lambda", input),
+    traces: async (input) => buildProviderTracesFromLocalArtifacts(options.projectDir, "aws-lambda", input),
+    metrics: async (input) => buildProviderMetricsFromLocalArtifacts(options.projectDir, "aws-lambda", input),
     destroy: async (project) => {
       await runAwsDestroy(options, project);
       await appendProviderLog(options.projectDir, "aws-lambda", "destroy local artifacts");

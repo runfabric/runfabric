@@ -12,12 +12,16 @@ import type {
 import {
   appendProviderLog,
   buildProviderLogsFromLocalArtifacts,
+  createProviderNativeObservabilityOperations,
+  createStandardProviderPlanOperations,
   createDeploymentId,
   destroyProviderArtifacts,
   invokeProviderViaDeployedEndpoint,
+  isRecordLike,
   isRealDeployModeEnabled,
   missingRequiredCredentialErrors,
-  runJsonCommand,
+  readNonEmptyString,
+  runStandardCliRealDeployIfEnabled,
   runShellCommand,
   writeDeploymentReceipt
 } from "@runfabric/core";
@@ -36,14 +40,6 @@ const vercelCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
 function toHttpEndpoint(endpoint: string): string {
   if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
     return endpoint;
@@ -52,21 +48,21 @@ function toHttpEndpoint(endpoint: string): string {
 }
 
 function endpointFromVercelResponse(response: unknown): string | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
   const direct =
-    readString(response.endpoint) ||
-    readString(response.url) ||
-    readString(response.alias) ||
-    readString(response.inspectorUrl);
+    readNonEmptyString(response.endpoint) ||
+    readNonEmptyString(response.url) ||
+    readNonEmptyString(response.alias) ||
+    readNonEmptyString(response.inspectorUrl);
   if (direct) {
     return toHttpEndpoint(direct);
   }
 
   if (Array.isArray(response.alias) && response.alias.length > 0) {
-    const alias = readString(response.alias[0]);
+    const alias = readNonEmptyString(response.alias[0]);
     return alias ? toHttpEndpoint(alias) : undefined;
   }
 
@@ -74,13 +70,13 @@ function endpointFromVercelResponse(response: unknown): string | undefined {
 }
 
 function vercelResourceMetadata(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
   const metadata: Record<string, unknown> = {};
   for (const key of ["id", "name", "projectId", "readyState"]) {
-    const value = readString(response[key]);
+    const value = readNonEmptyString(response[key]);
     if (value) {
       metadata[key] = value;
     }
@@ -104,52 +100,6 @@ function resolveProjectName(project: ProjectConfig): string {
   return project.service;
 }
 
-async function runRealDeployIfEnabled(
-  options: ProviderOptions,
-  project: ProjectConfig,
-  plan: DeployPlan,
-  stage: string,
-  projectName: string
-): Promise<{
-  endpoint: string;
-  mode: "simulated" | "cli";
-  rawResponse?: unknown;
-  resource?: Record<string, unknown>;
-}> {
-  const defaultEndpoint = `https://${projectName}.vercel.app`;
-  if (!isRealDeployModeEnabled("RUNFABRIC_VERCEL_REAL_DEPLOY")) {
-    return { endpoint: defaultEndpoint, mode: "simulated" };
-  }
-
-  const deployCommand = process.env.RUNFABRIC_VERCEL_DEPLOY_CMD || defaultVercelDeployCommand();
-  const hasCommandOverride = Boolean(process.env.RUNFABRIC_VERCEL_DEPLOY_CMD);
-  const rawResponse = await runJsonCommand(deployCommand, {
-    cwd: options.projectDir,
-    env: {
-      RUNFABRIC_SERVICE: project.service,
-      RUNFABRIC_STAGE: stage,
-      RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
-      RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
-    }
-  });
-
-  const parsedEndpoint = endpointFromVercelResponse(rawResponse);
-  if (!parsedEndpoint && hasCommandOverride) {
-    throw new Error("vercel deploy response does not include deployment URL");
-  }
-
-  return {
-    endpoint: parsedEndpoint || defaultEndpoint,
-    mode: "cli",
-    rawResponse,
-    resource: {
-      ...(vercelResourceMetadata(rawResponse) || {}),
-      projectName,
-      deployCommandSource: hasCommandOverride ? "override" : "builtin"
-    }
-  };
-}
-
 async function deployVercel(
   options: ProviderOptions,
   project: ProjectConfig,
@@ -158,7 +108,20 @@ async function deployVercel(
   const stage = project.stage || "default";
   const projectName = resolveProjectName(project);
   const deploymentId = createDeploymentId("vercel", projectName, stage);
-  const deployState = await runRealDeployIfEnabled(options, project, plan, stage, projectName);
+  const deployState = await runStandardCliRealDeployIfEnabled({
+    projectDir: options.projectDir,
+    project,
+    plan,
+    stage,
+    realDeployEnv: "RUNFABRIC_VERCEL_REAL_DEPLOY",
+    deployCommandEnv: "RUNFABRIC_VERCEL_DEPLOY_CMD",
+    defaultDeployCommand: defaultVercelDeployCommand(),
+    defaultEndpoint: `https://${projectName}.vercel.app`,
+    parseEndpoint: endpointFromVercelResponse,
+    missingEndpointError: "vercel deploy response does not include deployment URL",
+    buildResource: (rawResponse) => vercelResourceMetadata(rawResponse),
+    extraResource: { projectName }
+  });
 
   await writeDeploymentReceipt(options.projectDir, "vercel", {
     provider: "vercel",
@@ -208,36 +171,34 @@ function validateVercelProvider(): ValidationResult {
   return { ok: errors.length === 0, warnings: [], errors };
 }
 
-function createBuildPlan(): BuildPlan {
-  return {
-    provider: "vercel",
-    steps: ["prepare vercel function metadata"]
-  };
-}
-
-function createDeployPlan(artifact: BuildArtifact): DeployPlan {
-  return {
-    provider: "vercel",
-    artifactPath: artifact.entry,
-    artifactManifestPath: artifact.outputPath,
-    steps: [`deploy artifact from ${artifact.outputPath}`]
-  };
-}
+const vercelPlanOperations = createStandardProviderPlanOperations(
+  "vercel",
+  "prepare vercel function metadata"
+);
 
 export function createVercelProvider(options: ProviderOptions): ProviderAdapter {
+  const observabilityOperations = createProviderNativeObservabilityOperations({
+    projectDir: options.projectDir,
+    provider: "vercel",
+    realDeployEnv: "RUNFABRIC_VERCEL_REAL_DEPLOY",
+    tracesCommandEnv: "RUNFABRIC_VERCEL_TRACES_CMD",
+    metricsCommandEnv: "RUNFABRIC_VERCEL_METRICS_CMD"
+  });
+
   return {
     name: "vercel",
     getCapabilities: () => vercelCapabilities,
     getCredentialSchema: () => vercelCredentialSchema,
     validate: async (): Promise<ValidationResult> => validateVercelProvider(),
-    planBuild: async (): Promise<BuildPlan> => createBuildPlan(),
+    planBuild: vercelPlanOperations.planBuild,
     build: async (): Promise<BuildResult> => ({ artifacts: [] }),
-    planDeploy: async (_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> =>
-      createDeployPlan(artifact),
+    planDeploy: vercelPlanOperations.planDeploy,
     deploy: async (project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> =>
       deployVercel(options, project, plan),
     invoke: async (input) => invokeProviderViaDeployedEndpoint(options.projectDir, "vercel", input),
     logs: async (input) => buildProviderLogsFromLocalArtifacts(options.projectDir, "vercel", input),
+    traces: observabilityOperations.traces,
+    metrics: observabilityOperations.metrics,
     destroy: async (project: ProjectConfig) => destroyVercel(options, project)
   };
 }

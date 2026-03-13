@@ -13,6 +13,8 @@ import type {
 import {
   appendProviderLog,
   buildProviderLogsFromLocalArtifacts,
+  createProviderNativeObservabilityOperations,
+  createStandardProviderPlanOperations,
   createDeploymentId,
   destroyProviderArtifacts,
   invokeProviderViaDeployedEndpoint,
@@ -273,39 +275,37 @@ function validateCloudflareProvider(project: ProjectConfig): ValidationResult {
   return { ok: errors.length === 0, warnings, errors };
 }
 
-function createBuildPlan(): BuildPlan {
-  return {
-    provider: "cloudflare-workers",
-    steps: ["prepare worker bundle metadata"]
-  };
-}
-
-function createDeployPlan(artifact: BuildArtifact): DeployPlan {
-  return {
-    provider: "cloudflare-workers",
-    artifactPath: artifact.entry,
-    artifactManifestPath: artifact.outputPath,
-    steps: [`deploy artifact from ${artifact.outputPath}`]
-  };
-}
+const cloudflarePlanOperations = createStandardProviderPlanOperations(
+  "cloudflare-workers",
+  "prepare worker bundle metadata"
+);
 
 export function createCloudflareWorkersProvider(options: ProviderOptions): ProviderAdapter {
+  const observabilityOperations = createProviderNativeObservabilityOperations({
+    projectDir: options.projectDir,
+    provider: "cloudflare-workers",
+    realDeployEnv: "RUNFABRIC_CLOUDFLARE_REAL_DEPLOY",
+    tracesCommandEnv: "RUNFABRIC_CLOUDFLARE_TRACES_CMD",
+    metricsCommandEnv: "RUNFABRIC_CLOUDFLARE_METRICS_CMD"
+  });
+
   return {
     name: "cloudflare-workers",
     getCapabilities: () => cloudflareWorkersCapabilities,
     getCredentialSchema: () => cloudflareCredentialSchema,
     validate: async (project: ProjectConfig): Promise<ValidationResult> =>
       validateCloudflareProvider(project),
-    planBuild: async (): Promise<BuildPlan> => createBuildPlan(),
+    planBuild: cloudflarePlanOperations.planBuild,
     build: async (): Promise<BuildResult> => ({ artifacts: [] }),
-    planDeploy: async (_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> =>
-      createDeployPlan(artifact),
+    planDeploy: cloudflarePlanOperations.planDeploy,
     deploy: async (project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> =>
       deployCloudflareWorkers(options, project, plan),
     invoke: async (input) =>
       invokeProviderViaDeployedEndpoint(options.projectDir, "cloudflare-workers", input),
     logs: async (input) =>
       buildProviderLogsFromLocalArtifacts(options.projectDir, "cloudflare-workers", input),
+    traces: observabilityOperations.traces,
+    metrics: observabilityOperations.metrics,
     destroy: async (project: ProjectConfig) => destroyCloudflareWorkers(options, project)
   };
 }

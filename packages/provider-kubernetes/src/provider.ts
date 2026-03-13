@@ -10,6 +10,8 @@ import type {
 } from "@runfabric/core";
 import {
   buildProviderLogsFromLocalArtifacts,
+  createProviderNativeObservabilityOperations,
+  createStandardProviderPlanOperations,
   invokeProviderViaDeployedEndpoint,
   missingRequiredCredentialErrors
 } from "@runfabric/core";
@@ -34,32 +36,28 @@ function validateKubernetesProvider(): ValidationResult {
   return { ok: errors.length === 0, warnings: [], errors };
 }
 
-function createBuildPlan(): BuildPlan {
-  return {
-    provider: "kubernetes",
-    steps: ["prepare kubernetes deployment metadata"]
-  };
-}
-
-function createDeployPlan(artifact: BuildArtifact): DeployPlan {
-  return {
-    provider: "kubernetes",
-    artifactPath: artifact.entry,
-    artifactManifestPath: artifact.outputPath,
-    steps: [`deploy artifact from ${artifact.outputPath}`]
-  };
-}
+const kubernetesPlanOperations = createStandardProviderPlanOperations(
+  "kubernetes",
+  "prepare kubernetes deployment metadata"
+);
 
 export function createKubernetesProvider(options: { projectDir: string }): ProviderAdapter {
+  const observabilityOperations = createProviderNativeObservabilityOperations({
+    projectDir: options.projectDir,
+    provider: "kubernetes",
+    realDeployEnv: KUBERNETES_REAL_DEPLOY_ENV,
+    tracesCommandEnv: "RUNFABRIC_KUBERNETES_TRACES_CMD",
+    metricsCommandEnv: "RUNFABRIC_KUBERNETES_METRICS_CMD"
+  });
+
   return {
     name: "kubernetes",
     getCapabilities: () => kubernetesCapabilities,
     getCredentialSchema: () => kubernetesCredentialSchema,
     validate: async (): Promise<ValidationResult> => validateKubernetesProvider(),
-    planBuild: async (): Promise<BuildPlan> => createBuildPlan(),
+    planBuild: kubernetesPlanOperations.planBuild,
     build: async (): Promise<BuildResult> => ({ artifacts: [] }),
-    planDeploy: async (_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> =>
-      createDeployPlan(artifact),
+    planDeploy: kubernetesPlanOperations.planDeploy,
     deploy: async (project: ProjectConfig, plan: DeployPlan) =>
       deployKubernetesProvider(options, project, plan, {
         realDeployEnv: KUBERNETES_REAL_DEPLOY_ENV,
@@ -67,6 +65,8 @@ export function createKubernetesProvider(options: { projectDir: string }): Provi
       }),
     invoke: async (input) => invokeProviderViaDeployedEndpoint(options.projectDir, "kubernetes", input),
     logs: async (input) => buildProviderLogsFromLocalArtifacts(options.projectDir, "kubernetes", input),
+    traces: observabilityOperations.traces,
+    metrics: observabilityOperations.metrics,
     destroy: async (project: ProjectConfig) =>
       destroyKubernetesProvider(options, project, {
         realDeployEnv: KUBERNETES_REAL_DEPLOY_ENV,

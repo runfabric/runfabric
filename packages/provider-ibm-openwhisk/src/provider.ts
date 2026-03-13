@@ -12,12 +12,16 @@ import type {
 import {
   appendProviderLog,
   buildProviderLogsFromLocalArtifacts,
+  createProviderNativeObservabilityOperations,
+  createStandardProviderPlanOperations,
   createDeploymentId,
   destroyProviderArtifacts,
   invokeProviderViaDeployedEndpoint,
+  isRecordLike,
   isRealDeployModeEnabled,
   missingRequiredCredentialErrors,
-  runJsonCommand,
+  readNonEmptyString,
+  runStandardCliRealDeployIfEnabled,
   runShellCommand,
   writeDeploymentReceipt
 } from "@runfabric/core";
@@ -36,43 +40,40 @@ const ibmCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
 function toHttpEndpoint(value: string): string {
   return value.startsWith("http") ? value : `https://${value}`;
 }
 
 function endpointFromIbmResponse(response: unknown): string | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
-  const endpoint = readString(response.endpoint) || readString(response.url) || readString(response.apihost);
+  const endpoint =
+    readNonEmptyString(response.endpoint) ||
+    readNonEmptyString(response.url) ||
+    readNonEmptyString(response.apihost);
   if (endpoint) {
     return toHttpEndpoint(endpoint);
   }
 
-  if (!isRecord(response.result)) {
+  if (!isRecordLike(response.result)) {
     return undefined;
   }
-  const nested = readString(response.result.url) || readString(response.result.endpoint);
+  const nested =
+    readNonEmptyString(response.result.url) ||
+    readNonEmptyString(response.result.endpoint);
   return nested ? toHttpEndpoint(nested) : undefined;
 }
 
 function ibmResourceMetadata(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
   const metadata: Record<string, unknown> = {};
   for (const key of ["namespace", "name", "version"]) {
-    const value = readString(response[key]);
+    const value = readNonEmptyString(response[key]);
     if (value) {
       metadata[key] = value;
     }
@@ -107,54 +108,6 @@ function defaultEndpoint(service: string, namespace: string): string {
   return `https://${region}.functions.cloud.ibm.com/api/v1/web/${namespace}/default/${service}`;
 }
 
-async function runRealDeployIfEnabled(
-  options: ProviderOptions,
-  project: ProjectConfig,
-  plan: DeployPlan,
-  stage: string,
-  namespace: string
-): Promise<{
-  endpoint: string;
-  mode: "simulated" | "cli";
-  rawResponse?: unknown;
-  resource?: Record<string, unknown>;
-}> {
-  const initialEndpoint = defaultEndpoint(project.service, namespace);
-  if (!isRealDeployModeEnabled("RUNFABRIC_IBM_REAL_DEPLOY")) {
-    return { endpoint: initialEndpoint, mode: "simulated" };
-  }
-
-  const region = process.env.IBM_CLOUD_REGION || "us-south";
-  const deployCommand = process.env.RUNFABRIC_IBM_DEPLOY_CMD || defaultIbmDeployCommand();
-  const hasCommandOverride = Boolean(process.env.RUNFABRIC_IBM_DEPLOY_CMD);
-  const rawResponse = await runJsonCommand(deployCommand, {
-    cwd: options.projectDir,
-    env: {
-      RUNFABRIC_SERVICE: project.service,
-      RUNFABRIC_STAGE: stage,
-      RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
-      RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
-    }
-  });
-
-  const parsedEndpoint = endpointFromIbmResponse(rawResponse);
-  if (!parsedEndpoint && hasCommandOverride) {
-    throw new Error("ibm-openwhisk deploy response does not include endpoint");
-  }
-
-  return {
-    endpoint: parsedEndpoint || initialEndpoint,
-    mode: "cli",
-    rawResponse,
-    resource: {
-      ...(ibmResourceMetadata(rawResponse) || {}),
-      region,
-      namespace,
-      deployCommandSource: hasCommandOverride ? "override" : "builtin"
-    }
-  };
-}
-
 async function deployIbmOpenWhisk(
   options: ProviderOptions,
   project: ProjectConfig,
@@ -163,7 +116,23 @@ async function deployIbmOpenWhisk(
   const stage = project.stage || "default";
   const namespace = resolveNamespace(project);
   const deploymentId = createDeploymentId("ibm-openwhisk", project.service, stage);
-  const deployState = await runRealDeployIfEnabled(options, project, plan, stage, namespace);
+  const deployState = await runStandardCliRealDeployIfEnabled({
+    projectDir: options.projectDir,
+    project,
+    plan,
+    stage,
+    realDeployEnv: "RUNFABRIC_IBM_REAL_DEPLOY",
+    deployCommandEnv: "RUNFABRIC_IBM_DEPLOY_CMD",
+    defaultDeployCommand: defaultIbmDeployCommand(),
+    defaultEndpoint: defaultEndpoint(project.service, namespace),
+    parseEndpoint: endpointFromIbmResponse,
+    missingEndpointError: "ibm-openwhisk deploy response does not include endpoint",
+    buildResource: (rawResponse) => ibmResourceMetadata(rawResponse),
+    extraResource: {
+      region: process.env.IBM_CLOUD_REGION || "us-south",
+      namespace
+    }
+  });
 
   await writeDeploymentReceipt(options.projectDir, "ibm-openwhisk", {
     provider: "ibm-openwhisk",
@@ -213,36 +182,34 @@ function validateIbmProvider(): ValidationResult {
   return { ok: errors.length === 0, warnings: [], errors };
 }
 
-function createBuildPlan(): BuildPlan {
-  return {
-    provider: "ibm-openwhisk",
-    steps: ["prepare ibm openwhisk metadata"]
-  };
-}
-
-function createDeployPlan(artifact: BuildArtifact): DeployPlan {
-  return {
-    provider: "ibm-openwhisk",
-    artifactPath: artifact.entry,
-    artifactManifestPath: artifact.outputPath,
-    steps: [`deploy artifact from ${artifact.outputPath}`]
-  };
-}
+const ibmPlanOperations = createStandardProviderPlanOperations(
+  "ibm-openwhisk",
+  "prepare ibm openwhisk metadata"
+);
 
 export function createIbmOpenWhiskProvider(options: ProviderOptions): ProviderAdapter {
+  const observabilityOperations = createProviderNativeObservabilityOperations({
+    projectDir: options.projectDir,
+    provider: "ibm-openwhisk",
+    realDeployEnv: "RUNFABRIC_IBM_REAL_DEPLOY",
+    tracesCommandEnv: "RUNFABRIC_IBM_TRACES_CMD",
+    metricsCommandEnv: "RUNFABRIC_IBM_METRICS_CMD"
+  });
+
   return {
     name: "ibm-openwhisk",
     getCapabilities: () => ibmOpenWhiskCapabilities,
     getCredentialSchema: () => ibmCredentialSchema,
     validate: async (): Promise<ValidationResult> => validateIbmProvider(),
-    planBuild: async (): Promise<BuildPlan> => createBuildPlan(),
+    planBuild: ibmPlanOperations.planBuild,
     build: async (): Promise<BuildResult> => ({ artifacts: [] }),
-    planDeploy: async (_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> =>
-      createDeployPlan(artifact),
+    planDeploy: ibmPlanOperations.planDeploy,
     deploy: async (project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> =>
       deployIbmOpenWhisk(options, project, plan),
     invoke: async (input) => invokeProviderViaDeployedEndpoint(options.projectDir, "ibm-openwhisk", input),
     logs: async (input) => buildProviderLogsFromLocalArtifacts(options.projectDir, "ibm-openwhisk", input),
+    traces: observabilityOperations.traces,
+    metrics: observabilityOperations.metrics,
     destroy: async (project: ProjectConfig) => destroyIbmOpenWhisk(options, project)
   };
 }

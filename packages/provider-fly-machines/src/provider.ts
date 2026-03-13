@@ -12,12 +12,16 @@ import type {
 import {
   appendProviderLog,
   buildProviderLogsFromLocalArtifacts,
+  createProviderNativeObservabilityOperations,
+  createStandardProviderPlanOperations,
   createDeploymentId,
   destroyProviderArtifacts,
   invokeProviderViaDeployedEndpoint,
+  isRecordLike,
   isRealDeployModeEnabled,
   missingRequiredCredentialErrors,
-  runJsonCommand,
+  readNonEmptyString,
+  runStandardCliRealDeployIfEnabled,
   runShellCommand,
   writeDeploymentReceipt
 } from "@runfabric/core";
@@ -35,14 +39,6 @@ const flyCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
 function toHttpEndpoint(value: string): string {
   if (value.startsWith("http://") || value.startsWith("https://")) {
     return value;
@@ -51,20 +47,23 @@ function toHttpEndpoint(value: string): string {
 }
 
 function endpointFromFlyResponse(response: unknown): string | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
-  const direct = readString(response.endpoint) || readString(response.url) || readString(response.hostname);
+  const direct =
+    readNonEmptyString(response.endpoint) ||
+    readNonEmptyString(response.url) ||
+    readNonEmptyString(response.hostname);
   if (direct) {
     return toHttpEndpoint(direct);
   }
 
-  if (!isRecord(response.app)) {
+  if (!isRecordLike(response.app)) {
     return undefined;
   }
 
-  const host = readString(response.app.hostname) || readString(response.app.name);
+  const host = readNonEmptyString(response.app.hostname) || readNonEmptyString(response.app.name);
   if (!host) {
     return undefined;
   }
@@ -72,13 +71,13 @@ function endpointFromFlyResponse(response: unknown): string | undefined {
 }
 
 function flyResourceMetadata(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
   const metadata: Record<string, unknown> = {};
   for (const key of ["id", "name", "region", "status"]) {
-    const value = readString(response[key]);
+    const value = readNonEmptyString(response[key]);
     if (value) {
       metadata[key] = value;
     }
@@ -102,52 +101,6 @@ function resolveAppName(project: ProjectConfig): string {
   return process.env.FLY_APP_NAME || project.service;
 }
 
-async function runRealDeployIfEnabled(
-  options: ProviderOptions,
-  project: ProjectConfig,
-  plan: DeployPlan,
-  stage: string,
-  appName: string
-): Promise<{
-  endpoint: string;
-  mode: "simulated" | "cli";
-  rawResponse?: unknown;
-  resource?: Record<string, unknown>;
-}> {
-  const defaultEndpoint = `https://${appName}.fly.dev`;
-  if (!isRealDeployModeEnabled("RUNFABRIC_FLY_REAL_DEPLOY")) {
-    return { endpoint: defaultEndpoint, mode: "simulated" };
-  }
-
-  const deployCommand = process.env.RUNFABRIC_FLY_DEPLOY_CMD || defaultFlyDeployCommand(appName);
-  const hasCommandOverride = Boolean(process.env.RUNFABRIC_FLY_DEPLOY_CMD);
-  const rawResponse = await runJsonCommand(deployCommand, {
-    cwd: options.projectDir,
-    env: {
-      RUNFABRIC_SERVICE: project.service,
-      RUNFABRIC_STAGE: stage,
-      RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
-      RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
-    }
-  });
-
-  const parsedEndpoint = endpointFromFlyResponse(rawResponse);
-  if (!parsedEndpoint && hasCommandOverride) {
-    throw new Error("fly-machines deploy response does not include endpoint");
-  }
-
-  return {
-    endpoint: parsedEndpoint || defaultEndpoint,
-    mode: "cli",
-    rawResponse,
-    resource: {
-      ...(flyResourceMetadata(rawResponse) || {}),
-      appName,
-      deployCommandSource: hasCommandOverride ? "override" : "builtin"
-    }
-  };
-}
-
 async function deployFlyMachines(
   options: ProviderOptions,
   project: ProjectConfig,
@@ -156,7 +109,20 @@ async function deployFlyMachines(
   const stage = project.stage || "default";
   const appName = resolveAppName(project);
   const deploymentId = createDeploymentId("fly-machines", appName, stage);
-  const deployState = await runRealDeployIfEnabled(options, project, plan, stage, appName);
+  const deployState = await runStandardCliRealDeployIfEnabled({
+    projectDir: options.projectDir,
+    project,
+    plan,
+    stage,
+    realDeployEnv: "RUNFABRIC_FLY_REAL_DEPLOY",
+    deployCommandEnv: "RUNFABRIC_FLY_DEPLOY_CMD",
+    defaultDeployCommand: defaultFlyDeployCommand(appName),
+    defaultEndpoint: `https://${appName}.fly.dev`,
+    parseEndpoint: endpointFromFlyResponse,
+    missingEndpointError: "fly-machines deploy response does not include endpoint",
+    buildResource: (rawResponse) => flyResourceMetadata(rawResponse),
+    extraResource: { appName }
+  });
 
   await writeDeploymentReceipt(options.projectDir, "fly-machines", {
     provider: "fly-machines",
@@ -206,36 +172,34 @@ function validateFlyProvider(): ValidationResult {
   return { ok: errors.length === 0, warnings: [], errors };
 }
 
-function createBuildPlan(): BuildPlan {
-  return {
-    provider: "fly-machines",
-    steps: ["prepare fly machines metadata"]
-  };
-}
-
-function createDeployPlan(artifact: BuildArtifact): DeployPlan {
-  return {
-    provider: "fly-machines",
-    artifactPath: artifact.entry,
-    artifactManifestPath: artifact.outputPath,
-    steps: [`deploy artifact from ${artifact.outputPath}`]
-  };
-}
+const flyPlanOperations = createStandardProviderPlanOperations(
+  "fly-machines",
+  "prepare fly machines metadata"
+);
 
 export function createFlyMachinesProvider(options: ProviderOptions): ProviderAdapter {
+  const observabilityOperations = createProviderNativeObservabilityOperations({
+    projectDir: options.projectDir,
+    provider: "fly-machines",
+    realDeployEnv: "RUNFABRIC_FLY_REAL_DEPLOY",
+    tracesCommandEnv: "RUNFABRIC_FLY_TRACES_CMD",
+    metricsCommandEnv: "RUNFABRIC_FLY_METRICS_CMD"
+  });
+
   return {
     name: "fly-machines",
     getCapabilities: () => flyMachinesCapabilities,
     getCredentialSchema: () => flyCredentialSchema,
     validate: async (): Promise<ValidationResult> => validateFlyProvider(),
-    planBuild: async (): Promise<BuildPlan> => createBuildPlan(),
+    planBuild: flyPlanOperations.planBuild,
     build: async (): Promise<BuildResult> => ({ artifacts: [] }),
-    planDeploy: async (_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> =>
-      createDeployPlan(artifact),
+    planDeploy: flyPlanOperations.planDeploy,
     deploy: async (project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> =>
       deployFlyMachines(options, project, plan),
     invoke: async (input) => invokeProviderViaDeployedEndpoint(options.projectDir, "fly-machines", input),
     logs: async (input) => buildProviderLogsFromLocalArtifacts(options.projectDir, "fly-machines", input),
+    traces: observabilityOperations.traces,
+    metrics: observabilityOperations.metrics,
     destroy: async (project: ProjectConfig) => destroyFlyMachines(options, project)
   };
 }

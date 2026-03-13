@@ -12,12 +12,16 @@ import type {
 import {
   appendProviderLog,
   buildProviderLogsFromLocalArtifacts,
+  createProviderNativeObservabilityOperations,
+  createStandardProviderPlanOperations,
   createDeploymentId,
   destroyProviderArtifacts,
   invokeProviderViaDeployedEndpoint,
+  isRecordLike,
   isRealDeployModeEnabled,
   missingRequiredCredentialErrors,
-  runJsonCommand,
+  readNonEmptyString,
+  runStandardCliRealDeployIfEnabled,
   runShellCommand,
   writeDeploymentReceipt
 } from "@runfabric/core";
@@ -38,14 +42,6 @@ const azureCredentialSchema: ProviderCredentialSchema = {
   ]
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
 function normalizeHttpEndpoint(endpoint: string): string {
   if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
     return endpoint;
@@ -54,34 +50,37 @@ function normalizeHttpEndpoint(endpoint: string): string {
 }
 
 function endpointFromAzureResponse(response: unknown): string | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
-  const direct = readString(response.endpoint) || readString(response.url) || readString(response.defaultHostName);
+  const direct =
+    readNonEmptyString(response.endpoint) ||
+    readNonEmptyString(response.url) ||
+    readNonEmptyString(response.defaultHostName);
   if (direct) {
     return normalizeHttpEndpoint(direct);
   }
 
-  if (!isRecord(response.properties)) {
+  if (!isRecordLike(response.properties)) {
     return undefined;
   }
 
   const nested =
-    readString(response.properties.defaultHostName) ||
-    readString(response.properties.url) ||
-    readString(response.properties.invokeUrlTemplate);
+    readNonEmptyString(response.properties.defaultHostName) ||
+    readNonEmptyString(response.properties.url) ||
+    readNonEmptyString(response.properties.invokeUrlTemplate);
   return nested ? normalizeHttpEndpoint(nested) : undefined;
 }
 
 function azureResourceMetadata(response: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(response)) {
+  if (!isRecordLike(response)) {
     return undefined;
   }
 
   const metadata: Record<string, unknown> = {};
   for (const key of ["id", "name", "state", "kind"]) {
-    const value = readString(response[key]);
+    const value = readNonEmptyString(response[key]);
     if (value) {
       metadata[key] = value;
     }
@@ -114,52 +113,6 @@ function resolveFunctionAppName(project: ProjectConfig): string {
   return process.env.AZURE_FUNCTION_APP_NAME || project.service;
 }
 
-async function runRealDeployIfEnabled(
-  options: ProviderOptions,
-  project: ProjectConfig,
-  plan: DeployPlan,
-  functionAppName: string,
-  stage: string
-): Promise<{
-  endpoint: string;
-  mode: "simulated" | "cli";
-  rawResponse?: unknown;
-  resource?: Record<string, unknown>;
-}> {
-  const defaultEndpoint = `https://${functionAppName}.azurewebsites.net/api`;
-  if (!isRealDeployModeEnabled("RUNFABRIC_AZURE_REAL_DEPLOY")) {
-    return { endpoint: defaultEndpoint, mode: "simulated" };
-  }
-
-  const deployCommand = process.env.RUNFABRIC_AZURE_DEPLOY_CMD || defaultAzureDeployCommand(functionAppName);
-  const hasCommandOverride = Boolean(process.env.RUNFABRIC_AZURE_DEPLOY_CMD);
-  const rawResponse = await runJsonCommand(deployCommand, {
-    cwd: options.projectDir,
-    env: {
-      RUNFABRIC_SERVICE: project.service,
-      RUNFABRIC_STAGE: stage,
-      RUNFABRIC_ARTIFACT_PATH: plan.artifactPath,
-      RUNFABRIC_ARTIFACT_MANIFEST_PATH: plan.artifactManifestPath
-    }
-  });
-
-  const parsedEndpoint = endpointFromAzureResponse(rawResponse);
-  if (!parsedEndpoint && hasCommandOverride) {
-    throw new Error("azure-functions deploy response does not include function app endpoint");
-  }
-
-  return {
-    endpoint: parsedEndpoint || defaultEndpoint,
-    mode: "cli",
-    rawResponse,
-    resource: {
-      ...(azureResourceMetadata(rawResponse) || {}),
-      functionAppName,
-      deployCommandSource: hasCommandOverride ? "override" : "builtin"
-    }
-  };
-}
-
 async function deployAzureFunctions(
   options: ProviderOptions,
   project: ProjectConfig,
@@ -168,7 +121,20 @@ async function deployAzureFunctions(
   const stage = project.stage || "default";
   const functionAppName = resolveFunctionAppName(project);
   const deploymentId = createDeploymentId("azure-functions", project.service, stage);
-  const deployState = await runRealDeployIfEnabled(options, project, plan, functionAppName, stage);
+  const deployState = await runStandardCliRealDeployIfEnabled({
+    projectDir: options.projectDir,
+    project,
+    plan,
+    stage,
+    realDeployEnv: "RUNFABRIC_AZURE_REAL_DEPLOY",
+    deployCommandEnv: "RUNFABRIC_AZURE_DEPLOY_CMD",
+    defaultDeployCommand: defaultAzureDeployCommand(functionAppName),
+    defaultEndpoint: `https://${functionAppName}.azurewebsites.net/api`,
+    parseEndpoint: endpointFromAzureResponse,
+    missingEndpointError: "azure-functions deploy response does not include function app endpoint",
+    buildResource: (rawResponse) => azureResourceMetadata(rawResponse),
+    extraResource: { functionAppName }
+  });
 
   await writeDeploymentReceipt(options.projectDir, "azure-functions", {
     provider: "azure-functions",
@@ -220,36 +186,34 @@ function validateAzureProvider(): ValidationResult {
   return { ok: errors.length === 0, warnings: [], errors };
 }
 
-function createPlanBuildResult(): BuildPlan {
-  return {
-    provider: "azure-functions",
-    steps: ["prepare azure function metadata"]
-  };
-}
-
-function createPlanDeployResult(artifact: BuildArtifact): DeployPlan {
-  return {
-    provider: "azure-functions",
-    artifactPath: artifact.entry,
-    artifactManifestPath: artifact.outputPath,
-    steps: [`deploy artifact from ${artifact.outputPath}`]
-  };
-}
+const azurePlanOperations = createStandardProviderPlanOperations(
+  "azure-functions",
+  "prepare azure function metadata"
+);
 
 export function createAzureFunctionsProvider(options: ProviderOptions): ProviderAdapter {
+  const observabilityOperations = createProviderNativeObservabilityOperations({
+    projectDir: options.projectDir,
+    provider: "azure-functions",
+    realDeployEnv: "RUNFABRIC_AZURE_REAL_DEPLOY",
+    tracesCommandEnv: "RUNFABRIC_AZURE_TRACES_CMD",
+    metricsCommandEnv: "RUNFABRIC_AZURE_METRICS_CMD"
+  });
+
   return {
     name: "azure-functions",
     getCapabilities: () => azureFunctionsCapabilities,
     getCredentialSchema: () => azureCredentialSchema,
     validate: async (): Promise<ValidationResult> => validateAzureProvider(),
-    planBuild: async (): Promise<BuildPlan> => createPlanBuildResult(),
+    planBuild: azurePlanOperations.planBuild,
     build: async (): Promise<BuildResult> => ({ artifacts: [] }),
-    planDeploy: async (_project: ProjectConfig, artifact: BuildArtifact): Promise<DeployPlan> =>
-      createPlanDeployResult(artifact),
+    planDeploy: azurePlanOperations.planDeploy,
     deploy: async (project: ProjectConfig, plan: DeployPlan): Promise<DeployResult> =>
       deployAzureFunctions(options, project, plan),
     invoke: async (input) => invokeProviderViaDeployedEndpoint(options.projectDir, "azure-functions", input),
     logs: async (input) => buildProviderLogsFromLocalArtifacts(options.projectDir, "azure-functions", input),
+    traces: observabilityOperations.traces,
+    metrics: observabilityOperations.metrics,
     destroy: async (project: ProjectConfig) => destroyAzureFunctions(options, project)
   };
 }
