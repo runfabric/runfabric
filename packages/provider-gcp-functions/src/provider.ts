@@ -87,6 +87,29 @@ function gcpResourceMetadata(response: unknown): Record<string, unknown> | undef
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
+function resolveGcpRuntime(project: ProjectConfig): string {
+  const extension = project.extensions?.["gcp-functions"];
+  if (typeof extension?.runtime === "string" && extension.runtime.trim().length > 0) {
+    return extension.runtime.trim();
+  }
+  if (process.env.RUNFABRIC_GCP_RUNTIME && process.env.RUNFABRIC_GCP_RUNTIME.trim().length > 0) {
+    return process.env.RUNFABRIC_GCP_RUNTIME.trim();
+  }
+  if (project.runtime === "python") {
+    return "python312";
+  }
+  if (project.runtime === "go") {
+    return "go122";
+  }
+  if (project.runtime === "java") {
+    return "java21";
+  }
+  if (project.runtime === "dotnet") {
+    return "dotnet8";
+  }
+  return "nodejs20";
+}
+
 function defaultGcpDeployCommand(region: string): string {
   return [
     'gcloud functions deploy "$RUNFABRIC_SERVICE"',
@@ -128,6 +151,7 @@ async function deployGcpFunctions(
 ): Promise<DeployResult> {
   const stage = project.stage || "default";
   const region = resolveRegion(project);
+  const runtime = resolveGcpRuntime(project);
   const deploymentId = createDeploymentId("gcp-functions", project.service, stage);
   const deployState = await runStandardCliRealDeployIfEnabled({
     projectDir: options.projectDir,
@@ -140,6 +164,8 @@ async function deployGcpFunctions(
     defaultEndpoint: defaultEndpoint(project.service, region),
     parseEndpoint: endpointFromGcpResponse,
     missingEndpointError: "gcp-functions deploy response does not include endpoint URL",
+    env: { RUNFABRIC_GCP_RUNTIME: runtime },
+    extraResource: { runtime },
     buildResource: (rawResponse) => gcpResourceMetadata(rawResponse)
   });
 

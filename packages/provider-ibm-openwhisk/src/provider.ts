@@ -81,10 +81,45 @@ function ibmResourceMetadata(response: unknown): Record<string, unknown> | undef
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
-function defaultIbmDeployCommand(): string {
+function defaultIbmRuntimeKind(projectRuntime: ProjectConfig["runtime"]): string {
+  if (projectRuntime === "python") {
+    return "python:3.11";
+  }
+  if (projectRuntime === "go") {
+    return "go:1.20";
+  }
+  if (projectRuntime === "java") {
+    return "java:17";
+  }
+  if (projectRuntime === "rust" || projectRuntime === "dotnet") {
+    return "blackbox";
+  }
+  return "nodejs:20";
+}
+
+function resolveIbmRuntimeKind(project: ProjectConfig): string {
+  const extension = isRecordLike(project.extensions?.["ibm-openwhisk"])
+    ? project.extensions?.["ibm-openwhisk"]
+    : undefined;
+  const extensionRuntimeKind = readNonEmptyString(extension?.runtimeKind);
+  if (extensionRuntimeKind) {
+    return extensionRuntimeKind;
+  }
+  const extensionRuntime = readNonEmptyString(extension?.runtime);
+  if (extensionRuntime) {
+    return extensionRuntime;
+  }
+  const envRuntimeKind = readNonEmptyString(process.env.RUNFABRIC_IBM_RUNTIME_KIND);
+  if (envRuntimeKind) {
+    return envRuntimeKind;
+  }
+  return defaultIbmRuntimeKind(project.runtime);
+}
+
+function defaultIbmDeployCommand(runtimeKind: string): string {
   return [
     'ibmcloud fn action update "$RUNFABRIC_SERVICE" "$RUNFABRIC_ARTIFACT_PATH"',
-    '--kind "${RUNFABRIC_IBM_RUNTIME_KIND:-nodejs:20}"',
+    `--kind "\${RUNFABRIC_IBM_RUNTIME_KIND:-${runtimeKind}}"`,
     "--web true",
     "--result",
     "--output json"
@@ -115,6 +150,7 @@ async function deployIbmOpenWhisk(
 ): Promise<DeployResult> {
   const stage = project.stage || "default";
   const namespace = resolveNamespace(project);
+  const runtimeKind = resolveIbmRuntimeKind(project);
   const deploymentId = createDeploymentId("ibm-openwhisk", project.service, stage);
   const deployState = await runStandardCliRealDeployIfEnabled({
     projectDir: options.projectDir,
@@ -123,15 +159,13 @@ async function deployIbmOpenWhisk(
     stage,
     realDeployEnv: "RUNFABRIC_IBM_REAL_DEPLOY",
     deployCommandEnv: "RUNFABRIC_IBM_DEPLOY_CMD",
-    defaultDeployCommand: defaultIbmDeployCommand(),
+    defaultDeployCommand: defaultIbmDeployCommand(runtimeKind),
     defaultEndpoint: defaultEndpoint(project.service, namespace),
     parseEndpoint: endpointFromIbmResponse,
     missingEndpointError: "ibm-openwhisk deploy response does not include endpoint",
     buildResource: (rawResponse) => ibmResourceMetadata(rawResponse),
-    extraResource: {
-      region: process.env.IBM_CLOUD_REGION || "us-south",
-      namespace
-    }
+    env: { RUNFABRIC_IBM_RUNTIME_KIND: runtimeKind },
+    extraResource: { region: process.env.IBM_CLOUD_REGION || "us-south", namespace, runtimeKind }
   });
 
   await writeDeploymentReceipt(options.projectDir, "ibm-openwhisk", {
