@@ -127,6 +127,7 @@ runfabric doctor -c ./my-api/runfabric.yml
 runfabric plan -c ./my-api/runfabric.yml
 runfabric build -c ./my-api/runfabric.yml
 runfabric deploy -c ./my-api/runfabric.yml
+runfabric deploy -c ./my-api/runfabric.yml --rollback-on-failure
 ```
 
 Run local provider-mimic server:
@@ -136,6 +137,7 @@ cd my-api
 npm run call:local
 curl -i http://127.0.0.1:8787/hello
 # stop server: Ctrl+C or type 'exit' and press Enter
+npm run call:local -- --serve --event ./event.template.json
 ```
 
 `call:local` now runs in watch mode by default in scaffolded projects.
@@ -169,7 +171,7 @@ export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);
 - `runfabric traces`
 - `runfabric metrics`
 - `runfabric remove`
-- `runfabric compose plan|deploy`
+- `runfabric compose plan|deploy|remove`
 - `runfabric state pull|list|backup|restore|force-unlock|migrate|reconcile`
 
 ## Security Scanning

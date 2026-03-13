@@ -58,7 +58,7 @@ Default service name is derived from the target directory (`my-api` here). Use `
 
 Interactive `init` prompts for:
 
-- template (`api`, `worker`, `queue`, `cron`)
+- template (`api`, `worker`, `queue`, `cron`, `storage`, `eventbridge`, `pubsub`)
 - provider
 - state backend (`local`, `postgres`, `s3`, `gcs`, `azblob`) with default `local`
 - language (`ts` or `js`)
@@ -72,8 +72,8 @@ Interactive picker UX:
 
 Template scope note:
 
-- `init` currently scaffolds only `api|worker|queue|cron`.
-- For `storage|eventbridge|pubsub` scenarios, scaffold from `worker` then edit `triggers` in `runfabric.yml`.
+- `init` only includes templates with at least one provider capability match: `api|worker|queue|cron|storage|eventbridge|pubsub`.
+- `kafka` and `rabbitmq` remain valid trigger schema types but are hidden from `init` until at least one provider reports support.
 
 Provider IDs (copy/paste):
 
@@ -143,6 +143,7 @@ pnpm run runfabric -- plan -c ./my-api/runfabric.yml
 pnpm run runfabric -- build -c ./my-api/runfabric.yml
 pnpm run runfabric -- package -c ./my-api/runfabric.yml --function api
 pnpm run runfabric -- deploy -c ./my-api/runfabric.yml
+pnpm run runfabric -- deploy -c ./my-api/runfabric.yml --rollback-on-failure
 pnpm run runfabric -- deploy -c ./my-api/runfabric.yml --function api
 pnpm run runfabric -- logs --provider aws-lambda
 pnpm run runfabric -- traces --provider aws-lambda --json
@@ -158,6 +159,7 @@ curl -i http://127.0.0.1:8787/hello
 # stop server: Ctrl+C or type 'exit' and press Enter
 pnpm run call:local -- --port 3000
 curl -i http://127.0.0.1:3000/hello
+pnpm run call:local -- --serve --event ./event.template.json
 
 # one-shot (non-server) invocation still available:
 pnpm run call:local -- --provider aws-lambda --method GET --path /hello
@@ -178,6 +180,7 @@ Or use the unified dev loop:
 pnpm run runfabric -- dev -c ./my-api/runfabric.yml --preset http --watch
 pnpm run runfabric -- dev -c ./my-api/runfabric.yml --preset queue --once
 pnpm run runfabric -- dev -c ./my-api/runfabric.yml --preset storage --once
+# additional presets: cron | eventbridge | pubsub | kafka | rabbitmq
 ```
 
 ## State Backends And Receipts

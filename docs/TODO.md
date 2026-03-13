@@ -3,8 +3,7 @@
 Only pending work is listed here. Completed items are removed.
 
 ## Active
-
-No active P0/P1 items.
+- No active P5/P6 items.
 
 ## Backlog
 
