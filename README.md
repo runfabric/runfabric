@@ -212,6 +212,7 @@ Full command reference: `docs/site/command-reference.md`
 - `docs/CREDENTIALS_MATRIX.md`
 - `docs/PROVIDER-SETUP.md`
 - `docs/ARCHITECTURE.md`
+- `docs/ENGINE_API_ABI.md`
 - `docs/REPO_DEVELOPMENT.md`
 - `docs/CI_TEMPLATES.md`
 - `docs/PLUGIN_API.md`

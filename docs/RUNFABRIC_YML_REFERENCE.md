@@ -57,6 +57,7 @@ Runtime mode:
 - `engine`: engine-first planning mode with provider feasibility checks.
 
 Engine feasibility reference: `docs/ENGINE_FEASIBILITY_MATRIX.md`.
+Engine contract compatibility reference: `docs/ENGINE_API_ABI.md`.
 
 ## Dynamic Env Bindings
 

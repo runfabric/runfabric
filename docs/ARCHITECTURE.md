@@ -60,6 +60,11 @@ Phase 1 decision artifacts:
 - ADR: `docs/adr/0001-engine-first-multi-runtime.md`
 - Provider feasibility matrix: `docs/ENGINE_FEASIBILITY_MATRIX.md`
 
+Phase 2 contract artifacts:
+
+- Engine API/ABI + compatibility policy: `docs/ENGINE_API_ABI.md`
+- Artifact manifest v2 fixtures: `tests/fixtures/artifact-manifest-v2/matrix.json`
+
 ## Repo Layout
 
 - `apps/cli`: command entrypoints and workflow orchestration.

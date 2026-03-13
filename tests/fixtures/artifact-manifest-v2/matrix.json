@@ -1,0 +1,438 @@
+{
+  "schemaVersion": 1,
+  "description": "Artifact manifest v2 fixtures for all runtime families across native-compat and engine modes",
+  "fixtures": [
+    {
+      "name": "nodejs-native-compat",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-nodejs-native-compat",
+        "runtimeFamily": "nodejs",
+        "runtimeMode": "native-compat",
+        "source": {
+          "entry": "src/index.ts"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/nodejs/native-compat/src/entry",
+            "bytes": 128,
+            "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/nodejs/native-compat/runtime/handler.mjs",
+            "bytes": 256,
+            "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+            "role": "runtime-wrapper"
+          }
+        ]
+      }
+    },
+    {
+      "name": "nodejs-engine",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-nodejs-engine",
+        "runtimeFamily": "nodejs",
+        "runtimeMode": "engine",
+        "source": {
+          "entry": "src/index.ts"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/nodejs/engine/src/entry",
+            "bytes": 129,
+            "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/nodejs/engine/runtime/handler.mjs",
+            "bytes": 257,
+            "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+            "role": "runtime-wrapper"
+          }
+        ]
+      }
+    },
+    {
+      "name": "python-native-compat",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-python-native-compat",
+        "runtimeFamily": "python",
+        "runtimeMode": "native-compat",
+        "source": {
+          "entry": "src/app.py"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/python/native-compat/src/entry",
+            "bytes": 130,
+            "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/python/native-compat/runtime/bootstrap",
+            "bytes": 258,
+            "sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+            "role": "runtime-package"
+          }
+        ]
+      }
+    },
+    {
+      "name": "python-engine",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-python-engine",
+        "runtimeFamily": "python",
+        "runtimeMode": "engine",
+        "source": {
+          "entry": "src/app.py"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/python/engine/src/entry",
+            "bytes": 131,
+            "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/python/engine/runtime/bootstrap",
+            "bytes": 259,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "role": "runtime-package"
+          }
+        ]
+      }
+    },
+    {
+      "name": "go-native-compat",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-go-native-compat",
+        "runtimeFamily": "go",
+        "runtimeMode": "native-compat",
+        "source": {
+          "entry": "src/main.go"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/go/native-compat/src/entry",
+            "bytes": 132,
+            "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/go/native-compat/runtime/bootstrap",
+            "bytes": 260,
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "role": "runtime-package"
+          }
+        ]
+      }
+    },
+    {
+      "name": "go-engine",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-go-engine",
+        "runtimeFamily": "go",
+        "runtimeMode": "engine",
+        "source": {
+          "entry": "src/main.go"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/go/engine/src/entry",
+            "bytes": 133,
+            "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/go/engine/runtime/bootstrap",
+            "bytes": 261,
+            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "role": "runtime-package"
+          }
+        ]
+      }
+    },
+    {
+      "name": "java-native-compat",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-java-native-compat",
+        "runtimeFamily": "java",
+        "runtimeMode": "native-compat",
+        "source": {
+          "entry": "src/Main.java"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/java/native-compat/src/entry",
+            "bytes": 134,
+            "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/java/native-compat/runtime/bootstrap",
+            "bytes": 262,
+            "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+            "role": "runtime-package"
+          }
+        ]
+      }
+    },
+    {
+      "name": "java-engine",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-java-engine",
+        "runtimeFamily": "java",
+        "runtimeMode": "engine",
+        "source": {
+          "entry": "src/Main.java"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/java/engine/src/entry",
+            "bytes": 135,
+            "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/java/engine/runtime/bootstrap",
+            "bytes": 263,
+            "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+            "role": "runtime-package"
+          }
+        ]
+      }
+    },
+    {
+      "name": "rust-native-compat",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-rust-native-compat",
+        "runtimeFamily": "rust",
+        "runtimeMode": "native-compat",
+        "source": {
+          "entry": "src/main.rs"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/rust/native-compat/src/entry",
+            "bytes": 136,
+            "sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/rust/native-compat/runtime/bootstrap",
+            "bytes": 264,
+            "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+            "role": "runtime-package"
+          }
+        ]
+      }
+    },
+    {
+      "name": "rust-engine",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-rust-engine",
+        "runtimeFamily": "rust",
+        "runtimeMode": "engine",
+        "source": {
+          "entry": "src/main.rs"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/rust/engine/src/entry",
+            "bytes": 137,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/rust/engine/runtime/bootstrap",
+            "bytes": 265,
+            "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+            "role": "runtime-package"
+          }
+        ]
+      }
+    },
+    {
+      "name": "dotnet-native-compat",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-dotnet-native-compat",
+        "runtimeFamily": "dotnet",
+        "runtimeMode": "native-compat",
+        "source": {
+          "entry": "src/app.csproj"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/dotnet/native-compat/src/entry",
+            "bytes": 138,
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/dotnet/native-compat/runtime/bootstrap",
+            "bytes": 266,
+            "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+            "role": "runtime-package"
+          }
+        ]
+      }
+    },
+    {
+      "name": "dotnet-engine",
+      "manifest": {
+        "schemaVersion": 2,
+        "provider": "aws-lambda",
+        "service": "phase2-dotnet-engine",
+        "runtimeFamily": "dotnet",
+        "runtimeMode": "engine",
+        "source": {
+          "entry": "src/app.csproj"
+        },
+        "engineContract": {
+          "apiVersion": "2.0.0",
+          "abiVersion": "2.0.0",
+          "compatibilityPolicy": "semver-minor-forward"
+        },
+        "build": {
+          "manifestVersion": 2,
+          "generatedAt": "2026-03-14T00:00:00.000Z"
+        },
+        "files": [
+          {
+            "path": "build/dotnet/engine/src/entry",
+            "bytes": 139,
+            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "role": "entry-source"
+          },
+          {
+            "path": "build/dotnet/engine/runtime/bootstrap",
+            "bytes": 267,
+            "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+            "role": "runtime-package"
+          }
+        ]
+      }
+    }
+  ]
+}
