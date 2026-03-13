@@ -99,7 +99,11 @@ export class KeyValueStateBackend implements StateBackend {
     if (!service || !stage || !fileName) {
       return null;
     }
-    const provider = fileName.replace(STATE_FILE_SUFFIX, "").replace(LOCK_FILE_SUFFIX, "");
+    const provider = fileName.endsWith(LOCK_FILE_SUFFIX)
+      ? fileName.slice(0, -LOCK_FILE_SUFFIX.length)
+      : fileName.endsWith(STATE_FILE_SUFFIX)
+        ? fileName.slice(0, -STATE_FILE_SUFFIX.length)
+        : "";
     return provider ? { service, stage, provider } : null;
   }
 
@@ -260,6 +264,25 @@ export class KeyValueStateBackend implements StateBackend {
     return this.matchesFilter(address, record, filter) ? { address, record } : null;
   }
 
+  private async readLockEntryByKey(key: string, filter?: StateListFilter): Promise<StateLockEntry | null> {
+    const address = this.extractAddressFromKey(key);
+    if (!address) {
+      return null;
+    }
+    if (filter?.service && filter.service !== address.service) {
+      return null;
+    }
+    if (filter?.stage && filter.stage !== address.stage) {
+      return null;
+    }
+    if (filter?.provider && filter.provider !== address.provider) {
+      return null;
+    }
+
+    const lock = await this.readLock(address);
+    return lock ? { address, lock } : null;
+  }
+
   async list(filter?: StateListFilter): Promise<StateRecordEntry[]> {
     const keys = await this.store.list(this.objectPrefix());
     const stateKeys = keys.filter((key) => key.endsWith(STATE_FILE_SUFFIX) && !key.endsWith(LOCK_FILE_SUFFIX));
@@ -363,33 +386,28 @@ export class KeyValueStateBackend implements StateBackend {
 
   async listLocks(filter?: StateListFilter): Promise<StateLockEntry[]> {
     const keys = await this.store.list(this.objectPrefix());
-    const entries: StateLockEntry[] = [];
-
-    for (const key of keys) {
-      if (!key.endsWith(LOCK_FILE_SUFFIX)) {
-        continue;
-      }
-      const address = this.extractAddressFromKey(key);
-      if (!address) {
-        continue;
-      }
-      if (filter?.service && filter.service !== address.service) {
-        continue;
-      }
-      if (filter?.stage && filter.stage !== address.stage) {
-        continue;
-      }
-      if (filter?.provider && filter.provider !== address.provider) {
-        continue;
-      }
-
-      const lock = await this.readLock(address);
-      if (lock) {
-        entries.push({ address, lock });
-      }
+    const lockKeys = keys.filter((key) => key.endsWith(LOCK_FILE_SUFFIX));
+    if (lockKeys.length === 0) {
+      return [];
     }
 
-    return entries;
+    const entries: Array<StateLockEntry | null> = new Array(lockKeys.length);
+    const workerCount = Math.min(STATE_LIST_READ_CONCURRENCY, lockKeys.length);
+    let nextIndex = 0;
+
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        if (currentIndex >= lockKeys.length) {
+          return;
+        }
+        entries[currentIndex] = await this.readLockEntryByKey(lockKeys[currentIndex], filter);
+      }
+    });
+
+    await Promise.all(workers);
+    return entries.filter((entry): entry is StateLockEntry => entry !== null);
   }
 
   async createBackup(filter?: StateListFilter): Promise<StateBackupSnapshot> {

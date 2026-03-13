@@ -69,38 +69,72 @@ class FileStateBackend implements StateBackend {
     await mkdir(dirname(path), { recursive: true });
   }
 
-  private async listFilesBySuffix(suffix: string): Promise<string[]> {
-    const out: string[] = [];
+  private async mapWithConcurrency<T, U>(
+    items: readonly T[],
+    mapper: (item: T, index: number) => Promise<U>
+  ): Promise<U[]> {
+    if (items.length === 0) {
+      return [];
+    }
+    const output: U[] = new Array(items.length);
+    const workerCount = Math.min(STATE_LIST_READ_CONCURRENCY, items.length);
+    let nextIndex = 0;
 
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        if (currentIndex >= items.length) {
+          return;
+        }
+        output[currentIndex] = await mapper(items[currentIndex], currentIndex);
+      }
+    });
+
+    await Promise.all(workers);
+    return output;
+  }
+
+  private async listFilesBySuffix(suffix: string): Promise<string[]> {
     try {
       const services = await readdir(this.rootDir, { withFileTypes: true });
-      for (const service of services) {
-        if (!service.isDirectory()) {
-          continue;
-        }
-        const serviceDir = resolve(this.rootDir, service.name);
-        const stages = await readdir(serviceDir, { withFileTypes: true });
-        for (const stage of stages) {
-          if (!stage.isDirectory()) {
-            continue;
+      const serviceDirs = services
+        .filter((service) => service.isDirectory())
+        .map((service) => resolve(this.rootDir, service.name));
+      const stageDirGroups = await this.mapWithConcurrency(serviceDirs, async (serviceDir) => {
+        try {
+          const stages = await readdir(serviceDir, { withFileTypes: true });
+          return stages
+            .filter((stage) => stage.isDirectory())
+            .map((stage) => resolve(serviceDir, stage.name));
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return [];
           }
-          const stageDir = resolve(serviceDir, stage.name);
+          throw error;
+        }
+      });
+      const stageDirs = stageDirGroups.flat();
+      const fileGroups = await this.mapWithConcurrency(stageDirs, async (stageDir) => {
+        try {
           const files = await readdir(stageDir, { withFileTypes: true });
-          for (const file of files) {
-            if (file.isFile() && file.name.endsWith(suffix)) {
-              out.push(resolve(stageDir, file.name));
-            }
+          return files
+            .filter((file) => file.isFile() && file.name.endsWith(suffix))
+            .map((file) => resolve(stageDir, file.name));
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return [];
           }
+          throw error;
         }
-      }
+      });
+      return fileGroups.flat();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return [];
       }
       throw error;
     }
-
-    return out;
   }
 
   private listStateFiles(): Promise<string[]> {
@@ -127,7 +161,11 @@ class FileStateBackend implements StateBackend {
       return null;
     }
 
-    const provider = fileName.replace(STATE_FILE_SUFFIX, "").replace(LOCK_FILE_SUFFIX, "");
+    const provider = fileName.endsWith(LOCK_FILE_SUFFIX)
+      ? fileName.slice(0, -LOCK_FILE_SUFFIX.length)
+      : fileName.endsWith(STATE_FILE_SUFFIX)
+        ? fileName.slice(0, -STATE_FILE_SUFFIX.length)
+        : "";
     return provider ? { service, stage, provider } : null;
   }
 
@@ -234,28 +272,34 @@ class FileStateBackend implements StateBackend {
     return this.matchesFilter(address, record, filter) ? { address, record } : null;
   }
 
+  private async readLockEntry(filePath: string, filter?: StateListFilter): Promise<StateLockEntry | null> {
+    const address = this.extractAddressFromPath(filePath);
+    if (!address) {
+      return null;
+    }
+    if (filter?.service && filter.service !== address.service) {
+      return null;
+    }
+    if (filter?.stage && filter.stage !== address.stage) {
+      return null;
+    }
+    if (filter?.provider && filter.provider !== address.provider) {
+      return null;
+    }
+
+    const lock = await this.readLock(address);
+    return lock ? { address, lock } : null;
+  }
+
   async list(filter?: StateListFilter): Promise<StateRecordEntry[]> {
     const files = await this.listStateFiles();
     if (files.length === 0) {
       return [];
     }
 
-    const entries: Array<StateRecordEntry | null> = new Array(files.length);
-    const workerCount = Math.min(STATE_LIST_READ_CONCURRENCY, files.length);
-    let nextIndex = 0;
-
-    const workers = Array.from({ length: workerCount }, async () => {
-      while (true) {
-        const currentIndex = nextIndex;
-        nextIndex += 1;
-        if (currentIndex >= files.length) {
-          return;
-        }
-        entries[currentIndex] = await this.readListEntry(files[currentIndex], filter);
-      }
-    });
-
-    await Promise.all(workers);
+    const entries = await this.mapWithConcurrency(files, async (filePath) =>
+      this.readListEntry(filePath, filter)
+    );
     return entries.filter((entry): entry is StateRecordEntry => entry !== null);
   }
 
@@ -384,30 +428,14 @@ class FileStateBackend implements StateBackend {
 
   async listLocks(filter?: StateListFilter): Promise<StateLockEntry[]> {
     const files = await this.listLockFiles();
-    const entries: StateLockEntry[] = [];
-
-    for (const filePath of files) {
-      const address = this.extractAddressFromPath(filePath);
-      if (!address) {
-        continue;
-      }
-      if (filter?.service && filter.service !== address.service) {
-        continue;
-      }
-      if (filter?.stage && filter.stage !== address.stage) {
-        continue;
-      }
-      if (filter?.provider && filter.provider !== address.provider) {
-        continue;
-      }
-
-      const lock = await this.readLock(address);
-      if (lock) {
-        entries.push({ address, lock });
-      }
+    if (files.length === 0) {
+      return [];
     }
 
-    return entries;
+    const entries = await this.mapWithConcurrency(files, async (filePath) =>
+      this.readLockEntry(filePath, filter)
+    );
+    return entries.filter((entry): entry is StateLockEntry => entry !== null);
   }
 
   async createBackup(filter?: StateListFilter): Promise<StateBackupSnapshot> {

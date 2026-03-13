@@ -74,6 +74,35 @@ test("state backend fails fast on lock contention and supports force-unlock", as
   await backend.unlock(address, secondLock);
 });
 
+test("local state backend listLocks returns filtered entries", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "runfabric-state-list-locks-local-"));
+  const backend = new LocalFileStateBackend({ projectDir });
+
+  const firstAddress = {
+    service: "service-a",
+    stage: "default",
+    provider: "aws-lambda"
+  };
+  const secondAddress = {
+    service: "service-b",
+    stage: "default",
+    provider: "vercel"
+  };
+
+  const firstLock = await backend.lock(firstAddress, "owner-a");
+  const secondLock = await backend.lock(secondAddress, "owner-b");
+
+  const allLocks = await backend.listLocks();
+  assert.equal(allLocks.length, 2);
+
+  const filtered = await backend.listLocks({ service: "service-a" });
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0]?.address.provider, "aws-lambda");
+
+  await backend.unlock(firstAddress, firstLock);
+  await backend.unlock(secondAddress, secondLock);
+});
+
 test("local state backend rejects addresses that escape backend root", async () => {
   const projectDir = await mkdtemp(join(tmpdir(), "runfabric-state-path-"));
   const backend = new LocalFileStateBackend({ projectDir });
@@ -166,6 +195,61 @@ test("key-value state backend surfaces parse failures during read/list", async (
     /failed to parse state record at runfabric\/state\/parse-test\/default\/aws-lambda\.state\.json/,
     "list should fail loudly when a stored state record is malformed"
   );
+});
+
+test("key-value state backend listLocks returns filtered entries", async () => {
+  const config = normalizeStateConfig({
+    backend: "s3",
+    s3: {
+      bucket: "ignored-test-bucket",
+      region: "us-east-1"
+    }
+  });
+  const objects = new Map<string, string>();
+
+  const backend = new KeyValueStateBackend({
+    backend: "s3",
+    config,
+    keyPrefix: config.s3.keyPrefix,
+    store: {
+      async get(key: string): Promise<string | null> {
+        return objects.get(key) ?? null;
+      },
+      async put(key: string, value: string): Promise<void> {
+        objects.set(key, value);
+      },
+      async delete(key: string): Promise<void> {
+        objects.delete(key);
+      },
+      async list(prefix: string): Promise<string[]> {
+        return [...objects.keys()].filter((key) => key.startsWith(prefix));
+      }
+    }
+  });
+
+  const firstAddress = {
+    service: "service-a",
+    stage: "default",
+    provider: "aws-lambda"
+  };
+  const secondAddress = {
+    service: "service-b",
+    stage: "default",
+    provider: "vercel"
+  };
+
+  const firstLock = await backend.lock(firstAddress, "owner-a");
+  const secondLock = await backend.lock(secondAddress, "owner-b");
+
+  const allLocks = await backend.listLocks();
+  assert.equal(allLocks.length, 2);
+
+  const filtered = await backend.listLocks({ service: "service-b" });
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0]?.address.provider, "vercel");
+
+  await backend.unlock(firstAddress, firstLock);
+  await backend.unlock(secondAddress, secondLock);
 });
 
 test("state backend factory selects postgres and s3 backends", async () => {
