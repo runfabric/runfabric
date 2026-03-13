@@ -2,6 +2,12 @@
 
 runfabric is a CLI/serverless deployment framework with provider adapters. It is not a standalone compute scheduler/runtime fabric.
 
+Runtime model:
+
+- Canonical runtime families: `nodejs | python | go | java | rust | dotnet`.
+- Planner enforces provider runtime compatibility from the capability matrix before deploy.
+- `call-local` and `dev` are currently Node-only (`runtime: nodejs`) until multi-runtime local emulation lands.
+
 ## Repo Layout
 
 - `apps/cli`: command entrypoints and workflow orchestration.

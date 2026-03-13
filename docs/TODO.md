@@ -3,21 +3,9 @@
 Only pending work is listed here. Completed items are removed.
 
 ## Active
-- No active P5/P6 items.
+- No active items.
 
 ## Backlog
-
-### P8 - Multi-Runtime Support (Post Node-First GA)
-
-- Add typed runtime support matrix in core/planner:
-  - `runtime: nodejs | python | go | java | rust | dotnet`
-  - provider runtime mapping validation errors (clear per-provider unsupported runtime message).
-- Extend build adapters beyond Node.js:
-  - python packaging adapter (`pip`/venv artifact flow)
-  - go build adapter
-  - java/jar packaging adapter
-  - rust binary packaging adapter
-  - dotnet publish adapter
 
 ### P9 - Optional IaC Resource Provisioning (Terraform / Pulumi)
 

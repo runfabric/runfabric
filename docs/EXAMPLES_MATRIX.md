@@ -4,7 +4,7 @@ Matrix of current official examples and provider trigger capabilities.
 
 Runtime status:
 
-- Production-ready path in current release train: `runtime: nodejs`
+- Runtime families are provider-capability based: `nodejs|python|go|java|rust|dotnet`
 
 ## Provider Example Configs
 
