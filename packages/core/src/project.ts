@@ -193,6 +193,7 @@ export interface WorkflowConfig {
 export interface ProjectConfig {
   service: string;
   runtime: RuntimeFamily;
+  runtimeMode?: "native-compat" | "engine";
   entry: string;
   stage?: string;
   providers: string[];

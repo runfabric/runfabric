@@ -9,6 +9,8 @@ export const RUNTIME_FAMILIES = [
 
 export type RuntimeFamily = (typeof RUNTIME_FAMILIES)[number];
 
+export const RUNTIME_MODES = ["native-compat", "engine"] as const;
+
 const runtimeAliases: Record<string, RuntimeFamily> = {
   node: "nodejs",
   nodejs: "nodejs",
@@ -55,4 +57,19 @@ export function isRuntimeFamily(value: string): value is RuntimeFamily {
 
 export function runtimeFamilyList(): string {
   return RUNTIME_FAMILIES.join(" | ");
+}
+
+export function normalizeRuntimeMode(value: string): (typeof RUNTIME_MODES)[number] | undefined {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "native" || normalized === "native-compat") {
+    return "native-compat";
+  }
+  if (normalized === "engine") {
+    return "engine";
+  }
+  return undefined;
+}
+
+export function runtimeModeList(): string {
+  return RUNTIME_MODES.join(" | ");
 }

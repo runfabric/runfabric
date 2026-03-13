@@ -1,4 +1,4 @@
-import { PROVIDER_IDS, RUNTIME_FAMILIES } from "@runfabric/core";
+import { PROVIDER_IDS, RUNTIME_FAMILIES, RUNTIME_MODES } from "@runfabric/core";
 
 const triggerTypes = [
   "http",
@@ -29,6 +29,7 @@ const runfabricSchema: Record<string, unknown> = {
   properties: {
     service: { type: "string", minLength: 1, description: "Service name" },
     runtime: { type: "string", enum: [...RUNTIME_FAMILIES], examples: ["nodejs"], description: "Runtime identifier" },
+    runtimeMode: { type: "string", enum: [...RUNTIME_MODES], examples: ["native-compat"] },
     entry: { type: "string", minLength: 1, description: "Handler entry file path" },
     stage: { type: "string", minLength: 1 },
     providers: {
@@ -242,6 +243,7 @@ const runfabricSchema: Record<string, unknown> = {
       additionalProperties: true,
       properties: {
         runtime: { type: "string", enum: [...RUNTIME_FAMILIES] },
+        runtimeMode: { type: "string", enum: [...RUNTIME_MODES] },
         entry: { type: "string" },
         providers: {
           type: "array",

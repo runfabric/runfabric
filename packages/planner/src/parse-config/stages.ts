@@ -20,10 +20,11 @@ import {
   readWorkflowsAtPath
 } from "./project-readers";
 import { readTriggerArrayAtPath } from "./triggers";
-import { readOptionalRuntimeAtPath } from "./runtime";
+import { readOptionalRuntimeAtPath, readOptionalRuntimeModeAtPath } from "./runtime";
 
 export interface StageOverride {
   runtime?: RuntimeFamily;
+  runtimeMode?: ProjectConfig["runtimeMode"];
   entry?: string;
   providers?: string[];
   triggers?: TriggerConfig[];
@@ -51,6 +52,7 @@ export function applyStageOverride(base: ProjectConfig, override: StageOverride)
   return {
     ...base,
     runtime: override.runtime || base.runtime,
+    runtimeMode: override.runtimeMode || base.runtimeMode,
     entry: override.entry || base.entry,
     providers: override.providers || base.providers,
     triggers: override.triggers || base.triggers,
@@ -77,6 +79,10 @@ export function readStageOverride(
   const runtime = readOptionalRuntimeAtPath(source.runtime, `${path}.runtime`, errors);
   if (runtime) {
     override.runtime = runtime;
+  }
+  const runtimeMode = readOptionalRuntimeModeAtPath(source.runtimeMode, `${path}.runtimeMode`, errors);
+  if (runtimeMode) {
+    override.runtimeMode = runtimeMode;
   }
   const entry = readOptionalString(source, "entry", errors);
   if (entry) {

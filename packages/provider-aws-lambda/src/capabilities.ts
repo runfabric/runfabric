@@ -16,6 +16,7 @@ export const awsLambdaCapabilities: ProviderCapabilities = {
   backgroundJobs: true,
   websockets: true,
   supportedRuntimes: ["nodejs", "python", "go", "java", "rust", "dotnet"],
+  engineRuntime: "custom-runtime",
   maxTimeoutSeconds: 900,
   maxMemoryMB: 10240
 };

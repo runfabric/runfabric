@@ -16,6 +16,7 @@ export const digitalOceanFunctionsCapabilities: ProviderCapabilities = {
   backgroundJobs: false,
   websockets: false,
   supportedRuntimes: ["nodejs"],
+  engineRuntime: "unsupported",
   maxTimeoutSeconds: 900,
   maxMemoryMB: 3072
 };

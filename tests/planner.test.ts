@@ -828,7 +828,7 @@ test("createPlan validates support for new trigger types with supported non-node
   const config = [
     "service: non-node-advanced",
     "runtime: python",
-    "entry: src/index.ts",
+    "entry: src/index.py",
     "",
     "providers:",
     "  - aws-lambda",
@@ -875,6 +875,56 @@ test("createPlan reports provider-specific unsupported runtime errors", () => {
     plan.errors.some((error) =>
       error.includes("cloudflare-workers: runtime python is not supported")
     )
+  );
+});
+
+test("createPlan reports provider-specific unsupported engine runtime mode", () => {
+  const config = [
+    "service: engine-mode-mismatch",
+    "runtime: nodejs",
+    "runtimeMode: engine",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - cloudflare-workers",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /",
+    ""
+  ].join("\n");
+
+  const plan = createPlan(parseProjectConfig(config));
+  assert.equal(plan.ok, false);
+  assert.ok(
+    plan.errors.some((error) =>
+      error.includes("cloudflare-workers: runtimeMode engine is not supported for this provider")
+    )
+  );
+});
+
+test("createPlan allows supported provider in engine runtime mode", () => {
+  const config = [
+    "service: engine-mode-supported",
+    "runtime: nodejs",
+    "runtimeMode: engine",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /",
+    ""
+  ].join("\n");
+
+  const plan = createPlan(parseProjectConfig(config));
+  assert.equal(
+    plan.errors.some((error) => error.includes("runtimeMode engine is not supported for this provider")),
+    false
   );
 });
 

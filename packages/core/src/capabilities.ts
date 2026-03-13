@@ -16,6 +16,7 @@ export interface ProviderCapabilities {
   backgroundJobs: boolean;
   websockets: boolean;
   supportedRuntimes: RuntimeFamily[];
+  engineRuntime: "custom-runtime" | "container" | "unsupported";
   maxTimeoutSeconds?: number;
   maxMemoryMB?: number;
 }

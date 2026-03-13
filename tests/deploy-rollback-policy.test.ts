@@ -34,7 +34,8 @@ function providerCapabilities(): ProviderCapabilities {
     customRuntime: true,
     backgroundJobs: true,
     websockets: true,
-    supportedRuntimes: ["nodejs", "python", "go", "java", "rust", "dotnet"]
+    supportedRuntimes: ["nodejs", "python", "go", "java", "rust", "dotnet"],
+    engineRuntime: "custom-runtime"
   };
 }
 

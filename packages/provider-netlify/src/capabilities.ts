@@ -15,5 +15,6 @@ export const netlifyCapabilities: ProviderCapabilities = {
   customRuntime: false,
   backgroundJobs: false,
   websockets: false,
-  supportedRuntimes: ["nodejs"]
+  supportedRuntimes: ["nodejs"],
+  engineRuntime: "unsupported"
 };

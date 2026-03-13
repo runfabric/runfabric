@@ -16,6 +16,7 @@ export const alibabaFcCapabilities: ProviderCapabilities = {
   backgroundJobs: true,
   websockets: false,
   supportedRuntimes: ["nodejs", "python", "go", "java", "rust", "dotnet"],
+  engineRuntime: "custom-runtime",
   maxTimeoutSeconds: 3600,
   maxMemoryMB: 32768
 };

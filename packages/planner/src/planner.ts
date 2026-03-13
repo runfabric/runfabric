@@ -204,6 +204,27 @@ function evaluateProviderRuntimeSupport(
   }
 }
 
+function evaluateProviderEngineModeSupport(
+  project: ProjectConfig,
+  provider: string,
+  capabilities: ProviderCapabilities,
+  providerPlan: ProviderPlan,
+  errors: string[]
+): void {
+  if (project.runtimeMode !== "engine") {
+    return;
+  }
+  if (capabilities.engineRuntime !== "unsupported") {
+    return;
+  }
+  pushProviderError(
+    providerPlan,
+    provider,
+    "runtimeMode engine is not supported for this provider (engineRuntime=unsupported)",
+    errors
+  );
+}
+
 function createProviderPlanEntry(
   project: ProjectConfig,
   provider: string,
@@ -227,6 +248,7 @@ function createProviderPlanEntry(
   evaluateProviderTriggers(project, provider, capabilities, providerPlan, errors);
   evaluateProviderResources(project, provider, capabilities, providerPlan, errors);
   evaluateProviderRuntimeSupport(project, provider, capabilities, providerPlan, errors);
+  evaluateProviderEngineModeSupport(project, provider, capabilities, providerPlan, errors);
   return providerPlan;
 }
 

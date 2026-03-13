@@ -35,3 +35,30 @@ test("provider runtime capability matrix declares canonical runtime families", (
     }
   }
 });
+
+test("provider engine runtime feasibility matrix is explicit and consistent", () => {
+  const engineModes = new Set<string>();
+  for (const [provider, capabilities] of Object.entries(capabilityMatrix)) {
+    engineModes.add(capabilities.engineRuntime);
+    assert.ok(
+      ["custom-runtime", "container", "unsupported"].includes(capabilities.engineRuntime),
+      `${provider} engineRuntime must be custom-runtime, container, or unsupported`
+    );
+    if (capabilities.engineRuntime === "custom-runtime") {
+      assert.equal(capabilities.customRuntime, true, `${provider} custom-runtime engine mode requires customRuntime=true`);
+    }
+    if (capabilities.engineRuntime === "container") {
+      assert.equal(capabilities.containerImage, true, `${provider} container engine mode requires containerImage=true`);
+    }
+    if (capabilities.engineRuntime === "unsupported") {
+      assert.equal(
+        capabilities.customRuntime || capabilities.containerImage,
+        false,
+        `${provider} unsupported engine mode should not expose customRuntime/containerImage support`
+      );
+    }
+  }
+  assert.ok(engineModes.has("custom-runtime"), "at least one provider should support engine mode via custom runtime");
+  assert.ok(engineModes.has("container"), "at least one provider should support engine mode via container runtime");
+  assert.ok(engineModes.has("unsupported"), "at least one provider should be explicitly unsupported in engine mode");
+});

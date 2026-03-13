@@ -24,6 +24,7 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
       "rust",
       "dotnet"
     ],
+    engineRuntime: "custom-runtime",
     maxTimeoutSeconds: 900,
     maxMemoryMB: 10240
   },
@@ -49,6 +50,7 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
       "java",
       "dotnet"
     ],
+    engineRuntime: "custom-runtime",
     maxTimeoutSeconds: 3600,
     maxMemoryMB: 32768
   },
@@ -73,6 +75,7 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
       "java",
       "dotnet"
     ],
+    engineRuntime: "unsupported",
     maxTimeoutSeconds: 600,
     maxMemoryMB: 4096
   },
@@ -98,7 +101,8 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
       "java",
       "rust",
       "dotnet"
-    ]
+    ],
+    engineRuntime: "container"
   },
   "cloudflare-workers": {
     http: true,
@@ -117,7 +121,8 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     websockets: false,
     supportedRuntimes: [
       "nodejs"
-    ]
+    ],
+    engineRuntime: "unsupported"
   },
   vercel: {
     http: true,
@@ -136,7 +141,8 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     websockets: false,
     supportedRuntimes: [
       "nodejs"
-    ]
+    ],
+    engineRuntime: "unsupported"
   },
   netlify: {
     http: true,
@@ -155,7 +161,8 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     websockets: false,
     supportedRuntimes: [
       "nodejs"
-    ]
+    ],
+    engineRuntime: "unsupported"
   },
   "alibaba-fc": {
     http: true,
@@ -180,6 +187,7 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
       "rust",
       "dotnet"
     ],
+    engineRuntime: "custom-runtime",
     maxTimeoutSeconds: 3600,
     maxMemoryMB: 32768
   },
@@ -201,6 +209,7 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
     supportedRuntimes: [
       "nodejs"
     ],
+    engineRuntime: "unsupported",
     maxTimeoutSeconds: 900,
     maxMemoryMB: 3072
   },
@@ -227,6 +236,7 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
       "rust",
       "dotnet"
     ],
+    engineRuntime: "container",
     maxTimeoutSeconds: 3600,
     maxMemoryMB: 8192
   },
@@ -253,6 +263,7 @@ export const capabilityMatrix: Record<string, ProviderCapabilities> = {
       "rust",
       "dotnet"
     ],
+    engineRuntime: "custom-runtime",
     maxTimeoutSeconds: 600,
     maxMemoryMB: 512
   }
