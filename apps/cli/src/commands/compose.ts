@@ -15,26 +15,14 @@ import { error, info } from "../utils/logger";
 
 const DEFAULT_COMPOSE_CONCURRENCY = 4;
 
-interface ComposeOptions {
+type ComposeOptions = {
   file: string;
   stage?: string;
   json?: boolean;
   rollbackOnFailure?: boolean;
   provider?: string;
   concurrency: number;
-}
-
-interface ComposeDeployServiceResult {
-  name: string;
-  config: string;
-  summary: { exitCode: number; deployedProviders: number; failedProviders: number };
-}
-
-interface ComposeRemoveServiceResult {
-  name: string;
-  config: string;
-  summary: { exitCode: number; destroyedProviders: number; failures: number };
-}
+};
 
 function parseConcurrency(value: string): number {
   const parsed = Number.parseInt(value, 10);
@@ -99,7 +87,11 @@ function printComposeDeploy(
     stage: string;
     concurrency: number;
     order: string[];
-    services: ComposeDeployServiceResult[];
+    services: Array<{
+      name: string;
+      config: string;
+      summary: { exitCode: number; deployedProviders: number; failedProviders: number };
+    }>;
     sharedOutputs: Record<string, string>;
   },
   json: boolean | undefined
@@ -125,7 +117,11 @@ function printComposeRemove(
     stage: string;
     concurrency: number;
     order: string[];
-    services: ComposeRemoveServiceResult[];
+    services: Array<{
+      name: string;
+      config: string;
+      summary: { exitCode: number; destroyedProviders: number; failures: number };
+    }>;
   },
   json: boolean | undefined
 ): void {
@@ -181,7 +177,14 @@ async function deployComposeService(
   service: ComposeServiceConfig,
   stage: string | undefined,
   rollbackOnFailure: boolean | undefined
-): Promise<{ result: ComposeDeployServiceResult; outputs: Record<string, string> }> {
+): Promise<{
+  result: {
+    name: string;
+    config: string;
+    summary: { exitCode: number; deployedProviders: number; failedProviders: number };
+  };
+  outputs: Record<string, string>;
+}> {
   const projectDir = dirname(service.config);
   const deployResult = await executeDeployWorkflow({
     projectDir,
@@ -213,46 +216,78 @@ async function deployComposeService(
   };
 }
 
+function applySharedOutputs(outputs: Record<string, string>, sharedOutputs: Record<string, string>): void {
+  for (const [key, value] of Object.entries(outputs)) {
+    process.env[key] = value;
+    sharedOutputs[key] = value;
+  }
+}
+
+async function deployComposeLevel(
+  level: readonly ComposeServiceConfig[],
+  options: Pick<ComposeOptions, "concurrency" | "stage" | "rollbackOnFailure">
+): Promise<{
+  services: Array<{
+    name: string;
+    config: string;
+    summary: { exitCode: number; deployedProviders: number; failedProviders: number };
+  }>;
+  outputs: Record<string, string>;
+  exitCode: number;
+}> {
+  const services: Array<{
+    name: string;
+    config: string;
+    summary: { exitCode: number; deployedProviders: number; failedProviders: number };
+  }> = [];
+  const outputs: Record<string, string> = {};
+  let exitCode = 0;
+
+  if (options.concurrency === 1) {
+    for (const service of level) {
+      const item = await deployComposeService(service, options.stage, options.rollbackOnFailure);
+      services.push(item.result);
+      applySharedOutputs(item.outputs, outputs);
+      if (item.result.summary.exitCode !== 0) {
+        exitCode = item.result.summary.exitCode;
+        break;
+      }
+    }
+    return { services, outputs, exitCode };
+  }
+
+  const levelResults = await runBoundedConcurrent(level, options.concurrency, async (service) =>
+    deployComposeService(service, options.stage, options.rollbackOnFailure)
+  );
+  for (const item of levelResults) {
+    services.push(item.result);
+    applySharedOutputs(item.outputs, outputs);
+    if (item.result.summary.exitCode !== 0 && exitCode === 0) {
+      exitCode = item.result.summary.exitCode;
+    }
+  }
+  return { services, outputs, exitCode };
+}
+
 async function executeComposeDeploy(options: ComposeOptions): Promise<void> {
   const composePath = resolve(process.cwd(), options.file);
   const compose = await loadComposeConfig(composePath);
   const levels = composeServiceLevels(compose);
   const order = sortComposeServices(compose);
-  const services: ComposeDeployServiceResult[] = [];
+  const services: Array<{
+    name: string;
+    config: string;
+    summary: { exitCode: number; deployedProviders: number; failedProviders: number };
+  }> = [];
   const sharedOutputs: Record<string, string> = {};
   let exitCode = 0;
 
   for (const level of levels) {
-    if (options.concurrency === 1) {
-      for (const service of level) {
-        const item = await deployComposeService(service, options.stage, options.rollbackOnFailure);
-        services.push(item.result);
-        for (const [key, value] of Object.entries(item.outputs)) {
-          process.env[key] = value;
-          sharedOutputs[key] = value;
-        }
-        if (item.result.summary.exitCode !== 0 && exitCode === 0) {
-          exitCode = item.result.summary.exitCode;
-          break;
-        }
-      }
-    } else {
-      const levelResults = await runBoundedConcurrent(level, options.concurrency, async (service) =>
-        deployComposeService(service, options.stage, options.rollbackOnFailure)
-      );
-      for (const item of levelResults) {
-        services.push(item.result);
-        for (const [key, value] of Object.entries(item.outputs)) {
-          process.env[key] = value;
-          sharedOutputs[key] = value;
-        }
-        if (item.result.summary.exitCode !== 0 && exitCode === 0) {
-          exitCode = item.result.summary.exitCode;
-        }
-      }
-    }
-
-    if (exitCode !== 0) {
+    const levelResult = await deployComposeLevel(level, options);
+    services.push(...levelResult.services);
+    applySharedOutputs(levelResult.outputs, sharedOutputs);
+    if (levelResult.exitCode !== 0) {
+      exitCode = levelResult.exitCode;
       break;
     }
   }
@@ -276,7 +311,11 @@ async function removeComposeService(
   service: ComposeServiceConfig,
   stage: string | undefined,
   provider: string | undefined
-): Promise<ComposeRemoveServiceResult> {
+): Promise<{
+  name: string;
+  config: string;
+  summary: { exitCode: number; destroyedProviders: number; failures: number };
+}> {
   const projectDir = dirname(service.config);
   const removeResult = await executeRemoveWorkflow({
     projectDir,
@@ -300,7 +339,11 @@ async function executeComposeRemove(options: ComposeOptions): Promise<void> {
   const compose = await loadComposeConfig(composePath);
   const levels = composeServiceLevels(compose);
   const reverseLevels = [...levels].reverse();
-  const services: ComposeRemoveServiceResult[] = [];
+  const services: Array<{
+    name: string;
+    config: string;
+    summary: { exitCode: number; destroyedProviders: number; failures: number };
+  }> = [];
   const order = reverseLevels.flat().map((service) => service.name);
   let exitCode = 0;
 

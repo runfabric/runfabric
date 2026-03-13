@@ -16,34 +16,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readStringArray(value: unknown, path: string): string[] {
-  if (value === undefined) {
-    return [];
-  }
-  if (!Array.isArray(value)) {
-    throw new Error(`${path} must be an array`);
-  }
-  return value.map((item, index) => {
-    if (typeof item !== "string" || item.trim().length === 0) {
-      throw new Error(`${path}[${index}] must be a non-empty string`);
-    }
-    return item.trim();
-  });
-}
-
 export async function loadComposeConfig(composePath: string): Promise<ComposeConfig> {
   const absolutePath = resolve(composePath);
   const baseDir = dirname(absolutePath);
   const fileContent = await readFile(absolutePath, "utf8");
   const parsed = parseYaml(fileContent);
-
+  const readDependsOn = (value: unknown, index: number): string[] => {
+    if (value === undefined) {
+      return [];
+    }
+    if (!Array.isArray(value)) {
+      throw new Error(`services[${index}].dependsOn must be an array`);
+    }
+    return value.map((item, itemIndex) => {
+      if (typeof item !== "string" || item.trim().length === 0) {
+        throw new Error(`services[${index}].dependsOn[${itemIndex}] must be a non-empty string`);
+      }
+      return item.trim();
+    });
+  };
   if (!isRecord(parsed)) {
     throw new Error("Invalid compose file: root must be an object");
   }
   if (!Array.isArray(parsed.services)) {
     throw new Error("Invalid compose file: services must be an array");
   }
-
   const services: ComposeServiceConfig[] = parsed.services.map((service, index) => {
     if (!isRecord(service)) {
       throw new Error(`Invalid compose file: services[${index}] must be an object`);
@@ -57,10 +54,9 @@ export async function loadComposeConfig(composePath: string): Promise<ComposeCon
     return {
       name: service.name.trim(),
       config: resolve(baseDir, service.config.trim()),
-      dependsOn: readStringArray(service.dependsOn, `services[${index}].dependsOn`)
+      dependsOn: readDependsOn(service.dependsOn, index)
     };
   });
-
   const uniqueNames = new Set<string>();
   for (const service of services) {
     if (uniqueNames.has(service.name)) {
@@ -68,7 +64,6 @@ export async function loadComposeConfig(composePath: string): Promise<ComposeCon
     }
     uniqueNames.add(service.name);
   }
-
   return { services };
 }
 
@@ -114,7 +109,6 @@ export function composeServiceLevels(config: ComposeConfig): ComposeServiceConfi
   const indexByName = new Map(config.services.map((service, index) => [service.name, index]));
   const indegree = new Map<string, number>();
   const dependents = new Map<string, string[]>();
-
   for (const service of config.services) {
     indegree.set(service.name, service.dependsOn.length);
     for (const dependency of service.dependsOn) {
@@ -126,17 +120,14 @@ export function composeServiceLevels(config: ComposeConfig): ComposeServiceConfi
       dependents.set(dependency, items);
     }
   }
-
   const levels: ComposeServiceConfig[][] = [];
   let frontier = config.services.filter((service) => (indegree.get(service.name) || 0) === 0);
   let visitedCount = 0;
-
   while (frontier.length > 0) {
     const currentLevel = [...frontier];
     levels.push(currentLevel);
     visitedCount += currentLevel.length;
     const nextNames: string[] = [];
-
     for (const service of currentLevel) {
       const downstream = dependents.get(service.name) || [];
       for (const childName of downstream) {
@@ -147,18 +138,15 @@ export function composeServiceLevels(config: ComposeConfig): ComposeServiceConfi
         }
       }
     }
-
     frontier = nextNames
       .sort((left, right) => (indexByName.get(left) || 0) - (indexByName.get(right) || 0))
       .map((name) => byName.get(name))
       .filter((value): value is ComposeServiceConfig => Boolean(value));
   }
-
   if (visitedCount !== config.services.length) {
     const unresolved = config.services.find((service) => (indegree.get(service.name) || 0) > 0);
     throw new Error(`compose dependency cycle detected at ${unresolved?.name || "unknown service"}`);
   }
-
   return levels;
 }
 
