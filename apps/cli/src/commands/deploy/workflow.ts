@@ -18,6 +18,7 @@ import {
 import type {
   DeployCollections,
   DeployContext,
+  DeployRollbackResult,
   DeployWorkflowInput,
   DeployWorkflowResult
 } from "./workflow-types";
@@ -32,7 +33,7 @@ function summarizeResult(
   targetedProviders: number,
   deployments: Array<{ provider: string; endpoint?: string; mode?: DeploymentMode }>,
   failures: DeployFailure[],
-  rollbacks: Array<{ provider: string; ok: boolean; message?: string }>
+  rollbacks: DeployRollbackResult[]
 ): DeployWorkflowResult["summary"] {
   const exitCode = failures.length === 0 ? 0 : deployments.length > 0 ? 2 : 1;
   return {
@@ -53,7 +54,7 @@ function createPlanningFailureResult(
     phase: "deploy",
     message: planningError
   }));
-  const rollbacks: Array<{ provider: string; ok: boolean; message?: string }> = [];
+  const rollbacks: DeployRollbackResult[] = [];
 
   return {
     stage: project.stage || "default",

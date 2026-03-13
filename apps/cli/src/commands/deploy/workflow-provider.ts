@@ -276,8 +276,6 @@ async function runProviderDeployment(
     ? await provider.materializeSecrets(context.project)
     : undefined;
 
-  const providerBuildPlan = await provider.planBuild(context.project);
-  await provider.build(context.project, providerBuildPlan);
   const deployPlan = await provider.planDeploy(context.project, artifact);
   const deployResult = await provider.deploy(context.project, deployPlan);
 
@@ -484,16 +482,98 @@ export async function deploySingleArtifact(params: ProviderDeployInput): Promise
     await closeProviderStateSession(context.stateBackend, session, provider.name, collections.failures);
   }
 }
-
-function rollbackEnabled(): boolean {
-  const configured = process.env.RUNFABRIC_ROLLBACK_ON_FAILURE;
-  if (!configured) {
+function parseRollbackToggle(value: string | undefined): boolean | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
     return false;
   }
-  const normalized = configured.trim().toLowerCase();
-  return Boolean(normalized) && ["1", "true", "yes", "on"].includes(normalized);
+  return undefined;
 }
-
+function rollbackEnabled(input: DeployWorkflowInput, context: DeployContext): boolean {
+  if (typeof input.rollbackOnFailure === "boolean") {
+    return input.rollbackOnFailure;
+  }
+  if (typeof context.project.deploy?.rollbackOnFailure === "boolean") {
+    return context.project.deploy.rollbackOnFailure;
+  }
+  const envConfigured = parseRollbackToggle(process.env.RUNFABRIC_ROLLBACK_ON_FAILURE);
+  return envConfigured === true;
+}
+function removeDeploymentRecord(collections: DeployCollections, provider: string): void {
+  const deploymentIndex = collections.deployments.findIndex((item) => item.provider === provider);
+  if (deploymentIndex >= 0) {
+    collections.deployments.splice(deploymentIndex, 1);
+  }
+}
+function recordUnsupportedRollback(
+  input: DeployWorkflowInput,
+  collections: DeployCollections,
+  provider: string,
+  message: string
+): void {
+  collections.rollbacks.push({
+    provider,
+    ok: false,
+    status: "unsupported",
+    message
+  });
+  collections.failures.push({
+    provider,
+    phase: "rollback",
+    message: `rollback unsupported: ${message}`
+  });
+  logProgress(input.emitProgress, `${provider}: rollback unsupported (${message})`);
+}
+function recordFailedRollback(
+  input: DeployWorkflowInput,
+  collections: DeployCollections,
+  provider: string,
+  message: string
+): void {
+  collections.rollbacks.push({
+    provider,
+    ok: false,
+    status: "failed",
+    message
+  });
+  collections.failures.push({ provider, phase: "rollback", message });
+  logProgress(input.emitProgress, `${provider}: rollback failed (${message})`);
+}
+async function rollbackSingleProvider(
+  input: DeployWorkflowInput,
+  context: DeployContext,
+  collections: DeployCollections,
+  deployedProvider: DeployCollections["successfulDeployments"][number]
+): Promise<void> {
+  if (!deployedProvider.adapter.destroy) {
+    recordUnsupportedRollback(
+      input,
+      collections,
+      deployedProvider.provider,
+      "provider adapter does not implement destroy()"
+    );
+    return;
+  }
+  const stateAddress = createStateAddress(context.project, context.stage, deployedProvider.provider);
+  const cleanupTarget = resolve(input.projectDir, ".runfabric", "deploy", deployedProvider.provider);
+  await deployedProvider.adapter.destroy(context.project);
+  await context.stateBackend.delete(stateAddress);
+  await context.stateBackend.forceUnlock(stateAddress);
+  await rm(cleanupTarget, { recursive: true, force: true });
+  removeDeploymentRecord(collections, deployedProvider.provider);
+  collections.rollbacks.push({
+    provider: deployedProvider.provider,
+    ok: true,
+    status: "succeeded"
+  });
+  logProgress(input.emitProgress, `${deployedProvider.provider}: rollback succeeded`);
+}
 export async function rollbackDeployments(
   input: DeployWorkflowInput,
   context: DeployContext,
@@ -502,39 +582,16 @@ export async function rollbackDeployments(
   if (collections.failures.length === 0 || collections.successfulDeployments.length === 0) {
     return;
   }
-  if (!rollbackEnabled()) {
+  if (!rollbackEnabled(input, context)) {
     return;
   }
-
   logProgress(input.emitProgress, "deploy: rollback enabled, reverting successful providers");
   for (const deployedProvider of [...collections.successfulDeployments].reverse()) {
-    const stateAddress = createStateAddress(context.project, context.stage, deployedProvider.provider);
-    const cleanupTarget = resolve(input.projectDir, ".runfabric", "deploy", deployedProvider.provider);
-
     try {
-      if (!deployedProvider.adapter.destroy) {
-        throw new Error("provider destroy is not implemented");
-      }
-
-      await deployedProvider.adapter.destroy(context.project);
-      await context.stateBackend.delete(stateAddress);
-      await context.stateBackend.forceUnlock(stateAddress);
-      await rm(cleanupTarget, { recursive: true, force: true });
-
-      const deploymentIndex = collections.deployments.findIndex(
-        (item) => item.provider === deployedProvider.provider
-      );
-      if (deploymentIndex >= 0) {
-        collections.deployments.splice(deploymentIndex, 1);
-      }
-
-      collections.rollbacks.push({ provider: deployedProvider.provider, ok: true });
-      logProgress(input.emitProgress, `${deployedProvider.provider}: rollback succeeded`);
+      await rollbackSingleProvider(input, context, collections, deployedProvider);
     } catch (rollbackError) {
       const message = stringifyError(rollbackError);
-      collections.rollbacks.push({ provider: deployedProvider.provider, ok: false, message });
-      collections.failures.push({ provider: deployedProvider.provider, phase: "rollback", message });
-      logProgress(input.emitProgress, `${deployedProvider.provider}: rollback failed (${message})`);
+      recordFailedRollback(input, collections, deployedProvider.provider, message);
     }
   }
 }

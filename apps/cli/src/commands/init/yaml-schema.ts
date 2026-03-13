@@ -71,6 +71,7 @@ const runfabricSchema: Record<string, unknown> = {
         kubernetes: { $ref: "#/$defs/kubernetesExtension" }
       }
     },
+    deploy: { $ref: "#/$defs/deployConfig" },
     state: { $ref: "#/$defs/stateConfig" },
     stages: {
       type: "object",
@@ -168,6 +169,13 @@ const runfabricSchema: Record<string, unknown> = {
         steps: { type: "array", minItems: 1, items: { $ref: "#/$defs/workflowStep" } }
       },
       required: ["name", "steps"]
+    },
+    deployConfig: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        rollbackOnFailure: { type: "boolean" }
+      }
     },
     stateConfig: {
       type: "object",
@@ -268,6 +276,7 @@ const runfabricSchema: Record<string, unknown> = {
           type: "object",
           additionalProperties: { type: "object", additionalProperties: true }
         },
+        deploy: { $ref: "#/$defs/deployConfig" },
         state: { $ref: "#/$defs/stateConfig" }
       }
     },

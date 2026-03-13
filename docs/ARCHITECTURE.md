@@ -58,8 +58,12 @@ Controls:
 
 ## Recovery Semantics
 
-- Deploy failures support optional rollback (`RUNFABRIC_ROLLBACK_ON_FAILURE=1`).
-- Rollback uses provider `destroy` and backend state cleanup.
+- Deploy failures support optional rollback.
+- Rollback enablement precedence:
+  - `deploy --rollback-on-failure|--no-rollback-on-failure`
+  - `runfabric.yml` `deploy.rollbackOnFailure` (stage-aware)
+  - legacy env fallback `RUNFABRIC_ROLLBACK_ON_FAILURE`
+- Rollback uses provider `destroy` when available and reports explicit `unsupported` status when `destroy` is not implemented.
 - Remove failures write recovery notes under `.runfabric/recovery/remove/*.json`.
 
 ## State Lifecycle

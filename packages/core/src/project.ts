@@ -131,6 +131,10 @@ export interface ProjectStateConfig {
   azblob?: AzBlobStateConfig;
 }
 
+export interface ProjectDeployConfig {
+  rollbackOnFailure?: boolean;
+}
+
 export interface FunctionConfig {
   name: string;
   entry?: string;
@@ -200,5 +204,6 @@ export interface ProjectConfig {
   workflows?: WorkflowConfig[];
   params?: Record<string, string>;
   extensions?: ProjectExtensions;
+  deploy?: ProjectDeployConfig;
   state?: ProjectStateConfig;
 }

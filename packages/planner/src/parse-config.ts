@@ -18,6 +18,7 @@ import { readStageOverrides, applyStageOverride } from "./parse-config/stages";
 import { readStateConfigAtPath } from "./parse-config/state-config";
 import { readTriggerArray } from "./parse-config/triggers";
 import { parseYamlDocument } from "./parse-config/yaml";
+import { readDeployConfigAtPath } from "./parse-config/deploy-config";
 
 export interface ParseProjectConfigOptions {
   stage?: string;
@@ -39,6 +40,7 @@ function readProjectSections(source: Record<string, unknown>, errors: string[]) 
     workflows: readWorkflowsAtPath(source.workflows, "workflows", errors),
     params: readStringRecord(source, "params", errors),
     extensions: readExtensions(source, errors),
+    deploy: readDeployConfigAtPath(source.deploy, "deploy", errors),
     state: readStateConfigAtPath(source.state, "state", errors)
   };
 }

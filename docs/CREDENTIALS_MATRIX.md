@@ -40,4 +40,4 @@ Source of truth for detailed setup:
 | `RUNFABRIC_STAGE` | default stage when `--stage` is not passed |
 | `RUNFABRIC_REAL_DEPLOY=1` | enable real deploy globally |
 | `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1` | enable real deploy for one provider |
-| `RUNFABRIC_ROLLBACK_ON_FAILURE=1` | enable rollback-on-failure behavior |
+| `RUNFABRIC_ROLLBACK_ON_FAILURE=1` | legacy fallback toggle for rollback-on-failure behavior |

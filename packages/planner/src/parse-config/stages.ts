@@ -7,6 +7,7 @@ import {
   readStringRecordAtPath
 } from "./shared";
 import { readStateConfigAtPath } from "./state-config";
+import { readDeployConfigAtPath } from "./deploy-config";
 import {
   readFunctionsAtPath,
   readResourcesAtPath,
@@ -28,6 +29,7 @@ export interface StageOverride {
   workflows?: ProjectConfig["workflows"];
   params?: Record<string, string>;
   extensions?: ProjectConfig["extensions"];
+  deploy?: ProjectConfig["deploy"];
   state?: ProjectConfig["state"];
 }
 
@@ -54,6 +56,7 @@ export function applyStageOverride(base: ProjectConfig, override: StageOverride)
     workflows: override.workflows || base.workflows,
     params: { ...(base.params || {}), ...(override.params || {}) },
     extensions: mergeExtensions(base.extensions, override.extensions),
+    deploy: override.deploy || base.deploy,
     state: mergeStateConfig(base.state, override.state)
   };
 }
@@ -93,6 +96,7 @@ export function readStageOverride(
   override.workflows = readWorkflowsAtPath(source.workflows, `${path}.workflows`, errors);
   override.params = readStringRecordAtPath(source.params, `${path}.params`, errors);
   override.extensions = readExtensionsAtPath(source.extensions, `${path}.extensions`, errors);
+  override.deploy = readDeployConfigAtPath(source.deploy, `${path}.deploy`, errors);
   override.state = readStateConfigAtPath(source.state, `${path}.state`, errors);
 
   return override;

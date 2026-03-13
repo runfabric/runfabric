@@ -217,6 +217,59 @@ test("parseProjectConfig applies stage default and selected stage overrides", ()
   assert.equal(project.triggers[0].path, "/prod");
 });
 
+test("parseProjectConfig parses deploy rollback policy and applies stage overrides", () => {
+  const config = [
+    "service: deploy-policy",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /deploy-policy",
+    "",
+    "deploy:",
+    "  rollbackOnFailure: false",
+    "",
+    "stages:",
+    "  prod:",
+    "    deploy:",
+    "      rollbackOnFailure: true",
+    ""
+  ].join("\n");
+
+  const defaultProject = parseProjectConfig(config);
+  assert.equal(defaultProject.deploy?.rollbackOnFailure, false);
+
+  const prodProject = parseProjectConfig(config, { stage: "prod" });
+  assert.equal(prodProject.deploy?.rollbackOnFailure, true);
+});
+
+test("parseProjectConfig validates deploy rollback policy type", () => {
+  const invalidConfig = [
+    "service: deploy-policy-invalid",
+    "runtime: nodejs",
+    "entry: src/index.ts",
+    "",
+    "providers:",
+    "  - aws-lambda",
+    "",
+    "triggers:",
+    "  - type: http",
+    "    method: GET",
+    "    path: /deploy-policy-invalid",
+    "",
+    "deploy:",
+    "  rollbackOnFailure: maybe",
+    ""
+  ].join("\n");
+
+  assert.throws(() => parseProjectConfig(invalidConfig), /deploy\.rollbackOnFailure must be a boolean/);
+});
+
 test("parseProjectConfig validates typed provider extensions", () => {
   const invalidConfig = [
     "service: invalid-extensions",

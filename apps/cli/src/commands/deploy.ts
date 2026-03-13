@@ -1,4 +1,5 @@
 import type { CommandRegistrar } from "../types/cli";
+import type { Command } from "commander";
 import { resolve } from "node:path";
 import { printJson } from "../utils/output";
 import { resolveProjectDir } from "../utils/resolve-project";
@@ -8,6 +9,15 @@ import {
   type DeployWorkflowInput,
   type DeployWorkflowResult
 } from "./deploy/workflow";
+
+interface DeployCommandOptions {
+  config?: string;
+  stage?: string;
+  out?: string;
+  json?: boolean;
+  rollbackOnFailure?: boolean;
+  function?: string;
+}
 
 function logDeployResult(result: DeployWorkflowResult): void {
   info(`stage: ${result.stage}`);
@@ -42,8 +52,10 @@ function logDeployResult(result: DeployWorkflowResult): void {
   if (result.rollbacks.length > 0) {
     info(`rollback actions: ${result.rollbacks.length}`);
     for (const rollback of result.rollbacks) {
-      if (rollback.ok) {
+      if (rollback.status === "succeeded") {
         info(`${rollback.provider}: rollback succeeded`);
+      } else if (rollback.status === "unsupported") {
+        warn(`${rollback.provider}: rollback unsupported (${rollback.message || "destroy not available"})`);
       } else {
         warn(`${rollback.provider}: rollback failed (${rollback.message || "unknown"})`);
       }
@@ -53,7 +65,7 @@ function logDeployResult(result: DeployWorkflowResult): void {
 
 async function runDeployCommand(
   functionName: string | undefined,
-  options: { config?: string; stage?: string; out?: string; json?: boolean }
+  options: DeployCommandOptions
 ): Promise<void> {
   const configPath = options.config ? resolve(process.cwd(), options.config) : undefined;
   const projectDir = await resolveProjectDir(process.cwd(), options.config);
@@ -64,6 +76,7 @@ async function runDeployCommand(
     stage: options.stage,
     outputRoot: options.out,
     functionName,
+    rollbackOnFailure: options.rollbackOnFailure,
     emitProgress: !options.json
   };
   const result = await executeDeployWorkflow(workflowInput);
@@ -82,41 +95,49 @@ async function runDeployCommand(
   }
 }
 
+function withRollbackOptions(command: Command): Command {
+  return command
+    .option("--rollback-on-failure", "Rollback successful providers when deploy has failures")
+    .option("--no-rollback-on-failure", "Disable rollback when deploy has failures");
+}
+
+function registerNamedDeployCommand(command: Command): void {
+  withRollbackOptions(
+    command
+      .option("-c, --config <path>", "Path to runfabric config")
+      .option("-s, --stage <name>", "Stage name override")
+      .option("-o, --out <path>", "Output directory")
+      .option("--json", "Emit JSON output")
+  ).action(async (name: string, options: DeployCommandOptions) => {
+    await runDeployCommand(name, options);
+  });
+}
+
 export const registerDeployCommand: CommandRegistrar = (program) => {
-  const deployCommand = program
-    .command("deploy")
-    .description("Deploy built artifacts to providers")
-    .option("-c, --config <path>", "Path to runfabric config")
-    .option("-s, --stage <name>", "Stage name override")
-    .option("-f, --function <name>", "Deploy a specific function")
-    .option("-o, --out <path>", "Output directory")
-    .option("--json", "Emit JSON output")
-    .action(async (options: { config?: string; stage?: string; function?: string; out?: string; json?: boolean }) => {
-      await runDeployCommand(options.function, options);
-    });
+  const deployCommand = withRollbackOptions(
+    program
+      .command("deploy")
+      .description("Deploy built artifacts to providers")
+      .option("-c, --config <path>", "Path to runfabric config")
+      .option("-s, --stage <name>", "Stage name override")
+      .option("-f, --function <name>", "Deploy a specific function")
+      .option("-o, --out <path>", "Output directory")
+      .option("--json", "Emit JSON output")
+  ).action(async (options: DeployCommandOptions) => {
+    await runDeployCommand(options.function, options);
+  });
 
-  deployCommand
-    .command("fn <name>")
-    .alias("function")
-    .description("Deploy a specific function from config")
-    .option("-c, --config <path>", "Path to runfabric config")
-    .option("-s, --stage <name>", "Stage name override")
-    .option("-o, --out <path>", "Output directory")
-    .option("--json", "Emit JSON output")
-    .action(async (name: string, options: { config?: string; stage?: string; out?: string; json?: boolean }) => {
-      await runDeployCommand(name, options);
-    });
-
-  program
-    .command("deploy-function <name>")
-    .description("Deploy a specific function from config (alias)")
-    .option("-c, --config <path>", "Path to runfabric config")
-    .option("-s, --stage <name>", "Stage name override")
-    .option("-o, --out <path>", "Output directory")
-    .option("--json", "Emit JSON output")
-    .action(async (name: string, options: { config?: string; stage?: string; out?: string; json?: boolean }) => {
-      await runDeployCommand(name, options);
-    });
+  registerNamedDeployCommand(
+    deployCommand
+      .command("fn <name>")
+      .alias("function")
+      .description("Deploy a specific function from config")
+  );
+  registerNamedDeployCommand(
+    program
+      .command("deploy-function <name>")
+      .description("Deploy a specific function from config (alias)")
+  );
 };
 
 export { executeDeployWorkflow } from "./deploy/workflow";

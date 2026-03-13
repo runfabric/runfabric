@@ -33,6 +33,7 @@ triggers:
 - `workflows` (`workflow[]`, optional)
 - `params` (`Record<string,string>`, optional)
 - `extensions` (`object`, optional)
+- `deploy` (`object`, optional)
 - `state` (`object`, optional)
 - `stages` (`Record<string, override>`, optional)
 
@@ -66,6 +67,28 @@ triggers:
 ```
 
 If `${env:VAR_NAME}` is used without a default and the variable is missing, config parsing fails with an explicit error.
+
+## Deploy Policy
+
+```yaml
+deploy:
+  rollbackOnFailure: true # optional
+```
+
+Stage override:
+
+```yaml
+stages:
+  prod:
+    deploy:
+      rollbackOnFailure: true
+```
+
+Behavior precedence for rollback-on-failure:
+
+1. CLI flag (`deploy --rollback-on-failure` or `--no-rollback-on-failure`)
+2. `runfabric.yml` deploy policy (`deploy.rollbackOnFailure`)
+3. Legacy env toggle (`RUNFABRIC_ROLLBACK_ON_FAILURE`)
 
 ## Trigger Types
 

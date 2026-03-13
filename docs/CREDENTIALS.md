@@ -41,7 +41,10 @@ AWS_ACCESS_KEY_ID="..." AWS_SECRET_ACCESS_KEY="..." AWS_REGION="us-east-1" runfa
 
 - `RUNFABRIC_STAGE`: default stage when `--stage` is not provided.
 - `RUNFABRIC_REAL_DEPLOY=1`: enable real mode globally for all providers.
-- `RUNFABRIC_ROLLBACK_ON_FAILURE=1`: attempt provider rollback when deploy has failures.
+- Rollback on failure precedence:
+  - `runfabric deploy --rollback-on-failure|--no-rollback-on-failure`
+  - `deploy.rollbackOnFailure` in `runfabric.yml`
+  - legacy env fallback `RUNFABRIC_ROLLBACK_ON_FAILURE=1`
 
 Per-provider real mode flag:
 

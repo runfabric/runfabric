@@ -16,7 +16,17 @@ export interface DeployWorkflowInput {
   stage?: string;
   outputRoot?: string;
   functionName?: string;
+  rollbackOnFailure?: boolean;
   emitProgress?: boolean;
+}
+
+export type DeployRollbackStatus = "succeeded" | "failed" | "unsupported";
+
+export interface DeployRollbackResult {
+  provider: string;
+  ok: boolean;
+  status: DeployRollbackStatus;
+  message?: string;
 }
 
 export interface DeployWorkflowResult {
@@ -24,7 +34,7 @@ export interface DeployWorkflowResult {
   project: ProjectConfig;
   deployments: Array<{ provider: string; endpoint?: string; mode?: DeploymentMode }>;
   failures: DeployFailure[];
-  rollbacks: Array<{ provider: string; ok: boolean; message?: string }>;
+  rollbacks: DeployRollbackResult[];
   summary: {
     targetedProviders: number;
     deployedProviders: number;
@@ -48,7 +58,7 @@ export interface DeployCollections {
   deployments: Array<{ provider: string; endpoint?: string; mode?: DeploymentMode }>;
   failures: DeployFailure[];
   successfulDeployments: SuccessfulProviderDeployment[];
-  rollbacks: Array<{ provider: string; ok: boolean; message?: string }>;
+  rollbacks: DeployRollbackResult[];
 }
 
 export interface DeployContext {
