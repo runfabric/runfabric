@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { access, constants, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
-import type { BuildArtifact, BuildResult, ProjectConfig } from "@runfabric/core";
+import type { BuildArtifact, BuildResult, ProjectConfig, RuntimeFamily } from "@runfabric/core";
 import type { PlanningResult } from "@runfabric/planner";
 
 export interface BuildProjectInput {
@@ -18,7 +19,7 @@ interface GeneratedFile {
   path: string;
   bytes: number;
   sha256: string;
-  role: "entry-source" | "runtime-wrapper" | "manifest";
+  role: "entry-source" | "runtime-wrapper" | "runtime-package" | "manifest";
 }
 
 const requireModule = createRequire(__filename);
@@ -59,6 +60,16 @@ interface MaterializedSourceEntry {
   content: string;
 }
 
+interface RuntimePackagingContext {
+  project: ProjectConfig;
+  projectDir: string;
+  runtimeDir: string;
+  copiedEntryPath: string;
+  generatedFiles: GeneratedFile[];
+}
+
+type RuntimePackagingAdapter = (context: RuntimePackagingContext) => Promise<string>;
+
 function toProviderSlug(provider: string): string {
   return provider.replace(/[^a-z0-9]/gi, "_");
 }
@@ -79,9 +90,8 @@ function runtimeWrapperFilename(provider: string): string {
   return `${toProviderSlug(provider)}-handler.mjs`;
 }
 
-function isNodeLikeRuntime(runtime: string): boolean {
-  const normalized = runtime.trim().toLowerCase();
-  return normalized === "nodejs" || normalized === "node" || normalized.startsWith("node");
+function isNodeRuntime(runtime: RuntimeFamily): boolean {
+  return runtime === "nodejs";
 }
 
 function createCloudflareWrapperContent(importSource: string, service: string): string {
@@ -171,7 +181,7 @@ function createRuntimeWrapperContent(
   return createNodeWrapperContent(importSource, provider);
 }
 
-function hashContent(content: string): string {
+function hashContent(content: string | Buffer): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
@@ -215,7 +225,7 @@ function resolveSourceEntryInfo(project: ProjectConfig, projectDir: string): Sou
   const sourceEntryPath = resolve(projectDir, project.entry);
   const sourceEntryName = basename(project.entry);
   const sourceEntryExt = extname(sourceEntryName).toLowerCase();
-  const shouldTranspile = isNodeLikeRuntime(project.runtime) && (sourceEntryExt === ".ts" || sourceEntryExt === ".tsx");
+  const shouldTranspile = isNodeRuntime(project.runtime) && (sourceEntryExt === ".ts" || sourceEntryExt === ".tsx");
   const copiedEntryName = shouldTranspile
     ? sourceEntryName.replace(/\.(ts|tsx)$/i, ".js")
     : sourceEntryName;
@@ -258,11 +268,7 @@ async function addRuntimeWrapperFile(
   runtimeDir: string,
   copiedEntryName: string,
   generatedFiles: GeneratedFile[]
-): Promise<string | undefined> {
-  if (!isNodeLikeRuntime(project.runtime)) {
-    return undefined;
-  }
-
+): Promise<string> {
   await mkdir(runtimeDir, { recursive: true });
   const runtimeFileName = runtimeWrapperFilename(provider);
   const runtimeFilePath = join(runtimeDir, runtimeFileName);
@@ -276,6 +282,209 @@ async function addRuntimeWrapperFile(
     role: "runtime-wrapper"
   });
   return runtimeFilePath;
+}
+
+async function runBuildCommand(
+  command: string,
+  args: string[],
+  cwd: string,
+  description: string
+): Promise<void> {
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    const stderrChunks: Buffer[] = [];
+    const child = spawn(command, args, { cwd, env: process.env });
+    if (child.stderr) {
+      child.stderr.on("data", (chunk) => stderrChunks.push(Buffer.from(chunk)));
+    }
+    child.on("error", (error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        rejectPromise(new Error(`${description} requires "${command}" to be available in PATH`));
+        return;
+      }
+      rejectPromise(error);
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolvePromise();
+        return;
+      }
+      const stderr = Buffer.concat(stderrChunks).toString("utf8").trim();
+      rejectPromise(new Error(`${description} failed with exit code ${code ?? 1}${stderr ? `: ${stderr}` : ""}`));
+    });
+  });
+}
+
+async function fileExists(pathValue: string): Promise<boolean> {
+  try {
+    await access(pathValue, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function addGeneratedRuntimeFile(pathValue: string, generatedFiles: GeneratedFile[]): Promise<void> {
+  const content = await readFile(pathValue);
+  generatedFiles.push({
+    path: pathValue,
+    bytes: content.byteLength,
+    sha256: hashContent(content),
+    role: "runtime-package"
+  });
+}
+
+async function packagePythonRuntime(
+  projectDir: string,
+  copiedEntryPath: string,
+  runtimeDir: string,
+  generatedFiles: GeneratedFile[]
+): Promise<string> {
+  const requirementsPath = resolve(projectDir, "requirements.txt");
+  if (!(await fileExists(requirementsPath))) {
+    return copiedEntryPath;
+  }
+
+  const pythonRoot = join(runtimeDir, "python");
+  const venvDir = join(pythonRoot, "venv");
+  const packagesDir = join(pythonRoot, "site-packages");
+  const pipExecutable = process.platform === "win32" ? join(venvDir, "Scripts", "pip.exe") : join(venvDir, "bin", "pip");
+  await mkdir(pythonRoot, { recursive: true });
+  await runBuildCommand("python3", ["-m", "venv", venvDir], projectDir, "python venv setup");
+  await runBuildCommand(
+    pipExecutable,
+    ["install", "-r", requirementsPath, "-t", packagesDir],
+    projectDir,
+    "python dependency packaging"
+  );
+
+  const markerPath = join(pythonRoot, "packaged-with-runfabric.txt");
+  const markerContent = [
+    "# generated by @runfabric/builder",
+    `requirements=${requirementsPath}`,
+    `entry=${copiedEntryPath}`
+  ].join("\n");
+  await writeFile(markerPath, markerContent, "utf8");
+  generatedFiles.push({
+    path: markerPath,
+    bytes: Buffer.byteLength(markerContent, "utf8"),
+    sha256: hashContent(markerContent),
+    role: "runtime-package"
+  });
+  return copiedEntryPath;
+}
+
+async function packageGoRuntime(
+  projectDir: string,
+  copiedEntryPath: string,
+  runtimeDir: string,
+  generatedFiles: GeneratedFile[]
+): Promise<string> {
+  if (extname(copiedEntryPath).toLowerCase() !== ".go") {
+    return copiedEntryPath;
+  }
+  const goRoot = join(runtimeDir, "go");
+  const binaryPath = join(goRoot, "bootstrap");
+  await mkdir(goRoot, { recursive: true });
+  await runBuildCommand("go", ["build", "-o", binaryPath, copiedEntryPath], projectDir, "go build");
+  await addGeneratedRuntimeFile(binaryPath, generatedFiles);
+  return binaryPath;
+}
+
+async function packageJavaRuntime(
+  projectDir: string,
+  copiedEntryPath: string,
+  runtimeDir: string,
+  generatedFiles: GeneratedFile[]
+): Promise<string> {
+  const extension = extname(copiedEntryPath).toLowerCase();
+  if (extension === ".jar" || extension !== ".java") {
+    return copiedEntryPath;
+  }
+  const javaRoot = join(runtimeDir, "java");
+  const classesDir = join(javaRoot, "classes");
+  const jarPath = join(javaRoot, "app.jar");
+  await mkdir(classesDir, { recursive: true });
+  await runBuildCommand("javac", ["-d", classesDir, copiedEntryPath], projectDir, "java compilation");
+  await runBuildCommand("jar", ["--create", "--file", jarPath, "-C", classesDir, "."], projectDir, "java jar packaging");
+  await addGeneratedRuntimeFile(jarPath, generatedFiles);
+  return jarPath;
+}
+
+async function packageRustRuntime(
+  projectDir: string,
+  copiedEntryPath: string,
+  runtimeDir: string,
+  generatedFiles: GeneratedFile[]
+): Promise<string> {
+  if (extname(copiedEntryPath).toLowerCase() !== ".rs") {
+    return copiedEntryPath;
+  }
+  const rustRoot = join(runtimeDir, "rust");
+  const binaryPath = join(rustRoot, "bootstrap");
+  await mkdir(rustRoot, { recursive: true });
+  await runBuildCommand("rustc", [copiedEntryPath, "-O", "-o", binaryPath], projectDir, "rust build");
+  await addGeneratedRuntimeFile(binaryPath, generatedFiles);
+  return binaryPath;
+}
+
+async function packageDotnetRuntime(
+  project: ProjectConfig,
+  projectDir: string,
+  copiedEntryPath: string,
+  runtimeDir: string,
+  generatedFiles: GeneratedFile[]
+): Promise<string> {
+  if (extname(copiedEntryPath).toLowerCase() === ".dll") {
+    return copiedEntryPath;
+  }
+
+  const dotnetRoot = join(runtimeDir, "dotnet");
+  const publishDir = join(dotnetRoot, "publish");
+  const projectTarget = extname(copiedEntryPath).toLowerCase() === ".csproj" ? copiedEntryPath : projectDir;
+  await mkdir(dotnetRoot, { recursive: true });
+  await runBuildCommand("dotnet", ["publish", projectTarget, "-c", "Release", "-o", publishDir], projectDir, "dotnet publish");
+  const serviceDll = join(publishDir, `${project.service}.dll`);
+  if (await fileExists(serviceDll)) {
+    await addGeneratedRuntimeFile(serviceDll, generatedFiles);
+    return serviceDll;
+  }
+
+  const markerPath = join(dotnetRoot, "publish-manifest.txt");
+  const markerContent = [
+    "# generated by @runfabric/builder",
+    `publishDir=${publishDir}`,
+    `entry=${copiedEntryPath}`
+  ].join("\n");
+  await writeFile(markerPath, markerContent, "utf8");
+  generatedFiles.push({
+    path: markerPath,
+    bytes: Buffer.byteLength(markerContent, "utf8"),
+    sha256: hashContent(markerContent),
+    role: "runtime-package"
+  });
+  return publishDir;
+}
+
+async function addRuntimePackageFile(
+  context: RuntimePackagingContext
+): Promise<string> {
+  const runtimePackagingAdapters: Record<Exclude<RuntimeFamily, "nodejs">, RuntimePackagingAdapter> = {
+    python: ({ projectDir, copiedEntryPath, runtimeDir, generatedFiles }) =>
+      packagePythonRuntime(projectDir, copiedEntryPath, runtimeDir, generatedFiles),
+    go: ({ projectDir, copiedEntryPath, runtimeDir, generatedFiles }) =>
+      packageGoRuntime(projectDir, copiedEntryPath, runtimeDir, generatedFiles),
+    java: ({ projectDir, copiedEntryPath, runtimeDir, generatedFiles }) =>
+      packageJavaRuntime(projectDir, copiedEntryPath, runtimeDir, generatedFiles),
+    rust: ({ projectDir, copiedEntryPath, runtimeDir, generatedFiles }) =>
+      packageRustRuntime(projectDir, copiedEntryPath, runtimeDir, generatedFiles),
+    dotnet: ({ project, projectDir, copiedEntryPath, runtimeDir, generatedFiles }) =>
+      packageDotnetRuntime(project, projectDir, copiedEntryPath, runtimeDir, generatedFiles)
+  };
+
+  if (context.project.runtime === "nodejs") {
+    return context.copiedEntryPath;
+  }
+  return runtimePackagingAdapters[context.project.runtime](context);
 }
 
 async function writeArtifactManifest(
@@ -307,6 +516,7 @@ async function writeArtifactManifest(
 async function buildProviderArtifact(
   provider: string,
   project: ProjectConfig,
+  projectDir: string,
   outputRoot: string,
   sourceEntry: MaterializedSourceEntry
 ): Promise<BuildArtifact> {
@@ -319,18 +529,20 @@ async function buildProviderArtifact(
   await mkdir(sourceDir, { recursive: true });
   await writeFile(copiedEntryPath, sourceEntry.content, "utf8");
   const generatedFiles: GeneratedFile[] = [createGeneratedEntrySource(copiedEntryPath, sourceEntry.content)];
-  const runtimeEntry = await addRuntimeWrapperFile(
-    provider,
-    project,
-    runtimeDir,
-    sourceEntry.copiedEntryName,
-    generatedFiles
-  );
+  const runtimeEntry = isNodeRuntime(project.runtime)
+    ? await addRuntimeWrapperFile(provider, project, runtimeDir, sourceEntry.copiedEntryName, generatedFiles)
+    : await addRuntimePackageFile({
+        project,
+        projectDir,
+        runtimeDir,
+        copiedEntryPath,
+        generatedFiles
+      });
   await writeArtifactManifest(provider, project, manifestPath, generatedFiles);
 
   return {
     provider,
-    entry: runtimeEntry || copiedEntryPath,
+    entry: runtimeEntry,
     outputPath: manifestPath
   };
 }
@@ -361,6 +573,7 @@ export async function buildProject(input: BuildProjectInput): Promise<BuildResul
       artifacts[currentIndex] = await buildProviderArtifact(
         providerPlan.provider,
         input.project,
+        input.projectDir,
         outputRoot,
         materializedEntry
       );
