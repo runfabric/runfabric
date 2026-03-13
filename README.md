@@ -25,7 +25,7 @@ Project scope (current):
 - Local dev loop with rebuild + presets: `runfabric dev`
 - Multi-provider invoke/logs/remove support
 - Trace and metric queries from local artifacts: `runfabric traces`, `runfabric metrics`
-- Compose deploy orchestration with dependency ordering
+- Compose orchestration (`plan|deploy|remove`) with dependency ordering and bounded concurrency
 - Stage-aware local state and deployment receipts
 - Dynamic env interpolation in config values (`${env:VAR}` and `${env:VAR,default}`)
 - Node-first runtime guardrails for current beta (`runtime: nodejs` production-ready path)

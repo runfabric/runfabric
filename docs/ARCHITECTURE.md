@@ -30,7 +30,7 @@ Provider loading model:
 6. `invoke` and `logs` operate from receipt/state/log artifacts.
 7. `remove` triggers provider destroy + local cleanup (+ recovery notes on failure).
 8. `traces` and `metrics` use provider-native command overrides when configured, otherwise derive data from receipts + provider event logs.
-9. `dev` provides local watch/build and trigger preset simulation (`http|queue|storage`).
+9. `dev` provides local watch/build and trigger preset simulation (`http|queue|storage|cron|eventbridge|pubsub|kafka|rabbitmq`).
 
 ## Core Contracts
 
@@ -83,7 +83,9 @@ Controls:
 
 ## Compose
 
-- `runfabric compose plan|deploy` resolves dependency order from compose file.
+- `runfabric compose plan|deploy|remove` resolves dependency order from compose file.
+- `compose plan|deploy` execute by dependency levels and support bounded parallelism via `--concurrency <1-32>`.
+- `compose remove` executes in reverse dependency order and supports optional provider scoping (`--provider`).
 - Deploy exports shared outputs as:
   - `RUNFABRIC_OUTPUT_<SERVICE>_<PROVIDER>_ENDPOINT`
 
@@ -106,3 +108,4 @@ Controls:
   - `runfabric dev --preset http --watch`
   - `runfabric dev --preset queue --once`
   - `runfabric dev --preset storage --once`
+  - `runfabric dev --preset eventbridge --once`

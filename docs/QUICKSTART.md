@@ -183,6 +183,26 @@ pnpm run runfabric -- dev -c ./my-api/runfabric.yml --preset storage --once
 # additional presets: cron | eventbridge | pubsub | kafka | rabbitmq
 ```
 
+Compose-style multi-service orchestration:
+
+```bash
+# validate ordering + planning across all services
+pnpm run runfabric -- compose plan -f ./runfabric.compose.yml --concurrency 2
+
+# deploy independent services in parallel by dependency level
+pnpm run runfabric -- compose deploy -f ./runfabric.compose.yml --concurrency 4
+
+# optional rollback semantics mirror deploy command behavior
+pnpm run runfabric -- compose deploy -f ./runfabric.compose.yml --rollback-on-failure
+
+# remove in reverse dependency order (optionally scoped to one provider)
+pnpm run runfabric -- compose remove -f ./runfabric.compose.yml --provider aws-lambda
+```
+
+Compose deploy exports upstream endpoints as environment variables for downstream service workflows:
+
+- `RUNFABRIC_OUTPUT_<SERVICE>_<PROVIDER>_ENDPOINT`
+
 ## State Backends And Receipts
 
 After deploy:
