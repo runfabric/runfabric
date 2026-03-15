@@ -6,6 +6,7 @@
 
 Project scope (current):
 
+- **Core engine** is implemented in Go; Node and Python SDKs in `sdk/ts`, `sdk/node`, and `sdk/python` are wrappers that invoke the compiled binary.
 - CLI/serverless deployment framework, not a standalone scheduler/runtime fabric.
 - Uses `runfabric.yml`; not a drop-in config replacement for `serverless.yml`.
 - Node-first beta (`runtime: nodejs` production-ready path in current release train).

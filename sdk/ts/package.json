@@ -1,0 +1,17 @@
+{
+  "name": "@runfabric/sdk",
+  "version": "1.0.0",
+  "description": "RunFabric TypeScript SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["serverless", "runfabric", "sdk"],
+  "author": "RunFabric",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

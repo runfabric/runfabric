@@ -32,6 +32,16 @@ pnpm -r --if-present run build
 pnpm -r --if-present run typecheck
 ```
 
+For Go code:
+
+```bash
+go build ./...
+go test ./...
+go test -cover ./...   # coverage report
+```
+
+**Coverage target:** Critical paths (e.g. `internal/config`, `internal/planner`, lifecycle, state) aim for ~95% coverage. CI may enforce a minimum coverage gate on these packages; see `docs/docs/ROADMAP_PHASES.md` Phase 7.
+
 ## Commit Guidance
 
 Use clear, scoped commit messages. Suggested prefixes:

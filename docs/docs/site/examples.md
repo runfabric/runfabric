@@ -2,7 +2,7 @@
 
 ## Scaffold Command Index
 
-These are exact `init` command patterns used to create common starters.
+These are exact `init` command patterns used to create common starters. Use `--lang <node|ts|js|python|go>` to choose runtime (default: `ts`). Template and provider must match the Trigger Capability Matrix (`docs/EXAMPLES_MATRIX.md`).
 
 HTTP:
 

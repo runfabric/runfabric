@@ -22,20 +22,24 @@ Instructions for coding agents working in the RunFabric monorepo.
 
 ## Repo map
 
-- `apps/cli`: CLI commands and UX
-- `packages/core`: shared contracts and abstractions
-- `packages/planner`: parsing, validations, portability planning
-- `packages/builder`: artifact assembly
-- `packages/runtime-node`: Node runtime adapters
-- `packages/provider-*`: provider-specific adapters
-- `tests`: unit/integration tests
-- `scripts`: validation/release utilities
-- `docs`: product and contributor docs
+- `cmd/runfabric`: CLI entrypoint
+- `internal/cli`: CLI commands and UX (Cobra)
+- `internal/app`: deploy/remove/invoke/logs/plan routing (controlplane vs deploy/api vs lifecycle)
+- `internal/controlplane`: lock + journal orchestration (AWS deploy/remove)
+- `internal/deploy/api`: API-based deploy/remove/invoke/logs; dispatches to `providers/<name>`
+- `internal/deploy/cli`: optional CLI-based deploy (wrangler, vercel, etc.)
+- `internal/deployrunner`: runs adapter BuildPlan → Plan.Execute (used by controlplane for AWS)
+- `internal/deployexec`: phase engine (checkpoints, Phase list); used by AWS DeployPlan
+- `internal/config`, `internal/state`, `internal/planner`, `internal/providers`: shared contracts, config, portability
+- `internal/lifecycle`, `internal/backends`, `internal/transactions`: lifecycle fallback, backends, journal
+- `providers/<name>`: provider-specific adapters (deploy, remove, invoke, logs; resources/; triggers/)
+- `test/`: unit/integration tests
+- `docs/`: product and contributor docs
 
 ## Architecture guardrails
 
 - Keep shared packages provider-neutral.
-- Put provider-specific behavior in `packages/provider-*`.
+- Put provider-specific behavior in `providers/<name>/`.
 - Do not weaken portability checks without tests and docs.
 - Do not introduce breaking CLI/config changes without migration/versioning updates.
 

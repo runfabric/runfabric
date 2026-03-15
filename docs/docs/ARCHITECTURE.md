@@ -1,0 +1,114 @@
+# Architecture
+
+runfabric is a CLI/serverless deployment framework with provider adapters. It is not a standalone compute scheduler/runtime fabric.
+
+## Repo Layout (Go Core + Wrappers)
+
+The core engine is implemented in **Go**. Node and Python SDKs in `sdk/` are thin wrappers that invoke the compiled Go binary.
+
+- `cmd/`: CLI entrypoint (builds the `runfabric` binary).
+- `internal/`: core engine — config loader, planner, lifecycle (doctor, plan, build, deploy, remove), state, backends, observability, recovery, CLI command wiring.
+- `pkg/`: public Go API surface (e.g. protocol, inspect) for use by wrappers or external tools.
+- `providers/`: provider adapters (e.g. `providers/aws`, `providers/cloudflare`, `providers/kubernetes`); each implements the provider contract (Doctor, Plan, Deploy, Remove, Invoke, Logs).
+- `sdk/ts`, `sdk/node`: Node/TypeScript wrappers; install Go binary via postinstall and expose programmatic API.
+- `sdk/python`: Python wrapper; install Go binary on pip install and expose programmatic API.
+- `test/`: unit and integration tests (`test/unit/`, `test/integration/`).
+- `docs/`, `examples/`: documentation and example configs.
+
+Provider loading model:
+
+- CLI resolves provider adapters dynamically from project dependencies first, then CLI/global context.
+- Projects can install only required provider adapters (for example AWS-only projects do not need Vercel/GCP adapters).
+
+## Execution Flow
+
+1. `runfabric.yml` is loaded (with stage overrides when applicable).
+2. Planner validates providers, trigger schemas (`http|cron|queue|storage|eventbridge|pubsub|kafka|rabbitmq`), runtime constraints, and capability matrix constraints.
+3. Builder creates artifacts in `.runfabric/build/<provider>/<service>/`.
+4. Provider deploy writes receipt in `.runfabric/deploy/<provider>/deployment.json`.
+5. CLI writes provider state through the selected state backend:
+  - `local` -> `.runfabric/state/<service>/<stage>/<provider>.state.json`
+  - `postgres` -> real Postgres table storage (`state.postgres.schema` / `state.postgres.table`)
+  - `s3|gcs|azblob` -> real object storage keys under configured prefix (`<prefix>/<service>/<stage>/<provider>.state.json`)
+6. `invoke` and `logs` operate from receipt/state/log artifacts.
+7. `remove` triggers provider destroy + local cleanup (+ recovery notes on failure).
+8. `traces` and `metrics` use provider-native command overrides when configured, otherwise derive data from receipts + provider event logs.
+9. `dev` provides local watch/build and trigger preset simulation (`http|queue|storage|cron|eventbridge|pubsub|kafka|rabbitmq`).
+
+## Core Contracts
+
+- `ProjectConfig`: service metadata, runtime, entry, providers, triggers, functions, hooks, env, resources, workflows, secrets, extensions, state.
+- `ProviderAdapter`: `validate`, `planBuild`, `build`, `planDeploy`, `deploy`, optional `provisionResources`, optional `deployWorkflows`, optional `materializeSecrets`, `invoke`, `logs`, `destroy`.
+- `ProviderCredentialSchema`: required/optional env contracts.
+- `StateBackend`: backend-neutral `read/write/delete/list/lock/unlock/backup/restore` abstraction.
+- `DeploymentReceipt`: provider deployment metadata and endpoint output.
+
+## Deploy Modes
+
+- Simulated mode (default): deterministic endpoint generation + local receipt.
+- Real mode (opt-in): provider command/API response parsing.
+
+Controls:
+
+- `RUNFABRIC_REAL_DEPLOY=1` global
+- `RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1` provider-specific
+- built-in real deployers are used by default in real mode:
+  - `aws-lambda`: AWS SDK
+  - `cloudflare-workers`: Cloudflare API
+  - `kubernetes`: `kubectl` command contract
+  - other providers: built-in provider CLI command contracts
+- `RUNFABRIC_<PROVIDER>_DEPLOY_CMD` and `RUNFABRIC_<PROVIDER>_DESTROY_CMD` remain optional override hooks
+
+## Recovery Semantics
+
+- Deploy failures support optional rollback.
+- Rollback enablement precedence:
+  - `deploy --rollback-on-failure|--no-rollback-on-failure`
+  - `runfabric.yml` `deploy.rollbackOnFailure` (stage-aware)
+  - legacy env fallback `RUNFABRIC_ROLLBACK_ON_FAILURE`
+- Rollback uses provider `destroy` when available and reports explicit `unsupported` status when `destroy` is not implemented.
+- Remove failures write recovery notes under `.runfabric/recovery/remove/*.json`.
+
+## State Lifecycle
+
+- Deploy writes transactional state lifecycle:
+  - `in_progress` before provider deploy
+  - `applied` on success
+  - `failed` on deploy failure
+- State can persist provider address maps for deployed dependencies:
+  - `resourceAddresses`
+  - `workflowAddresses`
+  - `secretReferences` (references only; plaintext secrets are not persisted)
+- Locking is token-based with TTL + stale lock recovery.
+- Lock diagnostics + recovery are exposed via:
+  - `runfabric state list`
+  - `runfabric state force-unlock --service <name> --stage <name> --provider <name>`
+
+## Compose
+
+- `runfabric compose plan|deploy|remove` resolves dependency order from compose file.
+- `compose plan|deploy` execute by dependency levels and support bounded parallelism via `--concurrency <1-32>`.
+- `compose remove` executes in reverse dependency order and supports optional provider scoping (`--provider`).
+- Deploy exports shared outputs as:
+  - `RUNFABRIC_OUTPUT_<SERVICE>_<PROVIDER>_ENDPOINT`
+
+## Tooling
+
+- Syntax: `npm run check:syntax`
+- Capability sync check: `npm run check:capabilities`
+- Docs/code sync checks: `npm run check:docs-sync`
+- Tests: `npm test`
+- Workspace type checks: `pnpm -r --if-present run typecheck`
+- Compatibility checks:
+  - `npm run check:schema`
+  - `npm run check:provider-contracts`
+- Observability commands:
+  - `runfabric traces --provider <name>`
+  - `runfabric metrics --provider <name>`
+- Migration command:
+  - `runfabric migrate --input ./serverless.yml --output ./runfabric.yml`
+- Local dev loop:
+  - `runfabric dev --preset http --watch`
+  - `runfabric dev --preset queue --once`
+  - `runfabric dev --preset storage --once`
+  - `runfabric dev --preset eventbridge --once`

@@ -40,7 +40,7 @@ Legend: `Y` supported, `N` not supported by planner capability matrix.
 | fly-machines | Y | N | N | N | N | N | N | N |
 | ibm-openwhisk | Y | Y | N | N | N | N | N | N |
 
-Source of truth: `packages/planner/src/capability-matrix.ts`
+Source of truth: `internal/planner` (capability matrix and trigger validation live in the Go planner). The matrix is kept in sync with this doc via `check:capabilities` (or equivalent).
 
 ## Scenario Examples
 
