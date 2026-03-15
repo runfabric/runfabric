@@ -1,110 +1,32 @@
 name: release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Release version (must match CHANGELOG and release-notes file)"
-        required: true
-        type: string
-      publish:
-        description: "Publish packages to npm"
-        required: true
-        default: false
-        type: boolean
-      dry_run:
-        description: "Dry-run publish sequence"
-        required: true
-        default: true
-        type: boolean
-      dist_tag:
-        description: "npm dist-tag (latest, beta, rc, etc.)"
-        required: true
-        default: "latest"
-        type: string
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
 
 jobs:
-  release-check:
+  goreleaser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - uses: actions/setup-node@v4
+          
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          node-version: "24"
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Release check
-        run: pnpm run release:check
-
-      - name: Verify release notes + changelog
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
-          RELEASE_NOTES_SIGNING_KEY: ${{ secrets.RELEASE_NOTES_SIGNING_KEY }}
-        run: pnpm run release:notes:verify -- --version "${RELEASE_VERSION}"
-
-  publish:
-    runs-on: ubuntu-latest
-    needs: release-check
-    if: ${{ inputs.publish }}
-    steps:
-      - uses: actions/checkout@v4
+          go-version: "1.22"
+          
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
         with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Publish packages (dry run)
-        if: ${{ inputs.dry_run }}
-        run: pnpm run release:publish:dry-run -- --tag "${{ inputs.dist_tag }}"
-
-      - name: Publish packages
-        if: ${{ !inputs.dry_run }}
+          distribution: goreleaser
+          version: latest
+          args: release --clean
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm run release:publish -- --tag "${{ inputs.dist_tag }}"
-
-      - name: Create and push tag
-        if: ${{ !inputs.dry_run }}
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${RELEASE_VERSION}" -m "runfabric v${RELEASE_VERSION}"
-          git push origin "v${RELEASE_VERSION}"
-
-      - name: Create GitHub release
-        if: ${{ !inputs.dry_run }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ inputs.version }}
-          name: runfabric v${{ inputs.version }}
-          body_path: release-notes/${{ inputs.version }}.md
-
-      - name: Verify published release artifacts
-        if: ${{ !inputs.dry_run }}
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm run release:verify:published -- --version "${RELEASE_VERSION}"

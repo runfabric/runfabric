@@ -1,3 +1,77 @@
+# Binaries
+
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+
+*.test
+
+# Output of go build / go install
+
+*.out
+
+# Go workspace file
+
+go.work
+go.work.sum
+
+# Dependency directories (rare with Go modules but sometimes used)
+
+vendor/
+
+# Build directories
+
+bin/
+build/
+dist/
+/runfabric
+test_out.txt
+
+# Coverage reports
+
+coverage.out
+*.coverprofile
+
+# Go benchmark outputs
+
+*.bench
+
+# IDE / Editor files
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+
+.DS_Store
+Thumbs.db
+
+# Logs
+
+*.log
+
+# Environment files
+
+.env
+.env.*
+
+# Temporary files
+
+tmp/
+temp/
+
+# Generated files (optional — depends on your workflow)
+
+*.gen.go
+
+// 
 node_modules
 dist
 .turbo
@@ -6,3 +80,4 @@ dist
 .runfabric
 .DS_Store
 *.log
+
