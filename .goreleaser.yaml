@@ -1,0 +1,45 @@
+# GoReleaser config for runfabric CLI. Trigger: push tag v* (e.g. v0.2.0).
+# See https://goreleaser.com and RELEASE_PROCESS.md.
+
+version: 2
+
+project_name: runfabric
+
+builds:
+  - id: runfabric
+    main: ./cmd/runfabric
+    binary: runfabric
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/runfabric/runfabric/internal/runtime.Version={{ .Version }}
+      - -X github.com/runfabric/runfabric/internal/runtime.ProtocolVersion=1
+    env:
+      - CGO_ENABLED=0
+
+archives:
+  - id: runfabric
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "runfabric_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds:
+      - runfabric
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: runfabric
+    name: runfabric
+  name_template: "v{{ .Version }}"
+  draft: false
+  # Optional: add release_notes/{{ .Version }}.md to release body via a separate step or manual paste
