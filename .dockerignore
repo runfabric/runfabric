@@ -1,0 +1,15 @@
+# Used by Dockerfile.daemon (context: repo root)
+.git
+.gitignore
+*.md
+bin/
+node_modules/
+.runfabric/
+*.log
+.env
+.env.*
+Dockerfile*
+docker-compose*.yml
+.githooks
+protocol/mcp/node_modules
+packages/

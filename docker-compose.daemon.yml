@@ -1,0 +1,37 @@
+# RunFabric daemon with optional Redis for distributed dashboard cache.
+#
+# Usage:
+#   docker compose -f docker-compose.daemon.yml up -d
+#   API: http://localhost:8766
+#
+# With dashboard + project mount (uncomment volumes and command in daemon service):
+#   volumes: - ./:/app
+#   command: ["/usr/local/bin/runfabric", "daemon", "--address", "0.0.0.0", "--port", "8766",
+#             "--dashboard", "--config", "/app/runfabric.yml", "--workspace", "/app",
+#             "--cache-url", "redis://redis:6379/0"]
+#
+# API only (no Redis): comment out the redis service and RUNFABRIC_DAEMON_CACHE_URL.
+
+services:
+  daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile.daemon
+    ports:
+      - "8766:8766"
+    environment:
+      - RUNFABRIC_DAEMON_CACHE_URL=redis://redis:6379/0
+    # Uncomment to serve dashboard from host project:
+    # volumes:
+    #   - .:/app
+    # command: ["/usr/local/bin/runfabric", "daemon", "--address", "0.0.0.0", "--port", "8766", "--dashboard", "--config", "/app/runfabric.yml", "--workspace", "/app", "--cache-url", "redis://redis:6379/0"]
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
