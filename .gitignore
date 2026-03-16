@@ -1,0 +1,72 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*.test
+
+# Output of go build / go install
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories (rare with Go modules but sometimes used)
+vendor/
+
+# Build directories (root only; engine/internal/runtime/build is source code)
+bin/
+/build/
+dist/
+/runfabric
+# Binary left in engine/ when building from engine dir (use 'make build' → bin/runfabric)
+engine/runfabric
+engine/runfabric.exe
+test_out.txt
+
+# SDK build artifacts (each sdk/* has its own .gitignore for local tooling)
+sdk/node/bin/
+
+# Coverage reports
+coverage.out
+*.coverprofile
+
+# Go benchmark outputs
+*.bench
+
+# IDE / Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.*
+
+# Temporary files
+tmp/
+temp/
+
+misc/
+# Generated files (optional — depends on your workflow)
+*.gen.go
+
+# Node (root or workspace)
+node_modules/
+.turbo
+.artifacts
+.corepack-cache
+.runfabric
