@@ -1,0 +1,126 @@
+package cli
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/runfabric/runfabric/engine/internal/app"
+	"github.com/runfabric/runfabric/engine/internal/state"
+	"github.com/spf13/cobra"
+)
+
+func newFabricCmd(opts *GlobalOptions) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "fabric",
+		Short: "Runtime fabric: active-active deploy, health check, endpoints",
+		Long:  "When runfabric.yml has fabric.targets (provider keys from providerOverrides), deploy to multiple targets and run health checks. Use fabric deploy for active-active; fabric status to check endpoint health; fabric endpoints to list URLs (e.g. for failover/latency routing).",
+	}
+	cmd.AddCommand(newFabricDeployCmd(opts), newFabricStatusCmd(opts), newFabricEndpointsCmd(opts))
+	return cmd
+}
+
+func newFabricDeployCmd(opts *GlobalOptions) *cobra.Command {
+	var rollbackOnFailure, noRollbackOnFailure bool
+	c := &cobra.Command{
+		Use:   "deploy",
+		Short: "Active-active deploy to all fabric targets",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			statusRunning(opts.JSONOutput, "Fabric deploy...")
+			ctx, err := app.Bootstrap(opts.ConfigPath, opts.Stage, "")
+			if err != nil {
+				statusFail(opts.JSONOutput, "Fabric deploy failed.")
+				return printFailure("fabric deploy", err)
+			}
+			targets := app.FabricTargets(ctx.Config)
+			if len(targets) == 0 {
+				if !opts.JSONOutput {
+					fmt.Fprintf(cmd.OutOrStdout(), "No fabric targets; add fabric.targets (provider keys) and providerOverrides to runfabric.yml.\n")
+				}
+				return nil
+			}
+			fabricState, err := app.FabricDeploy(opts.ConfigPath, opts.Stage, rollbackOnFailure, noRollbackOnFailure)
+			if err != nil {
+				statusFail(opts.JSONOutput, "Fabric deploy failed.")
+				return printFailure("fabric deploy", err)
+			}
+			statusDone(opts.JSONOutput, "Fabric deploy complete.")
+			if opts.JSONOutput {
+				return printJSONSuccess("fabric deploy", fabricState)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Deployed to %d target(s): %v\n", len(fabricState.Endpoints), targets)
+			for _, e := range fabricState.Endpoints {
+				fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s\n", e.Provider, e.URL)
+			}
+			return nil
+		},
+	}
+	c.Flags().BoolVar(&rollbackOnFailure, "rollback-on-failure", false, "Rollback on deploy failure")
+	c.Flags().BoolVar(&noRollbackOnFailure, "no-rollback-on-failure", false, "Do not rollback on deploy failure")
+	return c
+}
+
+func newFabricStatusCmd(opts *GlobalOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Check health of fabric endpoints",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			statusRunning(opts.JSONOutput, "Fabric status...")
+			fabricState, err := app.FabricHealth(opts.ConfigPath, opts.Stage)
+			if err != nil {
+				statusFail(opts.JSONOutput, "Fabric status failed.")
+				return printFailure("fabric status", err)
+			}
+			if fabricState == nil {
+				if !opts.JSONOutput {
+					fmt.Fprintf(cmd.OutOrStdout(), "No fabric state; run 'runfabric fabric deploy' first.\n")
+				}
+				return nil
+			}
+			statusDone(opts.JSONOutput, "Fabric status complete.")
+			if opts.JSONOutput {
+				return printJSONSuccess("fabric status", fabricState)
+			}
+			for _, e := range fabricState.Endpoints {
+				healthy := "?"
+				if e.Healthy != nil {
+					if *e.Healthy {
+						healthy = "ok"
+					} else {
+						healthy = "fail"
+					}
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s [%s]\n", e.Provider, e.URL, healthy)
+			}
+			return nil
+		},
+	}
+}
+
+func newFabricEndpointsCmd(opts *GlobalOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "endpoints",
+		Short: "List fabric endpoints (for failover/latency routing)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, err := app.Bootstrap(opts.ConfigPath, opts.Stage, "")
+			if err != nil {
+				return printFailure("fabric endpoints", err)
+			}
+			fabricState, err := state.LoadFabricState(ctx.RootDir, opts.Stage)
+			if err != nil || fabricState == nil {
+				if !opts.JSONOutput {
+					fmt.Fprintf(cmd.OutOrStdout(), "No fabric state; run 'runfabric fabric deploy' first.\n")
+				}
+				return nil
+			}
+			if opts.JSONOutput {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(fabricState)
+			}
+			for _, e := range fabricState.Endpoints {
+				fmt.Fprintln(cmd.OutOrStdout(), e.URL)
+			}
+			return nil
+		},
+	}
+}
