@@ -1,0 +1,36 @@
+name: runfabric-preview-template
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  preview-deploy:
+    runs-on: ubuntu-latest
+    environment: preview
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build + Test
+        run: |
+          pnpm run check:syntax
+          pnpm run check:capabilities
+          pnpm test
+      - name: Deploy Preview
+        env:
+          RUNFABRIC_AWS_REAL_DEPLOY: "1"
+          RUNFABRIC_AWS_DEPLOY_CMD: ${{ secrets.RUNFABRIC_AWS_DEPLOY_CMD_PREVIEW }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_PREVIEW }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_PREVIEW }}
+          AWS_REGION: ${{ vars.AWS_REGION_PREVIEW }}
+        run: pnpm run runfabric -- deploy -c runfabric.yml --stage dev --json
+      - name: Collect Traces/Metrics
+        run: |
+          pnpm run runfabric -- traces --provider aws-lambda --json
+          pnpm run runfabric -- metrics --provider aws-lambda --json

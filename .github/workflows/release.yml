@@ -1,0 +1,143 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  npm:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Cache Go modules and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build all platform binaries
+        run: make build-all-platforms
+
+      - name: Copy binaries into CLI package
+        run: |
+          mkdir -p packages/node/cli/bin
+          for f in bin/runfabric-*; do
+            [ -f "$f" ] && cp "$f" packages/node/cli/bin/
+          done
+          if [ -z "$(ls -A packages/node/cli/bin 2>/dev/null)" ] && [ -f bin/runfabric ]; then
+            cp bin/runfabric packages/node/cli/bin/
+          fi
+          if [ -z "$(ls -A packages/node/cli/bin 2>/dev/null)" ]; then
+            echo "No binaries in bin/. Ensure 'make build-all-platforms' succeeded."
+            exit 1
+          fi
+          ls -la packages/node/cli/bin/
+
+      - name: Set package version from tag (CLI + SDK)
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          [ -d packages/node/cli ] && (cd packages/node/cli && npm version --no-git-tag-version "$VER")
+          [ -d packages/node/sdk ] && (cd packages/node/sdk && npm version --no-git-tag-version "$VER")
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish @runfabric/cli to npm
+        working-directory: packages/node/cli
+        run: npm publish --access public
+      - name: Publish @runfabric/sdk to npm
+        working-directory: packages/node/sdk
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  sdk-go:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Test Go SDK
+        run: cd packages/go/sdk && go test ./...
+
+  sdk-java:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+      - name: Test Java SDK
+        run: cd packages/java/sdk && mvn -q test
+
+  sdk-dotnet:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build and test .NET SDK
+        run: cd packages/dotnet/sdk && dotnet test -v minimal
+
+  sdk-python:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python SDK
+        run: cd packages/python/runfabric && pip install -e .

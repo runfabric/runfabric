@@ -1,0 +1,119 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Cache Go modules and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('engine/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Format Check
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Go code is not formatted."
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Run Go Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -v -race ./...
+
+      - name: Coverage report
+        run: |
+          go test -coverprofile=coverage.out ./...
+          go tool cover -func=coverage.out | tail -5
+
+  npm-package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Cache Go modules and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build all platform binaries
+        run: make build-all-platforms
+
+      - name: Verify binaries
+        run: |
+          ls -la bin/ || true
+          if [ -z "$(ls bin/runfabric* 2>/dev/null)" ]; then
+            echo "No bin/runfabric* binaries produced. Check build step."
+            exit 1
+          fi
+
+      - name: Copy binaries into CLI package
+        run: |
+          mkdir -p packages/node/cli/bin
+          for f in bin/runfabric-*; do
+            [ -f "$f" ] && cp "$f" packages/node/cli/bin/
+          done
+          if [ -z "$(ls -A packages/node/cli/bin 2>/dev/null)" ] && [ -f bin/runfabric ]; then
+            cp bin/runfabric packages/node/cli/bin/
+          fi
+          if [ -z "$(ls -A packages/node/cli/bin 2>/dev/null)" ]; then
+            echo "No binaries in bin/. Ensure 'make build-all-platforms' succeeded."
+            exit 1
+          fi
+          ls -la packages/node/cli/bin/
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate npm packages (pack)
+        run: |
+          [ ! -d packages/node/cli ] && echo "packages/node/cli not found" && exit 1
+          [ ! -d packages/node/sdk ] && echo "packages/node/sdk not found" && exit 1
+          cd packages/node/cli && npm pack --dry-run && npm pack && ls -la *.tgz
+          cd ../sdk && npm pack --dry-run && npm pack && ls -la *.tgz

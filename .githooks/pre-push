@@ -1,0 +1,9 @@
+#!/bin/sh
+# Pre-push hook: run linting and validation before allowing push.
+# Install: git config core.hooksPath .githooks  (from repo root)
+
+set -e
+cd "$(git rev-parse --show-toplevel)"
+echo "Running pre-push checks (lint + validation)..."
+make pre-push
+echo "Pre-push checks passed."
