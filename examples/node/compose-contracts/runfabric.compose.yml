@@ -1,0 +1,13 @@
+services:
+  - name: api
+    config: ./api/runfabric.yml
+
+  - name: worker
+    config: ./worker/runfabric.yml
+    dependsOn:
+      - api
+
+  - name: scheduler
+    config: ./scheduler/runfabric.yml
+    dependsOn:
+      - worker

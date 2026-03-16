@@ -1,0 +1,7 @@
+services:
+  - name: hello-api
+    config: ./runfabric.quickstart.yml
+  - name: hello-worker
+    config: ./runfabric.quickstart.yml
+    dependsOn:
+      - hello-api

@@ -1,0 +1,13 @@
+service: compose-scheduler
+runtime: nodejs
+entry: src/index.ts
+
+env:
+  WORKER_ENDPOINT_ENV: RUNFABRIC_OUTPUT_WORKER_AWS_LAMBDA_ENDPOINT
+
+providers:
+  - gcp-functions
+
+triggers:
+  - type: cron
+    schedule: "*/10 * * * *"

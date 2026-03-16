@@ -1,0 +1,37 @@
+service: hello-api
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${env:AWS_REGION,ap-southeast-1}
+
+# backend:
+#   kind: aws-remote
+#   s3Bucket: ${env:RUNFABRIC_S3_BUCKET}
+#   s3Prefix: runfabric/dev
+#   lockTable: ${env:RUNFABRIC_DYNAMODB_TABLE}
+
+backend:
+  kind: aws-remote
+  s3Bucket: runfabric
+  s3Prefix: apps/dev
+  lockTable: rf-locks
+
+functions:
+  hello:
+    handler: src/handler.hello
+    memory: 128
+    timeout: 10
+    events:
+      - http:
+          path: /hello
+          method: get
+
+  createUser:
+    handler: src/handler.createUser
+    memory: 128
+    timeout: 10
+    events:
+      - http:
+          path: /users
+          method: post

@@ -1,0 +1,11 @@
+service: handler-scenario-single
+runtime: nodejs
+entry: src/index.ts
+
+providers:
+  - aws-lambda
+
+triggers:
+  - type: http
+    method: GET
+    path: /hello

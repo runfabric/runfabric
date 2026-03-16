@@ -1,0 +1,11 @@
+service: hello-http
+runtime: nodejs
+entry: src/index.ts
+
+providers:
+  - alibaba-fc
+
+triggers:
+  - type: http
+    method: GET
+    path: /hello
