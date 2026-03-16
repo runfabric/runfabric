@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>RunFabric.Sdk</RootNamespace>
+    <PackageId>RunFabric.Sdk</PackageId>
+    <Version>1.0.0</Version>
+    <Description>RunFabric handler contract and HTTP adapter for .NET</Description>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+</Project>

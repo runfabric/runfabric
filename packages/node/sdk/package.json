@@ -1,0 +1,36 @@
+{
+  "name": "@runfabric/sdk",
+  "version": "0.1.2",
+  "description": "RunFabric SDK — handler contract, HTTP adapter, framework adapters (Node)",
+  "files": [
+    "src"
+  ],
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./adapters": "./src/adapters/index.js",
+    "./adapters/handler": "./src/adapters/handler.js",
+    "./adapters/raw": "./src/adapters/raw.js",
+    "./adapters/express": "./src/adapters/express/index.js",
+    "./adapters/fastify": "./src/adapters/fastify/index.js",
+    "./adapters/nest": "./src/adapters/nest/index.js",
+    "./http": "./src/http/index.js",
+    "./function": "./src/function/index.js",
+    "./dev": "./src/dev/index.js"
+  },
+  "scripts": {
+    "test": "node scripts/smoke-test.js",
+    "smoke": "node scripts/smoke-test.js"
+  },
+  "keywords": [
+    "runfabric",
+    "serverless",
+    "handler",
+    "express",
+    "fastify",
+    "nest"
+  ],
+  "author": "RunFabric",
+  "license": "MIT",
+  "type": "commonjs"
+}

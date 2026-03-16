@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "runfabric"
+version = "1.0.0"
+description = "RunFabric Framework CLI & SDK Python"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+fastapi = ["fastapi"]
+flask = ["flask"]
+django = ["django"]
+dev = ["pytest>=7.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[project.scripts]
+runfabric = "runfabric.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

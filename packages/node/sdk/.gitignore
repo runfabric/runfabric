@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build / package output
+bin/
+dist/
+*.tgz
+*.tar.gz
+
+# Logs and debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# OS and IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Env
+.env
+.env.*
+
+# Coverage
+coverage/
+.nyc_output/

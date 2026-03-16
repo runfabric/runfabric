@@ -1,0 +1,25 @@
+{
+  "name": "@runfabric/cli",
+  "version": "0.1.2",
+  "description": "RunFabric CLI — wrapper on the engine binary",
+  "files": [
+    "src",
+    "bin"
+  ],
+  "bin": {
+    "runfabric": "./src/cli.js"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "postinstall": "node src/install.js",
+    "test": "node -e \"require('./src'); console.log('cli ok')\""
+  },
+  "keywords": [
+    "runfabric",
+    "serverless",
+    "cli"
+  ],
+  "author": "RunFabric",
+  "license": "MIT",
+  "type": "commonjs"
+}
