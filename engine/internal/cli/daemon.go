@@ -4,15 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/runfabric/runfabric/engine/internal/app"
 	"github.com/runfabric/runfabric/engine/internal/configapi"
+	runfabricruntime "github.com/runfabric/runfabric/engine/internal/runtime"
 	"github.com/runfabric/runfabric/engine/internal/telemetry"
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/otel/attribute"
@@ -102,6 +107,20 @@ func newDaemonCmd(opts *GlobalOptions) *cobra.Command {
 			}
 
 			mux := http.NewServeMux()
+			// Readiness/liveness and version (no auth, no cache)
+			mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("ok"))
+			})
+			mux.HandleFunc("GET /version", func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"version":  runfabricruntime.Version,
+					"protocol": runfabricruntime.ProtocolVersion,
+				})
+			})
 			// Config API: POST /validate, /resolve, /plan, /deploy, /remove, /releases (wrapped with API cache when cache-url set)
 			mux.HandleFunc("POST /validate", apiHandler.ServeHTTP)
 			mux.HandleFunc("POST /resolve", apiHandler.ServeHTTP)
@@ -212,8 +231,16 @@ func newDaemonCmd(opts *GlobalOptions) *cobra.Command {
 				fmt.Fprintf(c.OutOrStdout(), "  API cache: distributed (Redis), validate/resolve/plan/releases\n")
 			}
 			fmt.Fprintf(c.OutOrStdout(), "  API: POST /validate, /resolve, /plan, /deploy, /remove, /releases\n")
+			fmt.Fprintf(c.OutOrStdout(), "  Health: GET /healthz  Version: GET /version\n")
 			handler := daemonOtelMiddleware(telemetry.Tracer("runfabric/daemon"), mux)
-			return http.ListenAndServe(addr, handler)
+			if err := http.ListenAndServe(addr, handler); err != nil {
+				if strings.Contains(err.Error(), "address already in use") {
+					fmt.Fprintf(os.Stderr, "Error: %v — try: runfabric daemon stop (or use --port to pick another port)\n", err)
+					os.Exit(1)
+				}
+				return err
+			}
+			return nil
 		},
 	}
 
@@ -225,7 +252,201 @@ func newDaemonCmd(opts *GlobalOptions) *cobra.Command {
 	cmd.Flags().StringVar(&workspace, "workspace", "", "Project root directory; --config is resolved relative to this (e.g. for systemd/launchd: WorkingDirectory=... and --workspace .)")
 	cmd.Flags().DurationVar(&cacheTTL, "cache-ttl", 5*time.Minute, "API cache TTL when --cache-url is set (e.g. 5m); 0 uses per-endpoint defaults")
 	cmd.Flags().StringVar(&cacheURL, "cache-url", "", "Distributed cache URL (e.g. redis://localhost:6379/0). Caches Config API (validate, resolve, plan, releases). Env: RUNFABRIC_DAEMON_CACHE_URL.")
+
+	cmd.AddCommand(
+		&cobra.Command{
+			Use:   "start",
+			Short: "Start the daemon in the background",
+			Long:  "Spawns the daemon as a detached process. PID is written to .runfabric/daemon.pid and logs to .runfabric/daemon.log. Run from project root so start/stop use the same .runfabric directory.",
+			RunE:  runDaemonStart,
+		},
+		&cobra.Command{
+			Use:   "stop",
+			Short: "Stop the daemon started with daemon start",
+			Long:  "Sends SIGTERM to the process whose PID is in .runfabric/daemon.pid and removes the file. Run from the same directory used for daemon start.",
+			RunE:  runDaemonStop,
+		},
+		&cobra.Command{
+			Use:   "restart",
+			Short: "Stop the daemon (if running) and start it again in the background",
+			Long:  "Equivalent to daemon stop followed by daemon start. Uses the same .runfabric directory; run from project root.",
+			RunE:  runDaemonRestart,
+		},
+		&cobra.Command{
+			Use:   "status",
+			Short: "Report whether the daemon is running (from .runfabric/daemon.pid)",
+			Long:  "Reads .runfabric/daemon.pid and checks if that process is alive. Run from the same directory used for daemon start.",
+			RunE:  runDaemonStatus,
+		},
+	)
 	return cmd
+}
+
+// daemonPortResponding returns true if something is listening on host:port (e.g. the daemon).
+func daemonPortResponding(host string, port int) bool {
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	conn, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+func daemonDir() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, ".runfabric"), nil
+}
+
+func runDaemonStatus(c *cobra.Command, _ []string) error {
+	dir, err := daemonDir()
+	if err != nil {
+		return err
+	}
+	pidPath := filepath.Join(dir, "daemon.pid")
+	b, err := os.ReadFile(pidPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// PID file missing: maybe daemon is still running (file was deleted). Probe default port.
+			if daemonPortResponding("127.0.0.1", 8766) {
+				fmt.Fprintf(c.OutOrStdout(), "daemon: no pid file but something is listening on http://127.0.0.1:8766 (daemon may still be running; use 'lsof -i :8766' to find PID, then kill)\n")
+			} else {
+				fmt.Fprintf(c.OutOrStdout(), "daemon: not running (no .runfabric/daemon.pid)\n")
+			}
+			return nil
+		}
+		return fmt.Errorf("read pid file: %w", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		fmt.Fprintf(c.OutOrStdout(), "daemon: not running (invalid pid file)\n")
+		_ = os.Remove(pidPath)
+		return nil
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		fmt.Fprintf(c.OutOrStdout(), "daemon: not running (stale pid file)\n")
+		_ = os.Remove(pidPath)
+		return nil
+	}
+	if runtime.GOOS != "windows" {
+		// Signal 0 checks if the process exists (no signal sent). Not implemented on Windows.
+		if err := proc.Signal(syscall.Signal(0)); err != nil {
+			fmt.Fprintf(c.OutOrStdout(), "daemon: not running (PID %d gone, removed stale pid file)\n", pid)
+			_ = os.Remove(pidPath)
+			return nil
+		}
+	}
+	fmt.Fprintf(c.OutOrStdout(), "daemon: running (PID %d)\n", pid)
+	return nil
+}
+
+func runDaemonRestart(c *cobra.Command, args []string) error {
+	_ = runDaemonStop(c, nil)
+	time.Sleep(1 * time.Second)
+	return runDaemonStart(c, nil)
+}
+
+func runDaemonStart(c *cobra.Command, _ []string) error {
+	dir, err := daemonDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create .runfabric: %w", err)
+	}
+	logPath := filepath.Join(dir, "daemon.log")
+	pidPath := filepath.Join(dir, "daemon.pid")
+
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("executable path: %w", err)
+	}
+	// Build argv: same as current but remove "start" or "restart" so child runs foreground daemon.
+	argv := os.Args[1:]
+	var newArgs []string
+	for _, a := range argv {
+		if a == "start" || a == "restart" {
+			continue
+		}
+		newArgs = append(newArgs, a)
+	}
+	if len(newArgs) == 0 || newArgs[0] != "daemon" {
+		newArgs = append([]string{"daemon"}, newArgs...)
+	}
+
+	cmd := exec.Command(execPath, newArgs...)
+	cmd.Stdin = nil
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("open log file: %w", err)
+	}
+	defer logFile.Close()
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	cmd.Dir = filepath.Dir(dir)
+	if runtime.GOOS != "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start daemon: %w", err)
+	}
+	pid := cmd.Process.Pid
+	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(pid)), 0644); err != nil {
+		_ = cmd.Process.Kill()
+		return fmt.Errorf("write pid file: %w", err)
+	}
+	fmt.Fprintf(c.OutOrStdout(), "Daemon started (PID %d). Logs: %s\n", pid, logPath)
+	return nil
+}
+
+func runDaemonStop(c *cobra.Command, _ []string) error {
+	dir, err := daemonDir()
+	if err != nil {
+		return err
+	}
+	pidPath := filepath.Join(dir, "daemon.pid")
+	b, err := os.ReadFile(pidPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Fprintf(c.OutOrStderr(), "No daemon PID file at %s (daemon may not be running).\n", pidPath)
+			return nil
+		}
+		return fmt.Errorf("read pid file: %w", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		return fmt.Errorf("invalid pid file: %w", err)
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("find process: %w", err)
+	}
+	if runtime.GOOS == "windows" {
+		if err := proc.Kill(); err != nil {
+			if strings.Contains(err.Error(), "already finished") || err == syscall.ESRCH {
+				_ = os.Remove(pidPath)
+				fmt.Fprintf(c.OutOrStdout(), "Daemon (PID %d) not running. Removed stale pid file.\n", pid)
+				return nil
+			}
+			return fmt.Errorf("kill daemon: %w", err)
+		}
+	} else {
+		if err := proc.Signal(syscall.SIGTERM); err != nil {
+			if strings.Contains(err.Error(), "process already finished") || err == syscall.ESRCH {
+				_ = os.Remove(pidPath)
+				fmt.Fprintf(c.OutOrStdout(), "Daemon (PID %d) not running. Removed stale pid file.\n", pid)
+				return nil
+			}
+			return fmt.Errorf("signal daemon: %w", err)
+		}
+	}
+	_ = os.Remove(pidPath)
+	fmt.Fprintf(c.OutOrStdout(), "Daemon stopped (PID %d).\n", pid)
+	return nil
 }
 
 func writeDaemonActionJSON(w http.ResponseWriter, result any, err error) {

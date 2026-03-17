@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/runfabric/runfabric/engine/internal/app"
 	"github.com/spf13/cobra"
@@ -17,7 +18,7 @@ func newDevCmd(opts *GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dev",
 		Short: "Local dev with optional watch",
-		Long:  "Runs your service locally (same as call-local --serve). Use --stream-from <stage> and --tunnel-url <url> for live-stream mode: the CLI points the provider's invocation target (e.g. API Gateway) at the tunnel and restores it on exit. See docs/DEV_LIVE_STREAM.md.",
+		Long:  "Runs your service locally (same as call-local --serve). Use --watch to auto-reload on file changes. Use --stream-from and --tunnel-url for live-stream mode. See docs/DEV_LIVE_STREAM.md.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			effectiveStage := opts.Stage
 			if streamFrom != "" {
@@ -62,13 +63,43 @@ func newDevCmd(opts *GlobalOptions) *cobra.Command {
 				os.Exit(0)
 			}
 
+			// Watch mode: restart server when project files change
+			if watch {
+				sigCh := make(chan os.Signal, 1)
+				signal.Notify(sigCh, os.Interrupt)
+				watchDone := make(chan struct{})
+				watchChan := app.WatchProjectDir(opts.ConfigPath, 1*time.Second, watchDone)
+				for {
+					shutdownChan, restart, err := app.CallLocalServe(opts.ConfigPath, effectiveStage, host, port)
+					if err != nil {
+						statusFail(opts.JSONOutput, "Dev failed.")
+						return printFailure("dev", err)
+					}
+					select {
+					case <-watchChan:
+						if !opts.JSONOutput {
+							fmt.Fprintf(cmd.OutOrStdout(), "→ File change detected, reloading...\n")
+						}
+						restart()
+						<-shutdownChan
+					case <-sigCh:
+						close(watchDone)
+						restart()
+						<-shutdownChan
+						if !opts.JSONOutput {
+							fmt.Fprintf(cmd.OutOrStdout(), "Exiting.\n")
+						}
+						return nil
+					}
+				}
+			}
+
 			result, err := app.CallLocal(opts.ConfigPath, effectiveStage, host, port, true)
 			if err != nil {
 				statusFail(opts.JSONOutput, "Dev failed.")
 				return printFailure("dev", err)
 			}
 			statusDone(opts.JSONOutput, "Dev server ready.")
-			_ = watch
 			_ = once
 			_ = provider
 			_ = preset

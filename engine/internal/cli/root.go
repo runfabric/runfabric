@@ -6,9 +6,11 @@ import (
 )
 
 type GlobalOptions struct {
-	ConfigPath string
-	Stage      string
-	JSONOutput bool
+	ConfigPath     string
+	Stage          string
+	JSONOutput     bool
+	NonInteractive bool
+	AssumeYes      bool
 }
 
 func NewRootCmd() *cobra.Command {
@@ -24,6 +26,8 @@ func NewRootCmd() *cobra.Command {
 	cmd.PersistentFlags().StringVarP(&opts.ConfigPath, "config", "c", "runfabric.yml", "Path to runfabric.yml")
 	cmd.PersistentFlags().StringVarP(&opts.Stage, "stage", "s", "dev", "Deployment stage")
 	cmd.PersistentFlags().BoolVar(&opts.JSONOutput, "json", false, "Emit machine-readable JSON output")
+	cmd.PersistentFlags().BoolVar(&opts.NonInteractive, "non-interactive", false, "Disable interactive prompts (for CI/MCP)")
+	cmd.PersistentFlags().BoolVarP(&opts.AssumeYes, "yes", "y", false, "Assume yes for any confirmation prompt")
 
 	cmd.AddCommand(
 		newDoctorCmd(opts),
@@ -40,6 +44,7 @@ func NewRootCmd() *cobra.Command {
 		newUnlockCmd(opts),
 		newBackendMigrateCmd(opts),
 		newInitCmd(opts),
+		newGenerateCmd(opts),
 		newDocsCmd(opts),
 		newBuildCmd(opts),
 		newPackageCmd(opts),

@@ -1,6 +1,11 @@
 package cli
 
 import (
+	"fmt"
+	"os"
+	"os/signal"
+	"time"
+
 	"github.com/runfabric/runfabric/engine/internal/app"
 	"github.com/spf13/cobra"
 )
@@ -12,16 +17,47 @@ func newCallLocalCmd(opts *GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "call-local",
 		Short: "Run the service locally",
-		Long:  "Starts a local HTTP server to run your handlers. Use --serve to keep it running (attach a debugger to this process to debug).",
+		Long:  "Starts a local HTTP server to run your handlers. Use --serve to keep it running. Use --watch to auto-reload on file changes (runfabric.yml, *.js, *.ts, etc.).",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			statusRunning(opts.JSONOutput, "Starting local server...")
+
+			// Watch mode: same as dev --watch — CallLocalServe + WatchProjectDir, restart on change or SIGINT
+			if serve && watch {
+				sigCh := make(chan os.Signal, 1)
+				signal.Notify(sigCh, os.Interrupt)
+				watchDone := make(chan struct{})
+				watchChan := app.WatchProjectDir(opts.ConfigPath, 1*time.Second, watchDone)
+				for {
+					shutdownChan, restart, err := app.CallLocalServe(opts.ConfigPath, opts.Stage, host, port)
+					if err != nil {
+						statusFail(opts.JSONOutput, "Call-local failed.")
+						return printFailure("call-local", err)
+					}
+					select {
+					case <-watchChan:
+						if !opts.JSONOutput {
+							fmt.Fprintf(cmd.OutOrStdout(), "→ File change detected, reloading...\n")
+						}
+						restart()
+						<-shutdownChan
+					case <-sigCh:
+						close(watchDone)
+						restart()
+						<-shutdownChan
+						if !opts.JSONOutput {
+							fmt.Fprintf(cmd.OutOrStdout(), "Exiting.\n")
+						}
+						return nil
+					}
+				}
+			}
+
 			result, err := app.CallLocal(opts.ConfigPath, opts.Stage, host, port, serve)
 			if err != nil {
 				statusFail(opts.JSONOutput, "Call-local failed.")
 				return printFailure("call-local", err)
 			}
 			statusDone(opts.JSONOutput, "Local server ready.")
-			_ = watch
 			_ = provider
 			_ = method
 			_ = path

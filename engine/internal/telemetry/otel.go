@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,7 +36,7 @@ func Init(ctx context.Context) error {
 		endpoint = "localhost:4318"
 	}
 	if endpoint == "" {
-		tp = sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.NeverSample()))
+		tp = sdktrace.NewTracerProvider(sdktrace.WithSampler(samplerFromEnv()))
 		otel.SetTracerProvider(tp)
 		return nil
 	}
@@ -68,10 +69,49 @@ func Init(ctx context.Context) error {
 			sdktrace.WithMaxExportBatchSize(512),
 		),
 		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithSampler(samplerFromEnv()),
 	)
 	otel.SetTracerProvider(tp)
 	return nil
+}
+
+// samplerFromEnv returns a Sampler from OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG.
+// Supported: "always_on", "always_off", "traceidratio" (arg = ratio 0..1), "parentbased_always_on", "parentbased_traceidratio" (arg = ratio).
+// Default when exporter is set: AlwaysSample(); when no exporter: NeverSample().
+func samplerFromEnv() sdktrace.Sampler {
+	s := strings.TrimSpace(strings.ToLower(os.Getenv("OTEL_TRACES_SAMPLER")))
+	argStr := strings.TrimSpace(os.Getenv("OTEL_TRACES_SAMPLER_ARG"))
+	switch s {
+	case "always_off", "never":
+		return sdktrace.NeverSample()
+	case "traceidratio":
+		if ratio := parseRatio(argStr); ratio >= 0 {
+			return sdktrace.TraceIDRatioBased(ratio)
+		}
+		return sdktrace.AlwaysSample()
+	case "parentbased_always_on":
+		return sdktrace.ParentBased(sdktrace.AlwaysSample())
+	case "parentbased_traceidratio":
+		if ratio := parseRatio(argStr); ratio >= 0 {
+			return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(ratio))
+		}
+		return sdktrace.ParentBased(sdktrace.AlwaysSample())
+	case "always_on", "always", "":
+		return sdktrace.AlwaysSample()
+	default:
+		return sdktrace.AlwaysSample()
+	}
+}
+
+func parseRatio(s string) float64 {
+	if s == "" {
+		return -1
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil || f < 0 || f > 1 {
+		return -1
+	}
+	return f
 }
 
 // Tracer returns a Tracer for the given name (e.g. "runfabric/daemon", "runfabric/deploy").

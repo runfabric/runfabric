@@ -18,6 +18,7 @@ const (
 type AppError struct {
 	Code    Code
 	Message string
+	Hint    string // Optional next-step hint (e.g. "run runfabric doctor", "set AWS_ACCESS_KEY_ID")
 	Err     error
 }
 
@@ -32,10 +33,12 @@ func (e *AppError) Unwrap() error {
 	return e.Err
 }
 
+// Wrap returns an AppError with optional hint for user-facing "next step" guidance.
 func Wrap(code Code, message string, err error) error {
-	return &AppError{
-		Code:    code,
-		Message: message,
-		Err:     err,
-	}
+	return &AppError{Code: code, Message: message, Err: err}
+}
+
+// WrapWithHint returns an AppError with a hint (e.g. "run runfabric doctor", "check GCP_PROJECT_ID").
+func WrapWithHint(code Code, message string, err error, hint string) error {
+	return &AppError{Code: code, Message: message, Hint: hint, Err: err}
 }

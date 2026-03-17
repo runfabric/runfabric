@@ -5,6 +5,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/runfabric/runfabric/engine/internal/config"
 	"github.com/runfabric/runfabric/engine/internal/providers"
@@ -72,4 +73,15 @@ var runners = map[string]Runner{
 func HasRunner(provider string) bool {
 	_, ok := runners[provider]
 	return ok
+}
+
+// APIProviderNames returns the list of provider names that have an API-based deploy runner.
+// Used by tests and doc-sync checks so DEPLOY_PROVIDERS.md stays in sync with code.
+func APIProviderNames() []string {
+	names := make([]string, 0, len(runners))
+	for k := range runners {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
 }

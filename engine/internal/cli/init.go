@@ -32,7 +32,8 @@ type initOpts struct {
 	SkipInstall     bool
 	CallLocal       bool
 	NoInteractive   bool
-	WithBuildScript bool // add build script (and for TS: tsconfig + tsc)
+	WithBuildScript bool   // add build script (and for TS: tsconfig + tsc)
+	WithCI          string // e.g. "github-actions" to add .github/workflows/deploy.yml
 }
 
 var (
@@ -55,7 +56,10 @@ func newInitCmd(opts *GlobalOptions) *cobra.Command {
 		Use:   "init",
 		Short: "Scaffold a new runfabric project",
 		Long:  "Creates a new project with runfabric.yml and handler scaffolding. Use interactive mode (default) to select provider, trigger, language, and state backend, or pass flags for non-interactive.",
-		RunE:  func(cmd *cobra.Command, args []string) error { return runInit(initOpts) },
+		RunE: func(c *cobra.Command, args []string) error {
+			initOpts.NoInteractive = initOpts.NoInteractive || opts.NonInteractive
+			return runInit(initOpts)
+		},
 	}
 
 	cmd.Flags().StringVar(&initOpts.Dir, "dir", "", "Target directory (default: create folder named after service)")
@@ -69,6 +73,7 @@ func newInitCmd(opts *GlobalOptions) *cobra.Command {
 	cmd.Flags().BoolVar(&initOpts.CallLocal, "call-local", false, "Add a script to run call-local after scaffold")
 	cmd.Flags().BoolVar(&initOpts.NoInteractive, "no-interactive", false, "Disable interactive prompts; use flags only")
 	cmd.Flags().BoolVar(&initOpts.WithBuildScript, "with-build", false, "Add package.json and (for TypeScript) tsconfig.json with build script (tsc)")
+	cmd.Flags().StringVar(&initOpts.WithCI, "with-ci", "", "Add CI workflow: github-actions (doctor → plan → deploy on push)")
 
 	return cmd
 }
@@ -233,6 +238,20 @@ func runInit(o *initOpts) error {
 		return fmt.Errorf("write README.md: %w", err)
 	}
 	initWrote("README.md")
+
+	// Optional: GitHub Actions workflow (doctor → plan → deploy on push)
+	if o.WithCI == "github-actions" {
+		workflowDir := filepath.Join(dir, ".github", "workflows")
+		if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+			return fmt.Errorf("create .github/workflows: %w", err)
+		}
+		workflowPath := filepath.Join(workflowDir, "deploy.yml")
+		workflowContent := generateGitHubActionsWorkflow(o)
+		if err := os.WriteFile(workflowPath, []byte(workflowContent), 0o644); err != nil {
+			return fmt.Errorf("write .github/workflows/deploy.yml: %w", err)
+		}
+		initWrote(".github/workflows/deploy.yml")
+	}
 
 	// Show paths relative to cwd for "Project ready in" and "Next:"
 	projectDirLabel := filepath.Base(dir)
@@ -813,4 +832,56 @@ func generateREADME(o *initOpts) string {
 		b.WriteString("- Handler: see runfabric.yml\n")
 	}
 	return b.String()
+}
+
+// generateGitHubActionsWorkflow returns a minimal .github/workflows/deploy.yml (doctor → plan → deploy on push).
+func generateGitHubActionsWorkflow(o *initOpts) string {
+	const tpl = `# Minimal RunFabric CI: doctor → plan → deploy on push to main.
+# Set RUNFABRIC_REAL_DEPLOY=1 and provider credentials (e.g. AWS_*) in repo secrets.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install RunFabric CLI
+        run: go install github.com/runfabric/runfabric/engine/cmd/runfabric@latest
+
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then npm ci; fi
+
+      - name: Build (if TypeScript)
+        run: |
+          if [ -f package.json ] && grep -q '"build"' package.json; then npm run build; fi
+
+      - name: Doctor
+        run: runfabric doctor --config runfabric.yml --stage prod
+        env:
+          RUNFABRIC_REAL_DEPLOY: "1"
+
+      - name: Plan
+        run: runfabric plan --config runfabric.yml --stage prod --json
+
+      - name: Deploy
+        run: runfabric deploy --config runfabric.yml --stage prod
+        env:
+          RUNFABRIC_REAL_DEPLOY: "1"
+          # Add provider credentials via repo secrets, e.g.:
+          # AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          # AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # AWS_REGION: ${{ secrets.AWS_REGION }}
+`
+	return tpl
 }

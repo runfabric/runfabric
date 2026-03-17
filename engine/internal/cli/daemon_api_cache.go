@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -15,14 +16,16 @@ import (
 )
 
 const (
-	apiCacheKeyPrefix   = "runfabric:daemon:api:"
-	apiCacheStagePrefix = "runfabric:daemon:api:stage:"
+	defaultAPICacheKeyPrefix   = "runfabric:daemon:api:"
+	defaultAPICacheStagePrefix = "runfabric:daemon:api:stage:"
 )
 
 // daemonAPICache backs Config API responses in Redis (validate, resolve, plan, releases). Invalidate on deploy/remove.
 type daemonAPICache struct {
-	client *redis.Client
-	ttl    time.Duration
+	client      *redis.Client
+	ttl         time.Duration
+	keyPrefix   string
+	stagePrefix string
 }
 
 // cachedResponse is stored in Redis.
@@ -40,15 +43,28 @@ func newDaemonAPICache(redisURL string, ttl time.Duration) *daemonAPICache {
 	if err != nil {
 		return nil
 	}
-	return &daemonAPICache{client: redis.NewClient(opt), ttl: ttl}
+	keyPrefix := strings.TrimSpace(os.Getenv("RUNFABRIC_DAEMON_CACHE_PREFIX"))
+	if keyPrefix == "" {
+		keyPrefix = defaultAPICacheKeyPrefix
+	}
+	if !strings.HasSuffix(keyPrefix, ":") {
+		keyPrefix += ":"
+	}
+	stagePrefix := keyPrefix + "stage:"
+	return &daemonAPICache{
+		client:      redis.NewClient(opt),
+		ttl:         ttl,
+		keyPrefix:   keyPrefix,
+		stagePrefix: stagePrefix,
+	}
 }
 
 func (c *daemonAPICache) key(endpoint, bodyHash, stage string) string {
-	return apiCacheKeyPrefix + endpoint + ":" + bodyHash + ":" + stage
+	return c.keyPrefix + endpoint + ":" + bodyHash + ":" + stage
 }
 
 func (c *daemonAPICache) stageSetKey(stage string) string {
-	return apiCacheStagePrefix + stage
+	return c.stagePrefix + stage
 }
 
 func (c *daemonAPICache) get(endpoint, bodyHash, stage string) (status int, body []byte, ok bool) {

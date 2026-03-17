@@ -70,8 +70,21 @@ func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function stri
 	return &providers.LogsResult{Provider: "gcp-functions", Function: function, Lines: allLines}, nil
 }
 
-// listLogEntries POSTs to Cloud Logging API and returns log lines (newest first, then we sort by timestamp for display).
+// listLogEntries POSTs to Cloud Logging API with retry/backoff and returns log lines.
 func listLogEntries(ctx context.Context, project, filter string, pageSize int) ([]string, error) {
+	var lines []string
+	err := apiutil.RetryWithBackoff(ctx, 3, 200*time.Millisecond, func() error {
+		l, e := listLogEntriesOnce(ctx, project, filter, pageSize)
+		if e != nil {
+			return e
+		}
+		lines = l
+		return nil
+	})
+	return lines, err
+}
+
+func listLogEntriesOnce(ctx context.Context, project, filter string, pageSize int) ([]string, error) {
 	body := map[string]any{
 		"resourceNames": []string{"projects/" + project},
 		"filter":        filter,
