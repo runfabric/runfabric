@@ -246,10 +246,10 @@ func inferLang(configPath, runtime string) string {
 
 // generateResourceOpts holds flags for runfabric generate resource.
 type generateResourceOpts struct {
-	Type           string
-	ConnectionEnv  string
-	DryRun         bool
-	NoBackup       bool
+	Type          string
+	ConnectionEnv string
+	DryRun        bool
+	NoBackup      bool
 }
 
 func newGenerateResourceCmd(opts *GlobalOptions) *cobra.Command {
@@ -313,8 +313,8 @@ func runGenerateResource(gopts *GlobalOptions, o *generateResourceOpts, name str
 
 // generateAddonOpts holds flags for runfabric generate addon.
 type generateAddonOpts struct {
-	Version string
-	DryRun  bool
+	Version  string
+	DryRun   bool
 	NoBackup bool
 }
 

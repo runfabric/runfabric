@@ -10,9 +10,9 @@ import (
 
 // JSONEnvelope is the standard --json result shape for dashboard tooling (Phase 13.11.4).
 type JSONEnvelope struct {
-	OK      bool             `json:"ok"`
-	Command string           `json:"command"`
-	Result  map[string]any   `json:"result,omitempty"`
+	OK      bool                   `json:"ok"`
+	Command string                 `json:"command"`
+	Result  map[string]any         `json:"result,omitempty"`
 	Error   *runtime.ErrorResponse `json:"error,omitempty"`
 }
 

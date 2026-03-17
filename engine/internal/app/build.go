@@ -39,8 +39,8 @@ type BuildResult struct {
 
 // BuildOptions configures the shared build.
 type BuildOptions struct {
-	NoCache       bool   // ignore cache and force rebuild
-	OutDir        string // if set, write zips here instead of .runfabric/build (package command)
+	NoCache        bool   // ignore cache and force rebuild
+	OutDir         string // if set, write zips here instead of .runfabric/build (package command)
 	FunctionFilter string // if set, only build this function
 }
 
