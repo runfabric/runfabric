@@ -56,6 +56,8 @@ Use clear, scoped commit messages. Suggested prefixes:
 - `test:` tests
 - `chore:` maintenance
 
+**Example contributions:** We welcome PRs that add or improve examples (e.g. a new `examples/node/*` app or a snippet in docs). Include a short README or doc snippet that shows how to run the example and which provider it targets.
+
 ## Pull Request Checklist
 
 - Change is scoped and documented.

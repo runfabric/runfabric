@@ -1,6 +1,6 @@
 APP=runfabric
 
-.PHONY: all help build build-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock mcp-install mcp-build mcp docker-daemon-build docker-daemon-run docker-daemon-up docker-daemon-down
+.PHONY: all help build build-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-run docker-daemon-up docker-daemon-down
 
 # UPX: compress binaries for smaller distribution. Override with e.g. make build-upx UPX="upx --best"
 # On macOS, UPX requires --force-macos; compressed binaries may need re-signing for notarization.
@@ -31,6 +31,7 @@ help:
 	@echo "  make coverage-gate [COVERAGE_THRESHOLD=N]  run coverage; fail if total below N%% (omit to report only)"
 	@echo "  make lint         go vet / golangci-lint"
 	@echo "  make release-check  format + vet + build + test -race + build CLI + UPX (CI gate)"
+	@echo "  make check-syntax   go vet + go build + go test -count=1 (no -race); fast PR feedback"
 	@echo "  make check-docs-sync  verify doc links and no outdated refs (packages/planner, packages/core)"
 	@echo "  make pre-push       lint + validation (used by .githooks/pre-push)"
 	@echo "  make release-tag   create and push tag v\$$(cat VERSION) to trigger CI release"
@@ -41,6 +42,8 @@ help:
 	@echo "  make mcp-install   npm install in protocol/mcp (MCP server)"
 	@echo "  make mcp-build     build MCP server (protocol/mcp)"
 	@echo "  make mcp           run MCP server (stdio; requires runfabric on PATH)"
+	@echo "  make daemon-background  start daemon in background (logs: .runfabric/daemon.log)"
+	@echo "  make daemon-stop   stop daemon started with daemon-background"
 	@echo "  make docker-daemon-build  build daemon Docker image (Dockerfile.daemon)"
 	@echo "  make docker-daemon-run    run daemon container (API on port 8766)"
 	@echo "  make docker-daemon-up    docker compose up daemon + Redis (docker-compose.daemon.yml)"
@@ -91,6 +94,16 @@ build-all-platforms-upx: build-all-platforms
 		$$opts "$$f" && echo "Compressed $$f"; \
 	done
 	@echo "Compressed all platform binaries in bin/"
+
+# Fast CI check: vet, build, test without -race. Use for quick PR feedback before full release-check.
+check-syntax:
+	@echo "Running go vet..."
+	@cd engine && go vet ./...
+	@echo "Building all packages..."
+	@cd engine && go build -v ./...
+	@echo "Running tests (no -race)..."
+	@cd engine && go test -count=1 ./...
+	@echo "check-syntax OK"
 
 # Pre-release validation: format, vet, build all, test with race, build CLI, then compress with UPX if available (matches CI; AGENTS.md default gate).
 release-check:
@@ -237,6 +250,14 @@ mcp-build: mcp-install
 
 mcp: mcp-build
 	cd protocol/mcp && npm start
+
+# Daemon: run in background (does not hold terminal). Uses bin/runfabric; logs in .runfabric/daemon.log
+daemon-background:
+	@mkdir -p .runfabric
+	@([ -f bin/runfabric ] && nohup ./bin/runfabric daemon >> .runfabric/daemon.log 2>&1 & echo $$! > .runfabric/daemon.pid && echo "Daemon started (PID $$(cat .runfabric/daemon.pid)). Logs: .runfabric/daemon.log") || (echo "Run 'make build' first to create bin/runfabric" && exit 1)
+
+daemon-stop:
+	@[ -f .runfabric/daemon.pid ] && kill $$(cat .runfabric/daemon.pid) 2>/dev/null && rm -f .runfabric/daemon.pid && echo "Daemon stopped." || echo "No daemon PID file (.runfabric/daemon.pid)."
 
 # Daemon Docker image (see docs/DAEMON.md). Image name override: make docker-daemon-build DAEMON_IMAGE=my-registry/runfabric-daemon
 DAEMON_IMAGE ?= runfabric-daemon

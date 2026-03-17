@@ -1,8 +1,10 @@
 # RunFabric
 
-**Multi-provider serverless deployment framework — one config, one CLI, many clouds.**
+**RunFabric is a multi-provider serverless framework package. It gives you one config and one CLI workflow across cloud providers, so you can deploy on managed serverless services that auto-scale and keep idle-cost overhead low.**
 
-RunFabric is a CLI-first framework that deploys applications to AWS Lambda, GCP, Azure, Cloudflare, Vercel, Netlify, and other providers from a single `runfabric.yml`. It provides a unified lifecycle (doctor → plan → build → deploy → remove) and keeps you portable across clouds.
+- **One config** — Single `runfabric.yml` per service; same structure whether you target AWS, GCP, Azure, Cloudflare, Vercel, Netlify, or others.
+- **One CLI workflow** — Same commands everywhere: `runfabric doctor`, `plan`, `build`, `deploy`, `invoke`, `logs`, `remove`.
+- **Managed serverless** — Deploys to each provider’s managed offerings (Lambda, Cloud Functions, Workers, etc.), which auto-scale and charge for usage rather than idle capacity.
 
 **Current scope:**
 
@@ -13,7 +15,7 @@ RunFabric is a CLI-first framework that deploys applications to AWS Lambda, GCP,
 
 ## Why RunFabric
 
-- **Single config** — One `runfabric.yml` per service; same workflow across providers.
+- **One config, one CLI** — One `runfabric.yml` and the same `runfabric` commands across all supported providers.
 - **Portability** — Provider and trigger checks before deploy; switch clouds without rewriting your app.
 - **Validation** — `runfabric doctor` checks config and credentials.
 - **Alternative** — Use instead of or alongside [Serverless Framework](https://github.com/serverless/serverless); migrate with `runfabric migrate`.
@@ -190,7 +192,7 @@ Rollback precedence: CLI `--rollback-on-failure` / `--no-rollback-on-failure` �
 - `docs/ARCHITECTURE.md` — deploy flow and provider layout
 - `docs/BUILD_AND_RELEASE.md` — build and release
 - `docs/REPO_DEVELOPMENT.md` — contributor setup
-- `docs/PLUGIN_API.md` — extensions
+- `docs/PLUGINS.md` — plugins (lifecycle hooks) and API contract
 - `docs/EXAMPLES_MATRIX.md` — examples and trigger matrix
 - `docs/EXAMPLE_VALIDATION.md` — example checklist
 - `docs/README.md` — doc index

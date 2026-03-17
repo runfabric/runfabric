@@ -6,7 +6,7 @@ Instructions for coding agents working in the RunFabric monorepo.
 
 ## Project truths
 
-- `runfabric` is a CLI-first multi-provider serverless framework.
+- RunFabric is a multi-provider serverless framework package: one config (`runfabric.yml`), one CLI workflow, deploy on managed serverless services that auto-scale and keep idle-cost overhead low.
 - Uses `runfabric.yml`, not `serverless.yml`.
 - Not a cluster scheduler / standalone compute fabric runtime.
 - Current production-ready path is Node-first (`runtime: nodejs`).
@@ -76,15 +76,15 @@ Default final gate for behavior changes:
 Minimum allowed lighter checks:
 
 - docs-only: skip full build; verify doc links and code references manually or via check:docs-sync if added to Makefile.
-- small code change in one package: relevant tests + `make lint` + `make test`
-  Escalate to `make release-check` if shared contracts, schema, planner, provider behavior, or docs-sync are affected.
+- small code change in one package: relevant tests + `make check-syntax` (or `make lint` + `make test`).
+- Escalate to `make release-check` if shared contracts, schema, planner, provider behavior, or docs-sync are affected.
 
 ## Documentation triggers
 
 - CLI/lifecycle changes -> `README.md`, `docs/QUICKSTART.md`
 - credentials/doctor changes -> `docs/CREDENTIALS.md`, `docs/PROVIDER_SETUP.md`
 - schema changes -> `docs/RUNFABRIC_YML_REFERENCE.md`
-- architecture/plugin changes -> `docs/ARCHITECTURE.md`, `docs/PLUGIN_API.md`
+- architecture/plugin changes -> `docs/ARCHITECTURE.md`, `docs/PLUGINS.md`
 
 ## Do not
 
@@ -92,6 +92,14 @@ Minimum allowed lighter checks:
 - Do not make unrelated formatting or cleanup changes.
 - Do not change config/flag names casually.
 - Do not edit release/signing artifacts unless the task is release-related.
+
+## Code ownership
+
+- **Core / engine:** `engine/cmd`, `engine/internal` (config, planner, state, deploy/api, controlplane, lifecycle) — framework maintainers.
+- **Providers:** `engine/providers/<name>` — per-provider owners; keep adapter logic in providers, not in `internal/`.
+- **Docs:** `docs/` — keep in sync with CLI and config; see COMMAND_REFERENCE, RUNFABRIC_YML_REFERENCE, ROADMAP.
+- **SDKs / packages:** `packages/node`, `packages/python`, etc. — runtime-specific owners; contract in `internal/providers` and protocol docs.
+
 ## Final output expectations
 
 State:
