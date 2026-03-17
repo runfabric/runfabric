@@ -64,7 +64,7 @@ Local execution:
 
 When example uses framework app wiring:
 
-- `@runfabric/runtime-node` is installed
+- `@runfabric/sdk` is installed
 - framework dependencies are installed
 - handler exports `createHandler(appOrFastifyOrNestApp)`
 - Nest TS config enables `experimentalDecorators` and `emitDecoratorMetadata`

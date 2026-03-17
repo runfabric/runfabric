@@ -5,8 +5,14 @@ The **daemon** is a long-running HTTP server that exposes the RunFabric Configur
 ## Quick start
 
 ```bash
-# API only (default port 8766)
+# API only (default port 8766) — runs in foreground (holds terminal)
 runfabric daemon
+
+# Start in background (does not hold terminal). Run from project root.
+runfabric daemon start
+runfabric daemon stop
+runfabric daemon restart   # stop (if running) then start
+runfabric daemon status    # report if daemon is running (from .runfabric/daemon.pid)
 
 # With dashboard at GET /
 runfabric daemon --dashboard --config runfabric.yml
@@ -14,6 +20,8 @@ runfabric daemon --dashboard --config runfabric.yml
 # With API key and rate limit
 runfabric daemon --api-key my-secret --rate-limit 60 --dashboard --config runfabric.yml
 ```
+
+**Background (start/stop):** `runfabric daemon start` spawns the daemon as a detached process. PID is written to `.runfabric/daemon.pid` and logs to `.runfabric/daemon.log`. Run both `start` and `stop` from the same directory (e.g. project root) so they use the same `.runfabric` folder.
 
 ## Options
 
@@ -46,7 +54,7 @@ export RUNFABRIC_DAEMON_CACHE_URL=redis://localhost:6379/0
 runfabric daemon
 ```
 
-Supported URL schemes: `redis://` and `rediss://` (TLS). Cache keys are prefixed with `runfabric:daemon:api:`.
+Supported URL schemes: `redis://` and `rediss://` (TLS). Cache key prefix defaults to `runfabric:daemon:api:`; override with `RUNFABRIC_DAEMON_CACHE_PREFIX` so a single Redis can serve multiple teams or projects (e.g. `RUNFABRIC_DAEMON_CACHE_PREFIX=team-a:runfabric:api:`). Per-endpoint TTL: validate 10m, resolve/plan 5m, releases 1m (or cap with `--cache-ttl`).
 
 ## OpenTelemetry
 
@@ -75,6 +83,11 @@ To serve the dashboard from your project, mount it and override the command: in 
 
 ## Endpoints
 
+### Health and version
+
+- **GET /healthz** — Readiness/liveness: returns `200 OK` with body `ok`. No auth. Use for Kubernetes probes or load balancer health checks.
+- **GET /version** — Returns JSON `{ "version": "<engine version>", "protocol": "<protocol version>" }`. No auth.
+
 ### Config API (POST, JSON body = YAML config)
 
 - **POST /validate** — Validate config; query `stage=<name>` optional. Response: `{ "ok": true }` or `{ "ok": false, "error": "..." }`.
@@ -96,6 +109,14 @@ When `--api-key` is set, send `X-API-Key: <key>` on every request.
 ### Without dashboard
 
 - **GET /** — JSON: `{ "service": "runfabric-daemon", "api": "POST /validate, ...", "dashboard": "run with --dashboard and --config for GET /" }`.
+
+## Security
+
+The daemon listens on HTTP by default. For production:
+
+- Run behind a **reverse proxy** (nginx, Caddy, Traefik) that terminates TLS and forwards to the daemon. Use `X-Forwarded-For` / `X-Forwarded-Proto` if the app needs to know the client or scheme.
+- Optionally require `--api-key` and send `X-API-Key` from clients; use `--rate-limit` to cap requests per minute per client.
+- Do not expose the daemon directly to the internet without TLS. Future options may include `--tls-cert` / `--tls-key` for direct TLS.
 
 ## Running as a system service
 

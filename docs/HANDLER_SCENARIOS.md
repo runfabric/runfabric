@@ -19,12 +19,12 @@ triggers:
 ```
 
 ```ts
-import type { UniversalHandler } from "@runfabric/core";
+import type { UniversalHandler } from "@runfabric/sdk";
 
 export const handler: UniversalHandler = async (req) => ({
   status: 200,
   headers: { "content-type": "application/json" },
-  body: JSON.stringify({ method: req.method, path: req.path })
+  body: JSON.stringify({ method: req.method, path: req.path }),
 });
 ```
 
@@ -66,18 +66,18 @@ runfabric deploy --function public-api -c runfabric.yml
 
 ## Scenario 3: Existing Framework Apps
 
-Use `createHandler` from `@runfabric/runtime-node`:
+Use `createHandler` from `@runfabric/sdk`:
 
 ```ts
-import type { UniversalHandler } from "@runfabric/core";
-import { createHandler } from "@runfabric/runtime-node";
+import type { UniversalHandler } from "@runfabric/sdk";
+import { createHandler } from "@runfabric/sdk";
 
 export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);
 ```
 
 Framework wiring checklist:
 
-- Install runtime adapter: `npm i @runfabric/runtime-node`
+- Install runtime adapter: `npm i @runfabric/sdk`
 - Express dependency: `npm i express`
 - Fastify dependency: `npm i fastify`
 - Nest dependencies: `npm i @nestjs/core @nestjs/common @nestjs/platform-express reflect-metadata rxjs`

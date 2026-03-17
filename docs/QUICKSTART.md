@@ -23,7 +23,7 @@ pnpm install
 
 ## Path A: Use Existing Hello HTTP Example
 
-Use `examples/hello-http/runfabric.quickstart.yml`.
+Use `examples/node/hello-http/runfabric.quickstart.yml`.
 
 Set Cloudflare credentials:
 
@@ -35,17 +35,17 @@ export CLOUDFLARE_ACCOUNT_ID="your-account-id"
 Run:
 
 ```bash
-pnpm run runfabric -- doctor -c examples/hello-http/runfabric.quickstart.yml
-pnpm run runfabric -- plan -c examples/hello-http/runfabric.quickstart.yml
-pnpm run runfabric -- build -c examples/hello-http/runfabric.quickstart.yml
-pnpm run runfabric -- deploy -c examples/hello-http/runfabric.quickstart.yml
+pnpm run runfabric -- doctor -c examples/node/hello-http/runfabric.quickstart.yml
+pnpm run runfabric -- plan -c examples/node/hello-http/runfabric.quickstart.yml
+pnpm run runfabric -- build -c examples/node/hello-http/runfabric.quickstart.yml
+pnpm run runfabric -- deploy -c examples/node/hello-http/runfabric.quickstart.yml
 ```
 
 Optional real Cloudflare API deployment:
 
 ```bash
 export RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1
-pnpm run runfabric -- deploy -c examples/hello-http/runfabric.quickstart.yml
+pnpm run runfabric -- deploy -c examples/node/hello-http/runfabric.quickstart.yml
 ```
 
 ## Path B: Scaffold New Project
@@ -93,7 +93,7 @@ Provider IDs (copy/paste):
 
 It also creates:
 
-- `package.json` with `@runfabric/core` and the selected provider adapter dependency
+- `package.json` with `@runfabric/sdk` and the selected provider adapter dependency
 - `call:local` script that runs `runfabric call-local -c runfabric.yml --serve --watch`
 - `.env.example` with provider and selected state backend variables
 - project-scoped random state prefix for object backends (`s3`, `gcs`, `azblob`)
@@ -127,9 +127,21 @@ If you used `--skip-install`, install project dependencies manually:
 
 ```bash
 cd my-api
-pnpm add @runfabric/core @runfabric/provider-aws-lambda
+pnpm add @runfabric/sdk @runfabric/provider-aws-lambda
 pnpm add -D typescript @types/node
 ```
+
+### Adding a new function (generate)
+
+Inside an existing project, add a function without hand-editing `runfabric.yml`:
+
+```bash
+runfabric generate function hello --trigger http --route GET:/hello
+runfabric generate function worker --trigger queue --queue-name my-queue
+runfabric generate function cron-job --trigger cron --schedule "rate(5 minutes)"
+```
+
+Use `--dry-run` to preview, `--force` to overwrite an existing handler file. See [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) and [GENERATE_PROPOSAL.md](GENERATE_PROPOSAL.md).
 
 Migrate existing `serverless.yml` (best-effort bootstrap):
 
@@ -357,11 +369,11 @@ Additional AWS payloads for P3/P4 schema:
 
 ## Framework Handler Wrappers
 
-You can reuse existing framework apps with `UniversalHandler` using `@runfabric/runtime-node`:
+You can reuse existing framework apps with `UniversalHandler` using `@runfabric/sdk`:
 
 ```ts
-import type { UniversalHandler } from "@runfabric/core";
-import { createHandler } from "@runfabric/runtime-node";
+import type { UniversalHandler } from "@runfabric/sdk";
+import { createHandler } from "@runfabric/sdk";
 
 // Auto-detects Nest app (getHttpAdapter), Fastify instance (inject), or Express app function:
 export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);

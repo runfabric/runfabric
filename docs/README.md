@@ -1,5 +1,7 @@
 # runfabric docs
 
+RunFabric is a multi-provider serverless framework package: **one config, one CLI workflow** across cloud providers, deploying on **managed serverless services** that auto-scale and keep **idle-cost overhead low**.
+
 Quick navigation for onboarding and reference.
 
 - **Getting started** – [QUICKSTART.md](QUICKSTART.md)
@@ -11,6 +13,7 @@ Quick navigation for onboarding and reference.
 - **Handlers** – [HANDLER_SCENARIOS.md](HANDLER_SCENARIOS.md)
 - **SDK frameworks** – [SDK_FRAMEWORKS.md](SDK_FRAMEWORKS.md)
 - **CLI commands** – [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md)
+- **Troubleshooting** – [TROUBLESHOOTING.md](TROUBLESHOOTING.md) (per-provider errors and fixes)
 - **Testing** – [TESTING_GUIDE.md](TESTING_GUIDE.md) (call-local, invoke, CI)
 - **Examples matrix** – [EXAMPLES_MATRIX.md](EXAMPLES_MATRIX.md)
 - **Example validation** – [EXAMPLE_VALIDATION.md](EXAMPLE_VALIDATION.md)
@@ -18,5 +21,7 @@ Quick navigation for onboarding and reference.
 - **Build and release** – [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md)
 - **Architecture** – [ARCHITECTURE.md](ARCHITECTURE.md)
 - **Roadmap** – [ROADMAP.md](ROADMAP.md)
+- **Generate (P1)** – [GENERATE_PROPOSAL.md](GENERATE_PROPOSAL.md) — `runfabric generate function` proposal
 - **Repo development** – [REPO_DEVELOPMENT.md](REPO_DEVELOPMENT.md)
-- **Plugin API** – [PLUGIN_API.md](PLUGIN_API.md)
+- **Add-ons** – [ADDONS.md](ADDONS.md)
+- **Plugins (hooks)** – [PLUGINS.md](PLUGINS.md)

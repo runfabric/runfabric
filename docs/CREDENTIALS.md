@@ -35,6 +35,18 @@ runfabric deploy
 AWS_ACCESS_KEY_ID="..." AWS_SECRET_ACCESS_KEY="..." AWS_REGION="us-east-1" runfabric deploy
 ```
 
+### Storing secrets in cloud secret managers
+
+For production, avoid committing credentials. Store them in your cloud’s secret manager and inject them into the environment before running `runfabric`:
+
+| Cloud | Service | Typical usage |
+|-------|---------|----------------|
+| **AWS** | [SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html) or [Secrets Manager](https://docs.aws.amazon.com/secretsmanager/) | Fetch at deploy time or in CI: `aws ssm get-parameter --name /app/runfabric/aws-key --with-decryption --query Parameter.Value --output text` and export. |
+| **GCP** | [Secret Manager](https://cloud.google.com/secret-manager/docs) | Use `gcloud secrets versions access latest --secret=runfabric-gcp-key` or workload identity to inject into CI. |
+| **Azure** | [Key Vault](https://azure.microsoft.com/products/key-vault) | Use `az keyvault secret show` or managed identity in CI to populate `AZURE_CLIENT_SECRET` and related env vars. |
+
+In CI (e.g. GitHub Actions), use the provider’s “secret” or “vault” integration to set env vars from the secret manager before running `runfabric doctor`, `runfabric deploy`, etc. The RunFabric engine reads credentials only from the environment; it does not call secret managers directly. To resolve `${secret:...}` placeholders in `runfabric.yml`, use a pre-step or the internal secrets resolver once wired to your backend (see `internal/secrets`).
+
 ## Deploy Mode Controls
 
 - `RUNFABRIC_STAGE`: default stage when `--stage` is not provided.

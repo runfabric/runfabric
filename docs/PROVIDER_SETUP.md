@@ -151,9 +151,9 @@ export RUNFABRIC_AWS_METRICS_CMD='echo "{\"metrics\":[{\"name\":\"invocations\",
 
 Provider config examples:
 
-- `examples/hello-http/runfabric.<provider>.yml`
-- `examples/hello-http/runfabric.quickstart.yml`
+- `examples/node/hello-http/runfabric.<provider>.yml`
+- `examples/node/hello-http/runfabric.quickstart.yml`
 
 Compose contracts example:
 
-- `examples/compose-contracts/runfabric.compose.yml`
+- `examples/node/compose-contracts/runfabric.compose.yml`

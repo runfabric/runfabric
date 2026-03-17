@@ -1,78 +1,38 @@
 # Repository layout
 
-Matches the structure in `cli/Untitled`:
+This is the current on-disk layout of the repo (high level):
 
 ```
 runfabric/
-├── engine/                              # Go core engine
-│   ├── cmd/
-│   │   ├── runfabric/           # main CLI binary
-│   │   └── runfabric-devd/              # local dev daemon (optional)
-│   ├── internal/                       # config, protocol, planner, builder, deploy, state, devserver, diagnostics
-│   ├── providers/                     # aws_lambda, cloudflare_workers, gcp_functions, azure_functions, kubernetes, common
-│   ├── simulators/                     # local cloud emulation (aws_lambda, cloudflare_workers, http, common)
-│   ├── runtimes/                       # language runtime execution
-│   │   ├── node/                       # runner.go, dev_runner.go, package_builder.go
-│   │   ├── python/                     # runner.go, venv.go, package_builder.go
-│   │   └── common/                     # runtime.go, env.go
-│   └── go.mod
+├── engine/                 # Go CLI + core implementation
+│   ├── cmd/runfabric/       # main CLI entrypoint
+│   ├── internal/            # app/cli/config/planner/providers/state/runtime/etc.
+│   ├── providers/           # provider adapters (aws, gcp, azure, cloudflare, ...)
+│   ├── runtimes/            # language runtimes/build helpers
+│   ├── test/                # engine tests (unit/integration)
+│   ├── go.mod
+│   └── go.sum
 │
-├── packages/                   # Per-runtime CLI and SDK (see docs/FILE_STRUCTURE.md)
-│   ├── node/
-│   │   ├── cli/                # @runfabric/cli (bin/)
-│   │   └── sdk/                # @runfabric/sdk (adapters)
-│   ├── python/runfabric/       # runfabric (CLI + SDK)
-│   ├── go/sdk/                 # Go SDK (handler/)
-│   ├── java/sdk/               # io.runfabric:runfabric-sdk
-│   └── dotnet/sdk/             # RunFabric.Sdk
-│
-├── schemas/
-│   ├── runfabric.schema.json   # main config schema (runfabric.yml)
-│   ├── resource.schema.json
-│   ├── workflow.schema.json
-│   ├── secrets.schema.json
-│   └── protocol/
-│
-├── examples/
-│   ├── node/                   # Node/TS examples (hello-aws, hello-http, etc.)
+├── packages/               # SDKs / language packages (published artifacts)
+│   ├── node/                # @runfabric/* (cli, sdk, providers, etc.)
 │   ├── python/
 │   ├── go/
 │   ├── java/
 │   └── dotnet/
 │
-├── docs/
-│   ├── architecture/
-│   ├── framework-guides/
-│   └── providers/
-│
-├── Makefile                            # build from engine/, output bin/runfabric
+├── schemas/                # JSON schemas (runfabric.yml, resources, workflows, protocol)
+├── examples/               # runnable example configs/projects (grouped by runtime)
+├── docs/                   # product + contributor documentation
+├── scripts/                # release/dev scripts
+├── .github/                # CI workflows, templates
+├── bin/                    # built binaries (e.g. `bin/runfabric`)
+├── Makefile
 └── README.md
 ```
 
+Notes:
+
 - **Build**: `make build` builds `engine/cmd/runfabric` into `bin/runfabric`.
-- **CLI**: Go binary from `engine/`; npm package **@runfabric/cli** at `packages/node/cli` invokes the binary.
-- **Packages** under `packages/`: **Node** `packages/node/cli` (@runfabric/cli), `packages/node/sdk` (@runfabric/sdk), **Python** `packages/python/runfabric`, **Go** `packages/go/sdk`, **Java** `packages/java/sdk`, **.NET** `packages/dotnet/sdk`.
-
-## Layout spec (reference)
-
-```
-runfabric/
-├─ engine/                    # Go
-│  ├─ cmd/
-│  ├─ internal/
-│  ├─ providers/
-│  ├─ simulators/
-│  ├─ runtimes/
-│  ├─ go.mod
-│  └─ go.sum
-│
-├─ packages/                 # node/cli, node/sdk, python/runfabric, go/sdk, java/sdk, dotnet/sdk
-│
-├─ schemas/
-├─ examples/ (node/, python/, go/, java/, dotnet/)
-├─ docs/
-├─ scripts/
-├─ .github/
-├─ Makefile
-└─ README.md
-```
+- **Go CLI**: the authoritative CLI is implemented in `engine/`.
+- **Node CLI wrapper**: `packages/node/cli` (when present) can invoke the Go binary.
+- **Examples**: see `examples/README.md` and `docs/QUICKSTART.md`.

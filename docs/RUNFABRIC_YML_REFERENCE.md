@@ -78,6 +78,14 @@ providerOverrides:
 
 Then run e.g. `runfabric deploy --provider aws --stage prod` or `runfabric deploy --provider gcp --stage prod`. Without `--provider`, the top-level `provider` block is used. When a provider override includes `backend`, that backend is used for state (receipts, locks) when `--provider <key>` is set. Invoke, logs, metrics, and traces also accept `--provider` for multi-cloud.
 
+## Real deploy and unsafe defaults
+
+Real deploy is opt-in: set **`RUNFABRIC_REAL_DEPLOY=1`** or provider-specific **`RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1`** (e.g. `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1`). When real deploy is enabled:
+
+- **Credentials:** Provider-specific env vars (API keys, region, project ID) must be set; otherwise deploy will fail. Run `runfabric doctor` to check; it reports missing required env per provider (see [CREDENTIALS.md](CREDENTIALS.md), [PROVIDER_SETUP.md](PROVIDER_SETUP.md)).
+- **Public HTTP:** Deploying HTTP endpoints without auth (no `authorizer` on the trigger) exposes the function to the internet. Prefer auth (e.g. `authorizer.type: jwt` or IAM) for production.
+- **Secrets:** Use `secrets` and resource bindings rather than plain env for sensitive values; ensure secret refs are resolved at deploy time.
+
 ## First-class layers
 
 Define layers once and reference them by name from functions (providers that support layers, e.g. AWS Lambda, resolve the ARN):
@@ -341,7 +349,7 @@ Provider logs (e.g. CloudWatch for AWS) are fetched first; local file lines are 
 
 ## Build order
 
-Optional ordering of build steps or hook modules. When you have multiple hooks (see [PLUGIN_API.md](PLUGIN_API.md)), `build.order` defines the execution order. Values can use `${env:VAR}`.
+Optional ordering of build steps or hook modules. When you have multiple hooks (see [PLUGINS.md](PLUGINS.md)), `build.order` defines the execution order. Values can use `${env:VAR}`.
 
 ```yaml
 build:

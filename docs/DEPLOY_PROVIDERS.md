@@ -15,6 +15,14 @@ How deployment works per cloud provider. The Go engine uses REST/SDK for deploy 
 
 Real deploy is opt-in: set **`RUNFABRIC_REAL_DEPLOY=1`** or provider-specific **`RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1`**.
 
+## Providers wired to deploy API
+
+The following providers have API-based deploy/remove/invoke/logs (see `engine/internal/deploy/api`). The list is asserted by tests so this doc stays in sync with code:
+
+- **alibaba-fc**, **azure-functions**, **cloudflare-workers**, **digitalocean-functions**, **fly-machines**, **gcp-functions**, **ibm-openwhisk**, **kubernetes**, **netlify**, **vercel**
+
+(AWS uses the control-plane path and is not in the API runner map.)
+
 ## Provider-specific notes
 
 - **aws-lambda:** Uses Lambda, API Gateway, SQS, S3, EventBridge as per [EXAMPLES_MATRIX.md](EXAMPLES_MATRIX.md). State backend can use S3 + DynamoDB (see [STATE_BACKENDS.md](STATE_BACKENDS.md)).

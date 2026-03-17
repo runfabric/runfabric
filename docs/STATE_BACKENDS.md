@@ -162,6 +162,30 @@ runfabric state migrate -c runfabric.yml --from local --to postgres --json
 - `s3`, `gcs`, and `azblob` use real object storage backends keyed by `<prefix>/<service>/<stage>/<provider>.state.json`.
 - Locking is token-based with timeout, stale-lock recovery, and heartbeat renewal.
 
+## Recovering from partial deploys and journal conflicts
+
+**Runbook-style steps** when state or locking gets out of sync:
+
+1. **Partial deploy (deploy started but failed mid-way)**  
+   - Run `runfabric plan` to see current vs desired state.  
+   - Re-run `runfabric deploy`; the engine is designed to converge. If the provider left resources behind, remove them manually in the cloud console or run `runfabric remove` and then deploy again.  
+   - For AWS with journaling: if a deploy wrote journal entries but never completed, consider `runfabric recover --dry-run` then `runfabric recover` to reconcile or roll back.
+
+2. **Journal or lock conflict (e.g. "stale lock", "version conflict")**  
+   - Ensure only one process is deploying to the same stage/provider at a time.  
+   - If a previous process crashed while holding a lock: use `runfabric state force-unlock` with the same `--service`, `--stage`, and `--provider` to clear the lock, then retry deploy.  
+   - For DynamoDB/S3 backends, check that the receipt table and lock table (if used) are writable and that no other tool is writing to the same keys.
+
+3. **State migrate (moving from local to postgres/s3/etc.)**  
+   - Run `runfabric state backup` with the current backend to export state.  
+   - Configure the new backend in `runfabric.yml`.  
+   - Run `runfabric state restore` from the backup file.  
+   - Run `runfabric state reconcile` to align with the provider if needed.  
+   - See `runfabric state migrate` for a single-command migration path when supported.
+
+4. **Reconcile (state and cloud out of sync)**  
+   - `runfabric state reconcile` compares local state with the provider and can report drift. Use it after manual changes in the cloud or after restoring from backup.
+
 ## Test Coverage Notes
 
 - Remote backend integration tests are opt-in and gated by `RUNFABRIC_TEST_REMOTE_STATE=1`.

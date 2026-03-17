@@ -9,6 +9,8 @@ runfabric/
 ├── .github/
 │   └── workflows/
 │
+├── bin/                      # built binaries (e.g. `bin/runfabric`)
+│
 ├── engine/
 │   └── ...                     # shared engine source / binary build logic
 │
@@ -28,6 +30,8 @@ runfabric/
 │   │
 │   └── dotnet/
 │       └── sdk/                 # package RunFabric.Sdk
+│
+├── schemas/                  # JSON schemas (runfabric.yml, resources, workflows, protocol)
 │
 └── examples/
     ├── node/

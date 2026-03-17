@@ -38,8 +38,8 @@ Releases are triggered by **pushing a version tag**; CI then builds artifacts an
 
 ### 1. Pre-release
 
-- Set the version in **VERSION** (e.g. `0.2.0`).
-- Update **CHANGELOG.md** and add **release-notes/<version>.md** if you use them.
+- Set the version in **VERSION** (e.g. `0.2.0` or `0.2.0-beta.0`).
+- Update **CHANGELOG.md** with a `## [<version>]` section. Optionally add **release-notes/<version>.md** (see RELEASE_PROCESS.md for signing).
 - Commit everything.
 - Run the release gate:
 
