@@ -1,12 +1,13 @@
 /**
  * RunFabric Node adapters: single handler or Express, Fastify, Nest, raw.
- * Prefer createHandler(handler): one function that manages internally and can mount on any framework.
+ * Prefer createHandler(handlerOrApp): pass a function (event, context) => response or an Express/Fastify/Nest app.
  */
 const raw = require("./raw");
-const express = require("./express");   // adapters/express/index.js
-const fastify = require("./fastify");   // adapters/fastify/index.js
-const nest = require("./nest");         // adapters/nest/index.js
+const express = require("./express");
+const fastify = require("./fastify");
+const nest = require("./nest");
 const { createHandler } = require("./handler");
+const universalHandler = require("./universalHandler");
 
 module.exports = {
     createHandler,
@@ -14,4 +15,5 @@ module.exports = {
     express,
     fastify,
     nest,
+    universalHandler,
 };

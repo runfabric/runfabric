@@ -6,6 +6,7 @@
     "src"
   ],
   "main": "src/index.js",
+  "types": "src/index.d.ts",
   "exports": {
     ".": "./src/index.js",
     "./adapters": "./src/adapters/index.js",
@@ -16,11 +17,15 @@
     "./adapters/nest": "./src/adapters/nest/index.js",
     "./http": "./src/http/index.js",
     "./function": "./src/function/index.js",
-    "./dev": "./src/dev/index.js"
+    "./dev": "./src/dev/index.js",
+    "./hooks": "./src/hooks/index.js"
   },
   "scripts": {
     "test": "node scripts/smoke-test.js",
     "smoke": "node scripts/smoke-test.js"
+  },
+  "dependencies": {
+    "@runfabric/cli": "0.1.2"
   },
   "keywords": [
     "runfabric",

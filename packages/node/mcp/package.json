@@ -1,0 +1,32 @@
+{
+  "name": "@runfabric/mcp-stdio",
+  "version": "0.1.0",
+  "description": "MCP server exposing RunFabric plan, deploy, doctor, invoke for agents and IDEs",
+  "type": "module",
+  "bin": {
+    "runfabric-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "runfabric",
+    "serverless"
+  ],
+  "author": "RunFabric",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

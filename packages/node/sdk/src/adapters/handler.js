@@ -1,21 +1,39 @@
 /**
- * Single handler function that manages internally: one (event, context) => response
- * can be used as raw HTTP, or mounted on Express, Fastify, or Nest via the same object.
+ * Single handler function that manages internally: (event, context) => response or (request) => Promise<UniversalResponse>.
+ * Accepts a raw handler function or an Express/Fastify/Nest app. Apps use the universal contract (request → response) via real HTTP or inject.
  * @module @runfabric/sdk/adapters/handler
  */
 
 const { createHttpHandler } = require("./raw");
-const expressAdapter = require("./express");   // express/index.js
-const fastifyAdapter = require("./fastify");   // fastify/index.js
-const nestAdapter = require("./nest");         // nest/index.js
+const expressAdapter = require("./express");
+const fastifyAdapter = require("./fastify");
+const nestAdapter = require("./nest");
+const universal = require("./universalHandler");
 
 /**
- * Creates a single handler that manages internally: use as (req, res), or call
- * .mountExpress(), .mountFastify(), or .forNest() to plug into a framework.
- * @param {(event: object, context: { requestId?: string, stage?: string, functionName?: string }) => Promise<object> | object} handler - Your (event, context) => response function
- * @returns {HttpHandler & { mountExpress: Function, mountFastify: Function, forNest: Function }}
+ * RunFabric universal handler: (request: UniversalRequest) => Promise<UniversalResponse>, or legacy (event, context) => response.
+ * Also callable as (req, res) for HTTP and has .mountExpress(), .mountFastify(), .forNest().
+ * @typedef {(event: object, context?: object) => Promise<object> | object} UniversalHandler
  */
-function createHandler(handler) {
+
+/**
+ * Creates a universal handler from a raw function or from an Express/Fastify/Nest app.
+ * - createHandler((event, context) => response) — legacy; invoked directly; has .mountExpress(), .mountFastify(), .forNest().
+ * - createHandler(expressApp | fastifyInstance | nestApp) — universal contract (request → { status, headers, body }); Express via real server + fetch, Fastify via inject.
+ * @param {((event: object, context?: object) => Promise<object> | object) | import('express').Application | import('fastify').FastifyInstance | import('@nestjs/common').INestApplication} handlerOrApp
+ * @returns {UniversalHandler & { mountExpress: Function, mountFastify: Function, forNest: Function }}
+ */
+function createHandler(handlerOrApp) {
+    let handler;
+    if (universal.isNestApplication(handlerOrApp) || universal.isFastifyInstance(handlerOrApp) || universal.isExpressApplication(handlerOrApp)) {
+        const universalHandler = universal.createHandler(handlerOrApp);
+        handler = (event, context) => universalHandler(event || {});
+    } else if (typeof handlerOrApp === "function") {
+        handler = handlerOrApp;
+    } else {
+        throw new Error("createHandler expects a function (event, context) => response or an Express/Fastify/Nest app");
+    }
+
     const httpHandler = createHttpHandler(handler);
 
     function mountExpress(app, path = "/", method = "post") {
@@ -30,7 +48,6 @@ function createHandler(handler) {
         return nestAdapter.nestHandler(handler);
     }
 
-    // Same object is callable as (req, res) and has mount methods
     const fn = (req, res) => httpHandler(req, res);
     fn.mountExpress = mountExpress;
     fn.mountFastify = mountFastify;
