@@ -23,6 +23,8 @@ type FunctionDeployment struct {
 	LayersHash      string `json:"layersHash,omitempty"`
 }
 
+// Receipt is the deployment receipt stored per stage. Metadata is the versioned place for
+// structured metadata (e.g. compiled graph hash/version, run summaries) without breaking existing providers.
 type Receipt struct {
 	Version      int                  `json:"version"`
 	Service      string               `json:"service"`
@@ -31,7 +33,7 @@ type Receipt struct {
 	DeploymentID string               `json:"deploymentId"`
 	Outputs      map[string]string    `json:"outputs"`
 	Artifacts    []providers.Artifact `json:"artifacts,omitempty"`
-	Metadata     map[string]string    `json:"metadata,omitempty"`
+	Metadata     map[string]string    `json:"metadata,omitempty"` // Phase 13.11.6: use for graph hash, run summaries, etc.
 	Functions    []FunctionDeployment `json:"functions,omitempty"`
 	UpdatedAt    string               `json:"updatedAt"`
 }
