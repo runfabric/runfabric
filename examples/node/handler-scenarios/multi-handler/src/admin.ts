@@ -1,4 +1,4 @@
-import type { UniversalHandler } from "@runfabric/core";
+import type { UniversalHandler } from "@runfabric/sdk";
 
 function parseJson(body: string | undefined): unknown {
   if (!body) {

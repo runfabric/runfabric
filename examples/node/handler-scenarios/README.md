@@ -55,8 +55,8 @@ pnpm run runfabric -- call-local -c examples/handler-scenarios/multi-handler/run
 Use one wrapper API and pass your app instance:
 
 ```ts
-import type { UniversalHandler } from "@runfabric/core";
-import { createHandler } from "@runfabric/runtime-node";
+import type { UniversalHandler } from "@runfabric/sdk";
+import { createHandler } from "@runfabric/sdk";
 
 export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);
 ```
@@ -65,14 +65,14 @@ Express catch-all route pattern:
 
 ```ts
 import express from "express";
-import { createHandler } from "@runfabric/runtime-node";
+import { createHandler } from "@runfabric/sdk";
 
 const app = express();
 app.use(express.json());
 app.all("*", (req, res) => {
   res.status(200).json({
     route: req.originalUrl,
-    method: req.method
+    method: req.method,
   });
 });
 

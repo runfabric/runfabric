@@ -1,4 +1,4 @@
-import type { UniversalHandler } from "@runfabric/core";
+import type { UniversalHandler } from "@runfabric/sdk";
 
 export const handler: UniversalHandler = async (req) => ({
   status: 200,

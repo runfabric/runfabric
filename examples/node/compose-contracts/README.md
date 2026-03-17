@@ -10,11 +10,11 @@ This reference example demonstrates multi-service orchestration and endpoint con
 
 ## Compose File
 
-Use `examples/compose-contracts/runfabric.compose.yml`:
+Use `examples/node/compose-contracts/runfabric.compose.yml`:
 
 ```bash
-pnpm run runfabric -- compose plan -f examples/compose-contracts/runfabric.compose.yml
-pnpm run runfabric -- compose deploy -f examples/compose-contracts/runfabric.compose.yml
+pnpm run runfabric -- compose plan -f examples/node/compose-contracts/runfabric.compose.yml
+pnpm run runfabric -- compose deploy -f examples/node/compose-contracts/runfabric.compose.yml
 ```
 
 ## Cross-service Output Contract

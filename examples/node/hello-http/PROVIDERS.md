@@ -22,12 +22,12 @@ All example configs use the same handler (`src/index.ts`) and HTTP trigger.
 From repo root:
 
 ```bash
-pnpm run runfabric -- doctor -c examples/hello-http/runfabric.<provider>.yml
-pnpm run runfabric -- plan -c examples/hello-http/runfabric.<provider>.yml
-pnpm run runfabric -- build -c examples/hello-http/runfabric.<provider>.yml
-pnpm run runfabric -- package -c examples/hello-http/runfabric.<provider>.yml
-pnpm run runfabric -- deploy -c examples/hello-http/runfabric.<provider>.yml
-pnpm run runfabric -- remove -c examples/hello-http/runfabric.<provider>.yml
+pnpm run runfabric -- doctor -c examples/node/hello-http/runfabric.<provider>.yml
+pnpm run runfabric -- plan -c examples/node/hello-http/runfabric.<provider>.yml
+pnpm run runfabric -- build -c examples/node/hello-http/runfabric.<provider>.yml
+pnpm run runfabric -- package -c examples/node/hello-http/runfabric.<provider>.yml
+pnpm run runfabric -- deploy -c examples/node/hello-http/runfabric.<provider>.yml
+pnpm run runfabric -- remove -c examples/node/hello-http/runfabric.<provider>.yml
 ```
 
 Replace `<provider>` with one of:

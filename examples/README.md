@@ -1,16 +1,25 @@
 # RunFabric examples
 
-Examples are grouped by runtime:
+Examples are grouped by runtime. Today this repo ships **Node/JS/TS** examples under `examples/node/`.
 
 | Directory   | Description |
 |------------|-------------|
 | **node/**  | Node/JS/TS examples (hello-aws, hello-http, compose-app, compose-contracts, handler-scenarios) |
-| **python/** | Python examples |
-| **go/**    | Go examples |
-| **java/**  | Java examples |
-| **dotnet/** | .NET examples |
 
-## Creating examples for all languages
+## Quick start (recommended)
+
+From repo root:
+
+```bash
+pnpm run runfabric -- doctor -c examples/node/hello-http/runfabric.quickstart.yml
+pnpm run runfabric -- plan -c examples/node/hello-http/runfabric.quickstart.yml
+pnpm run runfabric -- build -c examples/node/hello-http/runfabric.quickstart.yml
+pnpm run runfabric -- deploy -c examples/node/hello-http/runfabric.quickstart.yml
+```
+
+See `examples/node/hello-http/PROVIDERS.md` for provider-specific config files.
+
+## Creating examples (via init)
 
 To generate new examples with `runfabric init` for **js**, **ts**, **python**, and **go** (and any provider/template/state combination), see **[docs/EXAMPLES_ANALYSIS.md](../docs/EXAMPLES_ANALYSIS.md)**. That doc:
 
