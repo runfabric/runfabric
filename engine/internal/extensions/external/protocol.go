@@ -4,9 +4,10 @@ package external
 // One request JSON object per line, one response JSON object per line.
 
 type Request struct {
-	ID     string `json:"id"`
-	Method string `json:"method"`
-	Params any    `json:"params,omitempty"`
+	ID              string `json:"id"`
+	Method          string `json:"method"`
+	ProtocolVersion string `json:"protocolVersion,omitempty"`
+	Params          any    `json:"params,omitempty"`
 }
 
 type Response struct {

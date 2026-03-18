@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
+	extRuntime "github.com/runfabric/runfabric/engine/internal/extensions/runtime"
 )
 
 // ExternalProviderAdapter implements the legacy providers.Provider interface by spawning
@@ -21,6 +22,8 @@ type ExternalProviderAdapter struct {
 	executable string
 	timeout    time.Duration
 }
+
+const maxStderrBytes = 8 * 1024
 
 func NewExternalProviderAdapter(name, executable string) *ExternalProviderAdapter {
 	return &ExternalProviderAdapter{
@@ -111,7 +114,12 @@ func (p *ExternalProviderAdapter) call(method string, params any, out any) error
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	req := Request{ID: "1", Method: method, Params: params}
+	req := Request{
+		ID:              "1",
+		Method:          method,
+		ProtocolVersion: extRuntime.ProtocolVersion,
+		Params:          params,
+	}
 	enc := json.NewEncoder(stdin)
 	if err := enc.Encode(req); err != nil {
 		_ = stdin.Close()
@@ -125,26 +133,52 @@ func (p *ExternalProviderAdapter) call(method string, params any, out any) error
 	select {
 	case err := <-done:
 		if err != nil {
-			return fmt.Errorf("external plugin %s failed: %w (stderr: %s)", p.executable, err, stderr.String())
+			return fmt.Errorf(
+				"external plugin %s failed: %w (stderr: %s)",
+				p.executable,
+				err,
+				limitString(stderr.String(), maxStderrBytes),
+			)
 		}
 	case <-time.After(p.timeout):
 		_ = cmd.Process.Kill()
-		return fmt.Errorf("external plugin %s timed out", p.executable)
+		return fmt.Errorf(
+			"external plugin %s timed out after %s (stderr: %s)",
+			p.executable,
+			p.timeout,
+			limitString(stderr.String(), maxStderrBytes),
+		)
 	}
 
 	sc := bufio.NewScanner(bytes.NewReader(stdout.Bytes()))
+	// Allow larger responses than the default 64K token limit.
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	if !sc.Scan() {
 		if err := sc.Err(); err != nil {
-			return err
+			return fmt.Errorf("external plugin %s produced invalid response: %w", p.executable, err)
 		}
-		return fmt.Errorf("external plugin %s produced no response (stderr: %s)", p.executable, stderr.String())
+		return fmt.Errorf(
+			"external plugin %s produced no response on stdout (stderr: %s)",
+			p.executable,
+			limitString(stderr.String(), maxStderrBytes),
+		)
 	}
+	line := bytes.TrimSpace(sc.Bytes())
 	var resp Response
-	if err := json.Unmarshal(sc.Bytes(), &resp); err != nil {
-		return fmt.Errorf("external plugin %s invalid response: %w", p.executable, err)
+	if err := json.Unmarshal(line, &resp); err != nil {
+		return fmt.Errorf(
+			"external plugin %s returned malformed JSON on stdout: %v (line: %s)",
+			p.executable,
+			err,
+			limitString(string(line), 200),
+		)
 	}
 	if resp.Error != nil {
-		return fmt.Errorf("external plugin error [%s]: %s", resp.Error.Code, resp.Error.Message)
+		// Details may contain arbitrary data; keep this message concise.
+		if resp.Error.Code != "" {
+			return fmt.Errorf("external plugin error [%s]: %s", resp.Error.Code, resp.Error.Message)
+		}
+		return fmt.Errorf("external plugin error: %s", resp.Error.Message)
 	}
 	if out == nil {
 		return nil
@@ -154,4 +188,14 @@ func (p *ExternalProviderAdapter) call(method string, params any, out any) error
 		return err
 	}
 	return json.Unmarshal(blob, out)
+}
+
+func limitString(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "...(truncated)"
 }
