@@ -5,35 +5,96 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
 	extRuntime "github.com/runfabric/runfabric/engine/internal/extensions/runtime"
+	"github.com/runfabric/runfabric/engine/internal/wrapper"
 )
 
 // ExternalProviderAdapter implements the legacy providers.Provider interface by spawning
 // an external plugin executable and speaking the line-delimited JSON protocol over stdio.
 //
-// Phase 15c: this starts a fresh subprocess per call (simple + safe). We can optimize
-// to a reused process with idle timeout later.
+// Phase 15c: reuse a subprocess per command context (idle timeout) and add protocol
+// handshake/version negotiation.
 type ExternalProviderAdapter struct {
-	name       string
-	executable string
-	timeout    time.Duration
+	name        string
+	executable  string
+	timeout     time.Duration
+	idleTimeout time.Duration
+
+	mu        sync.Mutex
+	proc      *pluginProc
+	idleTimer *time.Timer
+	seq       uint64
+	debug     bool
 }
 
-const maxStderrBytes = 8 * 1024
+const (
+	maxStderrBytes     = 8 * 1024
+	defaultIdleTimeout = 60 * time.Second
+	envPluginDebug     = "RUNFABRIC_PLUGIN_DEBUG"
+)
+
+type pluginProc struct {
+	cmd        *exec.Cmd
+	stdin      io.WriteCloser
+	stdout     io.ReadCloser
+	scanner    *bufio.Scanner
+	stderr     *limitedBuffer
+	handshaked bool
+}
+
+type limitedBuffer struct {
+	mu  sync.Mutex
+	max int
+	buf []byte
+}
+
+func newLimitedBuffer(max int) *limitedBuffer {
+	return &limitedBuffer{max: max}
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(p) > b.max {
+		p = p[len(p)-b.max:]
+	}
+	b.buf = append(b.buf, p...)
+	if len(b.buf) > b.max {
+		b.buf = b.buf[len(b.buf)-b.max:]
+	}
+	return len(p), nil
+}
+
+func (b *limitedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return string(b.buf)
+}
 
 func NewExternalProviderAdapter(name, executable string) *ExternalProviderAdapter {
 	return &ExternalProviderAdapter{
-		name:       name,
-		executable: executable,
-		timeout:    30 * time.Second,
+		name:        name,
+		executable:  executable,
+		timeout:     30 * time.Second,
+		idleTimeout: defaultIdleTimeout,
+		debug:       isTruthyEnv(envPluginDebug),
 	}
 }
 
 func (p *ExternalProviderAdapter) Name() string { return p.name }
+
+func (p *ExternalProviderAdapter) nextIDLocked() string {
+	p.seq++
+	return fmt.Sprintf("%d", p.seq)
+}
 
 func (p *ExternalProviderAdapter) Doctor(cfg *providers.Config, stage string) (*providers.DoctorResult, error) {
 	var out providers.DoctorResult
@@ -102,79 +163,53 @@ func (p *ExternalProviderAdapter) Logs(cfg *providers.Config, stage, function st
 }
 
 func (p *ExternalProviderAdapter) call(method string, params any, out any) error {
-	cmd := exec.Command(p.executable)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Stop idle timer while the plugin is in use.
+	if p.idleTimer != nil {
+		p.idleTimer.Stop()
+		p.idleTimer = nil
+	}
+
+	if err := p.ensureProcessLocked(); err != nil {
 		return err
 	}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
+	proc := p.proc
+
 	req := Request{
-		ID:              "1",
+		ID:              p.nextIDLocked(),
 		Method:          method,
 		ProtocolVersion: extRuntime.ProtocolVersion,
 		Params:          params,
 	}
-	enc := json.NewEncoder(stdin)
-	if err := enc.Encode(req); err != nil {
-		_ = stdin.Close()
-		_ = cmd.Process.Kill()
+
+	if p.debug {
+		fmt.Fprintf(os.Stderr, "external plugin %s call=%s id=%s\n", p.executable, method, req.ID)
+	}
+
+	if err := json.NewEncoder(proc.stdin).Encode(req); err != nil {
+		p.killProcessLocked()
+		return fmt.Errorf("external plugin %s failed to write request: %w", p.executable, err)
+	}
+
+	resp, err := p.readResponseLocked(req.ID)
+	if err != nil {
+		// Process might already be dead; clean up and surface error.
+		p.killProcessLocked()
 		return err
 	}
-	_ = stdin.Close()
 
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-	select {
-	case err := <-done:
-		if err != nil {
-			return fmt.Errorf(
-				"external plugin %s failed: %w (stderr: %s)",
-				p.executable,
-				err,
-				limitString(stderr.String(), maxStderrBytes),
-			)
+	// Reset idle timer after a successful request.
+	p.idleTimer = time.AfterFunc(p.idleTimeout, func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if p.proc != nil {
+			p.killProcessLocked()
 		}
-	case <-time.After(p.timeout):
-		_ = cmd.Process.Kill()
-		return fmt.Errorf(
-			"external plugin %s timed out after %s (stderr: %s)",
-			p.executable,
-			p.timeout,
-			limitString(stderr.String(), maxStderrBytes),
-		)
-	}
+	})
 
-	sc := bufio.NewScanner(bytes.NewReader(stdout.Bytes()))
-	// Allow larger responses than the default 64K token limit.
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	if !sc.Scan() {
-		if err := sc.Err(); err != nil {
-			return fmt.Errorf("external plugin %s produced invalid response: %w", p.executable, err)
-		}
-		return fmt.Errorf(
-			"external plugin %s produced no response on stdout (stderr: %s)",
-			p.executable,
-			limitString(stderr.String(), maxStderrBytes),
-		)
-	}
-	line := bytes.TrimSpace(sc.Bytes())
-	var resp Response
-	if err := json.Unmarshal(line, &resp); err != nil {
-		return fmt.Errorf(
-			"external plugin %s returned malformed JSON on stdout: %v (line: %s)",
-			p.executable,
-			err,
-			limitString(string(line), 200),
-		)
-	}
 	if resp.Error != nil {
-		// Details may contain arbitrary data; keep this message concise.
 		if resp.Error.Code != "" {
 			return fmt.Errorf("external plugin error [%s]: %s", resp.Error.Code, resp.Error.Message)
 		}
@@ -198,4 +233,198 @@ func limitString(s string, max int) string {
 		return s
 	}
 	return s[:max] + "...(truncated)"
+}
+
+func isTruthyEnv(k string) bool {
+	v := os.Getenv(k)
+	v = strings.ToLower(strings.TrimSpace(v))
+	return v == "1" || v == "true" || v == "yes"
+}
+
+func (p *ExternalProviderAdapter) ensureProcessLocked() error {
+	if p.proc != nil {
+		return nil
+	}
+	stderr := newLimitedBuffer(maxStderrBytes)
+	cmd := exec.Command(p.executable)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		_ = stdin.Close()
+		return err
+	}
+	cmd.Stderr = stderr
+	if err := cmd.Start(); err != nil {
+		_ = stdin.Close()
+		_ = stdout.Close()
+		return err
+	}
+
+	sc := bufio.NewScanner(stdout)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	p.proc = &pluginProc{
+		cmd:        cmd,
+		stdin:      stdin,
+		stdout:     stdout,
+		scanner:    sc,
+		stderr:     stderr,
+		handshaked: false,
+	}
+
+	if err := p.handshakeLocked(); err != nil {
+		p.killProcessLocked()
+		return err
+	}
+	return nil
+}
+
+func (p *ExternalProviderAdapter) handshakeLocked() error {
+	if p.proc == nil {
+		return fmt.Errorf("external plugin %s internal error: nil process", p.executable)
+	}
+	// Perform handshake once per process start.
+	pid := p.nextIDLocked()
+	req := Request{
+		ID:              pid,
+		Method:          "Handshake",
+		ProtocolVersion: extRuntime.ProtocolVersion,
+	}
+	if p.debug {
+		fmt.Fprintf(os.Stderr, "external plugin %s handshake id=%s\n", p.executable, pid)
+	}
+	if err := json.NewEncoder(p.proc.stdin).Encode(req); err != nil {
+		return fmt.Errorf("external plugin %s handshake write failed: %w", p.executable, err)
+	}
+	resp, err := p.readResponseLocked(pid)
+	if err != nil {
+		return err
+	}
+	if resp.Error != nil {
+		return fmt.Errorf("external plugin %s handshake failed: %s", p.executable, resp.Error.Message)
+	}
+
+	var hs wrapper.Handshake
+	b, err := json.Marshal(resp.Result)
+	if err != nil {
+		return fmt.Errorf("external plugin %s handshake malformed result: %w", p.executable, err)
+	}
+	if err := json.Unmarshal(b, &hs); err != nil {
+		return fmt.Errorf("external plugin %s handshake result decode failed: %w", p.executable, err)
+	}
+	if strings.TrimSpace(hs.ProtocolVersion) != strings.TrimSpace(extRuntime.ProtocolVersion) {
+		return fmt.Errorf(
+			"external plugin %s incompatible protocolVersion: expected %s got %s (version=%s platform=%s)",
+			p.executable,
+			extRuntime.ProtocolVersion,
+			hs.ProtocolVersion,
+			hs.Version,
+			hs.Platform,
+		)
+	}
+
+	p.proc.handshaked = true
+	return nil
+}
+
+func (p *ExternalProviderAdapter) readResponseLocked(expectedID string) (*Response, error) {
+	proc := p.proc
+	if proc == nil {
+		return nil, fmt.Errorf("external plugin %s internal error: nil process", p.executable)
+	}
+	sc := proc.scanner
+	done := make(chan struct {
+		ok   bool
+		line []byte
+		err  error
+	}, 1)
+
+	go func() {
+		if sc.Scan() {
+			line := append([]byte(nil), sc.Bytes()...)
+			done <- struct {
+				ok   bool
+				line []byte
+				err  error
+			}{ok: true, line: line}
+			return
+		}
+		done <- struct {
+			ok   bool
+			line []byte
+			err  error
+		}{ok: false, err: sc.Err()}
+	}()
+
+	select {
+	case res := <-done:
+		if !res.ok {
+			// Process likely exited; collect exit error if possible.
+			waitErr := proc.cmd.Wait()
+			if waitErr != nil {
+				return nil, fmt.Errorf(
+					"external plugin %s exited unexpectedly (stderr: %s): %w",
+					p.executable,
+					limitString(proc.stderr.String(), maxStderrBytes),
+					waitErr,
+				)
+			}
+			if res.err != nil {
+				return nil, fmt.Errorf("external plugin %s produced no response: %w", p.executable, res.err)
+			}
+			return nil, fmt.Errorf("external plugin %s produced no response on stdout", p.executable)
+		}
+		line := bytes.TrimSpace(res.line)
+		if len(line) == 0 {
+			return nil, fmt.Errorf("external plugin %s produced empty response on stdout", p.executable)
+		}
+		var resp Response
+		if err := json.Unmarshal(line, &resp); err != nil {
+			return nil, fmt.Errorf(
+				"external plugin %s returned malformed JSON on stdout: %v (line: %s)",
+				p.executable,
+				err,
+				limitString(string(line), 200),
+			)
+		}
+		if resp.ID != "" && expectedID != "" && resp.ID != expectedID {
+			// With sequential requests, mismatched IDs likely means corrupted stream.
+			return nil, fmt.Errorf("external plugin %s response id mismatch: expected %s got %s", p.executable, expectedID, resp.ID)
+		}
+		return &resp, nil
+	case <-time.After(p.timeout):
+		_ = proc.cmd.Process.Kill()
+		return nil, fmt.Errorf(
+			"external plugin %s timed out after %s (stderr: %s)",
+			p.executable,
+			p.timeout,
+			limitString(proc.stderr.String(), maxStderrBytes),
+		)
+	}
+}
+
+func (p *ExternalProviderAdapter) killProcessLocked() {
+	if p.proc == nil {
+		return
+	}
+	proc := p.proc
+	p.proc = nil
+	if p.idleTimer != nil {
+		p.idleTimer.Stop()
+		p.idleTimer = nil
+	}
+	// Close stdin and stdout to unblock any waiting reads.
+	if proc.stdin != nil {
+		_ = proc.stdin.Close()
+	}
+	if proc.stdout != nil {
+		_ = proc.stdout.Close()
+	}
+	if proc.cmd != nil && proc.cmd.Process != nil {
+		_ = proc.cmd.Process.Kill()
+	}
+	_ = proc.cmd.Wait()
 }

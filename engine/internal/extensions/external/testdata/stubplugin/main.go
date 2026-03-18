@@ -3,8 +3,11 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"os"
+	"runtime"
+
+	extRuntime "github.com/runfabric/runfabric/engine/internal/extensions/runtime"
+	"github.com/runfabric/runfabric/engine/internal/wrapper"
 )
 
 type Request struct {
@@ -26,21 +29,29 @@ type RespError struct {
 
 func main() {
 	sc := bufio.NewScanner(os.Stdin)
-	if !sc.Scan() {
-		return
+	for sc.Scan() {
+		var req Request
+		if err := json.Unmarshal(sc.Bytes(), &req); err != nil {
+			_ = json.NewEncoder(os.Stdout).Encode(Response{ID: "?", Error: &RespError{Code: "bad_json", Message: err.Error()}})
+			continue
+		}
+		switch req.Method {
+		case "Handshake":
+			_ = json.NewEncoder(os.Stdout).Encode(Response{
+				ID: req.ID,
+				Result: wrapper.Handshake{
+					Version:         "stub",
+					ProtocolVersion: extRuntime.ProtocolVersion,
+					Platform:        runtime.GOOS + "-" + runtime.GOARCH,
+				},
+			})
+		case "Doctor":
+			_ = json.NewEncoder(os.Stdout).Encode(Response{ID: req.ID, Result: map[string]any{"provider": "stub", "checks": []string{"ok"}}})
+		case "Invoke":
+			_ = json.NewEncoder(os.Stdout).Encode(Response{ID: req.ID, Result: map[string]any{"provider": "stub", "function": "fn", "output": "pong"}})
+		default:
+			_ = json.NewEncoder(os.Stdout).Encode(Response{ID: req.ID, Result: map[string]any{"provider": "stub"}})
+		}
 	}
-	var req Request
-	if err := json.Unmarshal(sc.Bytes(), &req); err != nil {
-		_ = json.NewEncoder(os.Stdout).Encode(Response{ID: "?", Error: &RespError{Code: "bad_json", Message: err.Error()}})
-		return
-	}
-	switch req.Method {
-	case "Doctor":
-		_ = json.NewEncoder(os.Stdout).Encode(Response{ID: req.ID, Result: map[string]any{"provider": "stub", "checks": []string{"ok"}}})
-	case "Invoke":
-		_ = json.NewEncoder(os.Stdout).Encode(Response{ID: req.ID, Result: map[string]any{"provider": "stub", "function": "fn", "output": "pong"}})
-	default:
-		_ = json.NewEncoder(os.Stdout).Encode(Response{ID: req.ID, Result: map[string]any{"provider": "stub"}})
-	}
-	fmt.Fprintln(os.Stderr, "")
+	// Scanner exits when stdin is closed.
 }
