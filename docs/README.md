@@ -1,27 +1,32 @@
-# runfabric docs
+# RunFabric docs
 
-RunFabric is a multi-provider serverless framework package: **one config, one CLI workflow** across cloud providers, deploying on **managed serverless services** that auto-scale and keep **idle-cost overhead low**.
+Docs are split into two buckets:
 
-Quick navigation for onboarding and reference.
+- **User docs** (`docs/user/`): how to use RunFabric (CLI, `runfabric.yml`, providers, troubleshooting).
+- **Developer docs** (`docs/developer/`): repo development + internals (extensions/plugins/registry/SDK authoring, architecture, roadmap).
 
-- **Getting started** – [QUICKSTART.md](QUICKSTART.md)
-- **Config** – [RUNFABRIC_YML_REFERENCE.md](RUNFABRIC_YML_REFERENCE.md)
-- **Credentials** – [CREDENTIALS.md](CREDENTIALS.md)
-- **Provider setup** – [PROVIDER_SETUP.md](PROVIDER_SETUP.md)
-- **Deploy by provider** – [DEPLOY_PROVIDERS.md](DEPLOY_PROVIDERS.md)
-- **State backends** – [STATE_BACKENDS.md](STATE_BACKENDS.md)
-- **Handlers** – [HANDLER_SCENARIOS.md](HANDLER_SCENARIOS.md)
-- **SDK frameworks** – [SDK_FRAMEWORKS.md](SDK_FRAMEWORKS.md)
-- **CLI commands** – [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md)
-- **Troubleshooting** – [TROUBLESHOOTING.md](TROUBLESHOOTING.md) (per-provider errors and fixes)
-- **Testing** – [TESTING_GUIDE.md](TESTING_GUIDE.md) (call-local, invoke, CI)
-- **Examples matrix** – [EXAMPLES_MATRIX.md](EXAMPLES_MATRIX.md)
-- **Example validation** – [EXAMPLE_VALIDATION.md](EXAMPLE_VALIDATION.md)
-- **Migration** – [MIGRATION.md](MIGRATION.md)
-- **Build and release** – [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md)
-- **Architecture** – [ARCHITECTURE.md](ARCHITECTURE.md)
-- **Roadmap** – [ROADMAP.md](ROADMAP.md)
-- **Generate (P1)** – [GENERATE_PROPOSAL.md](GENERATE_PROPOSAL.md) — `runfabric generate function` proposal
-- **Repo development** – [REPO_DEVELOPMENT.md](REPO_DEVELOPMENT.md)
-- **Add-ons** – [ADDONS.md](ADDONS.md)
-- **Plugins (hooks)** – [PLUGINS.md](PLUGINS.md)
+## User docs
+
+- **Getting started** — [user/QUICKSTART.md](user/QUICKSTART.md)
+- **CLI commands** — [user/COMMAND_REFERENCE.md](user/COMMAND_REFERENCE.md)
+- **Config reference** — [user/RUNFABRIC_YML_REFERENCE.md](user/RUNFABRIC_YML_REFERENCE.md)
+- **Credentials** — [user/CREDENTIALS.md](user/CREDENTIALS.md)
+- **Provider setup** — [user/PROVIDER_SETUP.md](user/PROVIDER_SETUP.md)
+- **Deploy by provider** — [user/DEPLOY_PROVIDERS.md](user/DEPLOY_PROVIDERS.md)
+- **State backends** — [user/STATE_BACKENDS.md](user/STATE_BACKENDS.md)
+- **Troubleshooting** — [user/TROUBLESHOOTING.md](user/TROUBLESHOOTING.md)
+- **Testing** — [user/TESTING_GUIDE.md](user/TESTING_GUIDE.md)
+- **Examples matrix** — [user/EXAMPLES_MATRIX.md](user/EXAMPLES_MATRIX.md)
+
+## Developer docs
+
+- **Repo development** — [developer/REPO_DEVELOPMENT.md](developer/REPO_DEVELOPMENT.md)
+- **Architecture** — [developer/ARCHITECTURE.md](developer/ARCHITECTURE.md)
+- **Roadmap** — [developer/ROADMAP.md](developer/ROADMAP.md)
+- **Project TODO** — [developer/TODO.md](developer/TODO.md)
+- **SDK frameworks** — [developer/SDK_FRAMEWORKS.md](developer/SDK_FRAMEWORKS.md)
+- **Plugins (hooks)** — [developer/PLUGINS.md](developer/PLUGINS.md)
+- **Extension dev guide** — [developer/EXTENSION_DEVELOPMENT_GUIDE.md](developer/EXTENSION_DEVELOPMENT_GUIDE.md)
+- **Registry MVP spec** — [developer/REGISTRY_API_DB_SCHEMA_MVP_V1.md](developer/REGISTRY_API_DB_SCHEMA_MVP_V1.md)
+- **Registry security** — [developer/REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md](developer/REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md)
+
