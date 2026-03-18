@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://registry.runfabric.cloud/schema/addon.version.v1.json",
+  "title": "RunFabric Addon Version (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": { "type": "string", "const": "addon" },
+    "version": { "type": "string", "minLength": 1 },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "publisher": { "$ref": "./publisher.v1.schema.json" },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": { "core": { "type": "string", "minLength": 1 } },
+      "required": ["core"]
+    },
+    "permissions": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "artifact": { "$ref": "./artifact.v1.schema.json" },
+    "manifest": { "type": "object", "additionalProperties": true },
+    "integrity": { "type": "object", "additionalProperties": true },
+    "install": { "type": "object", "additionalProperties": true }
+  },
+  "required": ["id", "type", "version", "publisher", "compatibility", "permissions", "artifact"]
+}
+

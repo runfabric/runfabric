@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://registry.runfabric.cloud/schema/resolve.response.v1.json",
+  "title": "RunFabric Resolve Response (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "core": { "type": "string", "minLength": 1 },
+        "os": { "type": "string", "enum": ["darwin", "linux", "windows"] },
+        "arch": { "type": "string", "enum": ["amd64", "arm64"] }
+      },
+      "required": ["id", "core", "os", "arch"]
+    },
+    "resolved": {
+      "oneOf": [
+        { "$ref": "./addon.version.v1.schema.json" },
+        { "$ref": "./plugin.version.v1.schema.json" }
+      ]
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "resolvedAt": { "type": "string", "minLength": 1 },
+        "registryVersion": { "type": "string", "const": "v1" },
+        "requestId": { "type": "string", "minLength": 1 }
+      },
+      "required": ["resolvedAt", "registryVersion", "requestId"]
+    }
+  },
+  "required": ["request", "resolved", "meta"]
+}
+

@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://registry.runfabric.cloud/schema/artifact.v1.json",
+  "title": "RunFabric Artifact (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "type": { "type": "string", "enum": ["addon", "binary"] },
+    "format": { "type": "string" },
+    "url": { "type": "string", "minLength": 1 },
+    "sizeBytes": { "type": "integer", "minimum": 1 },
+    "checksum": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "type": "string", "enum": ["sha256"] },
+        "value": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" }
+      },
+      "required": ["algorithm", "value"]
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "type": "string", "enum": ["ed25519"] },
+        "value": { "type": "string", "minLength": 16 },
+        "publicKeyId": { "type": "string", "minLength": 1 }
+      },
+      "required": ["algorithm", "value", "publicKeyId"]
+    }
+  },
+  "required": ["type", "format", "url", "sizeBytes", "checksum"]
+}
+

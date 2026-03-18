@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://registry.runfabric.cloud/schema/publisher.v1.json",
+  "title": "RunFabric Publisher Ref (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "verified": { "type": "boolean" },
+    "trust": { "type": "string", "enum": ["official", "verified", "community"] }
+  },
+  "required": ["name", "verified", "trust"]
+}
+
