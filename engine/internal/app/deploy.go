@@ -8,9 +8,9 @@ import (
 	"github.com/runfabric/runfabric/engine/internal/config"
 	"github.com/runfabric/runfabric/engine/internal/controlplane"
 	deployapi "github.com/runfabric/runfabric/engine/internal/deploy/api"
+	awsprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/aws"
 	"github.com/runfabric/runfabric/engine/internal/lifecycle"
 	"github.com/runfabric/runfabric/engine/internal/provisioning"
-	awsprovider "github.com/runfabric/runfabric/engine/providers/aws"
 )
 
 // Deploy runs deploy for the given config and stage. If functionName is non-empty, only that function is deployed (when the provider supports it).

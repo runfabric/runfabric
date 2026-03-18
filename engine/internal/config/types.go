@@ -42,6 +42,8 @@ type Config struct {
 	Build *BuildConfig `yaml:"build,omitempty"`
 	// Alerts: optional alerting config (Phase 3.2). Webhook/Slack URLs and triggers; used by integrations or future runtime.
 	Alerts *AlertsConfig `yaml:"alerts,omitempty"`
+	// AiWorkflow: optional AI workflow graph (Phase 14). When enable is true, nodes/edges define a DAG; entrypoint is the starting node.
+	AiWorkflow *AiWorkflowConfig `yaml:"aiWorkflow,omitempty"`
 }
 
 // BuildConfig defines optional build-step ordering (e.g. for hooks or plugins). Order lists step or hook identifiers in execution order.
@@ -190,6 +192,30 @@ type HealthCheckConfig struct {
 type ScalingConfig struct {
 	ReservedConcurrency    int `yaml:"reservedConcurrency,omitempty"`
 	ProvisionedConcurrency int `yaml:"provisionedConcurrency,omitempty"`
+}
+
+// AiWorkflowConfig defines an AI workflow graph (Phase 14): enable, entrypoint node, optional models/datasets, nodes, edges.
+type AiWorkflowConfig struct {
+	Enable     bool             `yaml:"enable,omitempty"`
+	Entrypoint string           `yaml:"entrypoint,omitempty"` // node id that is the workflow entry
+	Models     map[string]any   `yaml:"models,omitempty"`     // model id -> config (provider, model id, etc.)
+	Datasets   map[string]any   `yaml:"datasets,omitempty"`   // dataset id -> config (path, format, etc.)
+	Nodes      []AiWorkflowNode `yaml:"nodes,omitempty"`
+	Edges      []AiWorkflowEdge `yaml:"edges,omitempty"`
+}
+
+// AiWorkflowNode is one node in the workflow graph. Type determines semantics (trigger, ai, data, logic, system, human).
+type AiWorkflowNode struct {
+	ID     string         `yaml:"id"`
+	Type   string         `yaml:"type"`             // trigger | ai | data | logic | system | human
+	Params map[string]any `yaml:"params,omitempty"` // type-specific config (e.g. model ref, trigger config)
+}
+
+// AiWorkflowEdge connects two nodes. From/To are node IDs; Expression is optional (e.g. condition).
+type AiWorkflowEdge struct {
+	From       string `yaml:"from"`
+	To         string `yaml:"to"`
+	Expression string `yaml:"expression,omitempty"`
 }
 
 // WorkflowConfig is a workflow definition (name, steps).

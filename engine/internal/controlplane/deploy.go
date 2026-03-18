@@ -6,17 +6,17 @@ import (
 
 	"github.com/runfabric/runfabric/engine/internal/config"
 	"github.com/runfabric/runfabric/engine/internal/deployrunner"
-	"github.com/runfabric/runfabric/engine/providers"
+	"github.com/runfabric/runfabric/engine/internal/extensions/provider"
 )
 
 func RunDeploy(
 	ctx context.Context,
 	coord *Coordinator,
-	adapter providers.Adapter,
+	adapter provider.Adapter,
 	cfg *config.Config,
 	stage string,
 	root string,
-) (*providers.DeployResult, error) {
+) (*provider.DeployResult, error) {
 	EmitEvent("deploy-start", cfg.Service, stage, "deploy started", nil)
 	run, err := coord.AcquireRunContext(ctx, cfg.Service, stage, "deploy")
 	if err != nil {

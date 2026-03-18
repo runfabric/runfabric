@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 
 	deployapi "github.com/runfabric/runfabric/engine/internal/deploy/api"
+	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
 	"github.com/runfabric/runfabric/engine/internal/lifecycle"
-	"github.com/runfabric/runfabric/engine/internal/providers"
 	"github.com/runfabric/runfabric/engine/internal/state"
 )
 
@@ -47,6 +47,11 @@ func logsSingle(ctx *AppContext, function string) (any, error) {
 			return nil, err
 		}
 		result = r
+	}
+	if receipt != nil && receipt.Metadata != nil {
+		if h := receipt.Metadata["aiWorkflowHash"]; h != "" {
+			result.Workflow = h
+		}
 	}
 	mergeLocalLogs(ctx, result, function)
 	return result, nil

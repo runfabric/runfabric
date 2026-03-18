@@ -46,9 +46,16 @@ func newBuildCmd(opts *GlobalOptions) *cobra.Command {
 					"cacheHit":  result.CacheHit,
 					"errors":    result.Errors,
 				}
+				if result.AiWorkflowHash != "" {
+					out["aiWorkflowHash"] = result.AiWorkflowHash
+					out["aiWorkflowEntrypoint"] = result.AiWorkflowEntrypoint
+				}
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
 				return enc.Encode(out)
+			}
+			if result.AiWorkflowHash != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "build: aiWorkflow hash=%s entrypoint=%s\n", result.AiWorkflowHash, result.AiWorkflowEntrypoint)
 			}
 			for _, a := range result.Artifacts {
 				label := "built"

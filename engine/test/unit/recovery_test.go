@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	awsprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/aws"
 	"github.com/runfabric/runfabric/engine/internal/transactions"
-	awsprovider "github.com/runfabric/runfabric/engine/providers/aws"
 )
 
 func TestRecoveryDetectsUnfinishedJournal(t *testing.T) {

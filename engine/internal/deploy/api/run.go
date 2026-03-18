@@ -8,18 +8,18 @@ import (
 	"sort"
 
 	"github.com/runfabric/runfabric/engine/internal/config"
-	"github.com/runfabric/runfabric/engine/internal/providers"
+	"github.com/runfabric/runfabric/engine/internal/extensions/provider/alibaba"
+	"github.com/runfabric/runfabric/engine/internal/extensions/provider/azure"
+	cf "github.com/runfabric/runfabric/engine/internal/extensions/provider/cloudflare"
+	do "github.com/runfabric/runfabric/engine/internal/extensions/provider/digitalocean"
+	"github.com/runfabric/runfabric/engine/internal/extensions/provider/fly"
+	"github.com/runfabric/runfabric/engine/internal/extensions/provider/gcp"
+	"github.com/runfabric/runfabric/engine/internal/extensions/provider/ibm"
+	k8s "github.com/runfabric/runfabric/engine/internal/extensions/provider/kubernetes"
+	"github.com/runfabric/runfabric/engine/internal/extensions/provider/netlify"
+	"github.com/runfabric/runfabric/engine/internal/extensions/provider/vercel"
+	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
 	"github.com/runfabric/runfabric/engine/internal/state"
-	"github.com/runfabric/runfabric/engine/providers/alibaba"
-	"github.com/runfabric/runfabric/engine/providers/azure"
-	cf "github.com/runfabric/runfabric/engine/providers/cloudflare"
-	do "github.com/runfabric/runfabric/engine/providers/digitalocean"
-	"github.com/runfabric/runfabric/engine/providers/fly"
-	"github.com/runfabric/runfabric/engine/providers/gcp"
-	"github.com/runfabric/runfabric/engine/providers/ibm"
-	k8s "github.com/runfabric/runfabric/engine/providers/kubernetes"
-	"github.com/runfabric/runfabric/engine/providers/netlify"
-	"github.com/runfabric/runfabric/engine/providers/vercel"
 )
 
 // Run deploys via the provider's API and returns a DeployResult. Saves receipt to root.
@@ -45,6 +45,7 @@ func Run(ctx context.Context, provider string, cfg *config.Config, stage, root s
 	for _, a := range result.Artifacts {
 		receipt.Functions = append(receipt.Functions, state.FunctionDeployment{Function: a.Function})
 	}
+	state.EnrichReceiptWithAiWorkflow(receipt, cfg)
 	if err := state.Save(root, receipt); err != nil {
 		return nil, err
 	}

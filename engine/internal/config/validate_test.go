@@ -98,3 +98,115 @@ func TestValidate_DeployCanaryPercent(t *testing.T) {
 		t.Errorf("canaryPercent 50 should be valid: %v", err)
 	}
 }
+
+func minimalValidConfig() *Config {
+	return &Config{
+		Service:   "svc",
+		Provider:  ProviderConfig{Name: "aws", Runtime: "nodejs"},
+		Functions: map[string]FunctionConfig{"api": {Handler: "h"}},
+	}
+}
+
+func TestValidate_AiWorkflow_EnableRequiresNodes(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.AiWorkflow = &AiWorkflowConfig{Enable: true, Nodes: nil}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected error when aiWorkflow.enable is true and nodes empty")
+	}
+}
+
+func TestValidate_AiWorkflow_DuplicateNodeID(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.AiWorkflow = &AiWorkflowConfig{
+		Enable: true,
+		Nodes: []AiWorkflowNode{
+			{ID: "n1", Type: "trigger"},
+			{ID: "n1", Type: "ai"},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected error for duplicate node id")
+	}
+}
+
+func TestValidate_AiWorkflow_InvalidNodeType(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.AiWorkflow = &AiWorkflowConfig{
+		Enable: true,
+		Nodes:  []AiWorkflowNode{{ID: "n1", Type: "unknown"}},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected error for unsupported node type")
+	}
+}
+
+func TestValidate_AiWorkflow_EntrypointMustBeNode(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.AiWorkflow = &AiWorkflowConfig{
+		Enable:     true,
+		Entrypoint: "missing",
+		Nodes:      []AiWorkflowNode{{ID: "n1", Type: "trigger"}},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected error when entrypoint is not a node id")
+	}
+}
+
+func TestValidate_AiWorkflow_EdgeEndpointsMustBeNodes(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.AiWorkflow = &AiWorkflowConfig{
+		Enable: true,
+		Nodes:  []AiWorkflowNode{{ID: "n1", Type: "trigger"}},
+		Edges:  []AiWorkflowEdge{{From: "n1", To: "n2"}},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected error when edge to is not a node id")
+	}
+}
+
+func TestValidate_AiWorkflow_Valid(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.AiWorkflow = &AiWorkflowConfig{
+		Enable:     true,
+		Entrypoint: "start",
+		Nodes: []AiWorkflowNode{
+			{ID: "start", Type: "trigger"},
+			{ID: "step1", Type: "ai"},
+		},
+		Edges: []AiWorkflowEdge{{From: "start", To: "step1"}},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("valid aiWorkflow should pass: %v", err)
+	}
+}
+
+func TestValidate_AiWorkflow_DisabledNoValidation(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.AiWorkflow = &AiWorkflowConfig{Enable: false, Nodes: nil}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("aiWorkflow disabled with no nodes should not error: %v", err)
+	}
+}
+
+func TestCompileAiWorkflow(t *testing.T) {
+	g, err := CompileAiWorkflow(nil)
+	if err != nil || g != nil {
+		t.Fatalf("CompileAiWorkflow(nil) want nil,nil got %v, %v", g, err)
+	}
+	cfg := &AiWorkflowConfig{
+		Enable:     true,
+		Entrypoint: "start",
+		Nodes: []AiWorkflowNode{
+			{ID: "start", Type: "trigger"},
+			{ID: "step1", Type: "ai"},
+		},
+		Edges: []AiWorkflowEdge{{From: "start", To: "step1"}},
+	}
+	g, err = CompileAiWorkflow(cfg)
+	if err != nil {
+		t.Fatalf("CompileAiWorkflow: %v", err)
+	}
+	if g == nil || g.Entrypoint != "start" || len(g.Order) != 2 || g.Hash == "" {
+		t.Errorf("CompileAiWorkflow: got Entrypoint=%q Order=%v Hash=%q", g.Entrypoint, g.Order, g.Hash)
+	}
+}

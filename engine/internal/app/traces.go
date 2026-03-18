@@ -3,9 +3,10 @@ package app
 import (
 	"context"
 
-	awsprovider "github.com/runfabric/runfabric/engine/providers/aws"
-	azureprovider "github.com/runfabric/runfabric/engine/providers/azure"
-	gcpprovider "github.com/runfabric/runfabric/engine/providers/gcp"
+	awsprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/aws"
+	azureprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/azure"
+	gcpprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/gcp"
+	"github.com/runfabric/runfabric/engine/internal/state"
 )
 
 // Traces returns trace data for the deployed service (from receipt/metadata or provider).
@@ -29,6 +30,14 @@ func Traces(configPath, stage, providerOverride string, all bool) (any, error) {
 	if receipt != nil {
 		out["deploymentId"] = receipt.DeploymentID
 		out["updatedAt"] = receipt.UpdatedAt
+		if receipt.Metadata != nil {
+			if h := receipt.Metadata["aiWorkflowHash"]; h != "" {
+				out["aiWorkflowHash"] = h
+				if runs, _ := state.ListWorkflowRuns(ctx.RootDir, ctx.Stage, 10); len(runs) > 0 {
+					out["workflowRuns"] = runs
+				}
+			}
+		}
 	}
 	switch ctx.Config.Provider.Name {
 	case "aws", "aws-lambda":

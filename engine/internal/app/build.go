@@ -8,8 +8,8 @@ import (
 
 	"github.com/runfabric/runfabric/engine/internal/buildcache"
 	"github.com/runfabric/runfabric/engine/internal/config"
-	"github.com/runfabric/runfabric/engine/internal/providers"
-	"github.com/runfabric/runfabric/engine/internal/runtime/build"
+	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
+	"github.com/runfabric/runfabric/engine/internal/extensions/runtime/build"
 )
 
 func copyFile(src, dst string) error {
@@ -32,9 +32,11 @@ func copyFile(src, dst string) error {
 
 // BuildResult is the result of a build run (shared by CLI build/package and plan/deploy paths).
 type BuildResult struct {
-	Artifacts []providers.Artifact `json:"artifacts"`
-	CacheHit  []string             `json:"cacheHit,omitempty"` // function names that used cache
-	Errors    []string             `json:"errors,omitempty"`   // per-function errors if any
+	Artifacts            []providers.Artifact `json:"artifacts"`
+	CacheHit             []string             `json:"cacheHit,omitempty"`             // function names that used cache
+	Errors               []string             `json:"errors,omitempty"`               // per-function errors if any
+	AiWorkflowHash       string               `json:"aiWorkflowHash,omitempty"`       // set when aiWorkflow.enable is true (Phase 14.3)
+	AiWorkflowEntrypoint string               `json:"aiWorkflowEntrypoint,omitempty"` // set when aiWorkflow.enable is true
 }
 
 // BuildOptions configures the shared build.
@@ -121,9 +123,12 @@ func Build(configPath string, opts BuildOptions) (*BuildResult, error) {
 		artifacts = append(artifacts, *artifact)
 	}
 
-	return &BuildResult{
-		Artifacts: artifacts,
-		CacheHit:  cacheHit,
-		Errors:    errs,
-	}, nil
+	res := &BuildResult{Artifacts: artifacts, CacheHit: cacheHit, Errors: errs}
+	if cfg.AiWorkflow != nil && cfg.AiWorkflow.Enable {
+		if g, err := config.CompileAiWorkflow(cfg.AiWorkflow); err == nil && g != nil {
+			res.AiWorkflowHash = g.Hash
+			res.AiWorkflowEntrypoint = g.Entrypoint
+		}
+	}
+	return res, nil
 }

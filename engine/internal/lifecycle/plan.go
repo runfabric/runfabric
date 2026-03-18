@@ -2,7 +2,7 @@ package lifecycle
 
 import (
 	"github.com/runfabric/runfabric/engine/internal/config"
-	"github.com/runfabric/runfabric/engine/internal/providers"
+	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
 )
 
 func Plan(reg *providers.Registry, cfg *config.Config, stage, root string) (*providers.PlanResult, error) {

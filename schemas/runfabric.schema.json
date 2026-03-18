@@ -65,7 +65,8 @@
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/StageConfig" },
       "description": "Stage-specific overrides (e.g. dev, prod)."
-    }
+    },
+    "aiWorkflow": { "$ref": "#/$defs/AiWorkflowConfig" }
   },
   "additionalProperties": false,
   "$defs": {
@@ -342,6 +343,51 @@
       "properties": {
         "rollbackOnFailure": { "type": "boolean" }
       }
+    },
+    "AiWorkflowConfig": {
+      "type": "object",
+      "description": "AI workflow graph (Phase 14). enable, entrypoint, optional models/datasets, nodes, edges.",
+      "properties": {
+        "enable": { "type": "boolean", "default": false },
+        "entrypoint": { "type": "string", "description": "Node id that is the workflow entry." },
+        "models": { "type": "object", "additionalProperties": true, "description": "Model id -> config." },
+        "datasets": { "type": "object", "additionalProperties": true, "description": "Dataset id -> config." },
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AiWorkflowNode" },
+          "description": "Workflow nodes (trigger, ai, data, logic, system, human)."
+        },
+        "edges": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AiWorkflowEdge" },
+          "description": "Edges connecting nodes (from, to, optional expression)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "AiWorkflowNode": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Unique node id." },
+        "type": {
+          "type": "string",
+          "enum": ["trigger", "ai", "data", "logic", "system", "human"],
+          "description": "Node type (MVP)."
+        },
+        "params": { "type": "object", "additionalProperties": true, "description": "Type-specific config." }
+      },
+      "additionalProperties": false
+    },
+    "AiWorkflowEdge": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "type": "string", "minLength": 1, "description": "Source node id." },
+        "to": { "type": "string", "minLength": 1, "description": "Target node id." },
+        "expression": { "type": "string", "description": "Optional condition expression." }
+      },
+      "additionalProperties": false
     },
     "WorkflowConfig": {
       "type": "object",

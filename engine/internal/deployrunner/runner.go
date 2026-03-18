@@ -5,17 +5,17 @@ import (
 
 	"github.com/runfabric/runfabric/engine/internal/backends"
 	"github.com/runfabric/runfabric/engine/internal/config"
+	"github.com/runfabric/runfabric/engine/internal/extensions/provider"
 	"github.com/runfabric/runfabric/engine/internal/transactions"
-	"github.com/runfabric/runfabric/engine/providers"
 )
 
 type RunResult struct {
-	DeployResult *providers.DeployResult
+	DeployResult *provider.DeployResult
 }
 
 func Run(
 	ctx context.Context,
-	adapter providers.Adapter,
+	adapter provider.Adapter,
 	cfg *config.Config,
 	stage string,
 	root string,

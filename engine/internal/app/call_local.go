@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/runfabric/runfabric/engine/internal/config"
 )
 
 // CallLocal runs the service locally: starts an HTTP server that can invoke handlers.
@@ -15,13 +17,24 @@ func CallLocal(configPath, stage, host, port string, serve bool) (any, error) {
 		return nil, err
 	}
 
+	// Phase 14.3: when aiWorkflow is enabled, compile and expose in response (replay not yet implemented).
+	var aiWorkflowInfo map[string]string
+	if ctx.Config.AiWorkflow != nil && ctx.Config.AiWorkflow.Enable {
+		if g, err := config.CompileAiWorkflow(ctx.Config.AiWorkflow); err == nil && g != nil {
+			aiWorkflowInfo = map[string]string{"entrypoint": g.Entrypoint, "hash": g.Hash}
+		}
+	}
+
 	addr := host + ":" + port
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintf(w, `{"message":"RunFabric call-local","service":%q,"stage":%q,"functions":%d}`,
-			ctx.Config.Service, ctx.Stage, len(ctx.Config.Functions))
+		msg := fmt.Sprintf(`{"message":"RunFabric call-local","service":%q,"stage":%q,"functions":%d`, ctx.Config.Service, ctx.Stage, len(ctx.Config.Functions))
+		if len(aiWorkflowInfo) > 0 {
+			msg += fmt.Sprintf(`,"aiWorkflow":{"entrypoint":%q,"hash":%q}`, aiWorkflowInfo["entrypoint"], aiWorkflowInfo["hash"])
+		}
+		_, _ = fmt.Fprint(w, msg+"}")
 	})
 	for name := range ctx.Config.Functions {
 		fnName := name
@@ -33,10 +46,18 @@ func CallLocal(configPath, stage, host, port string, serve bool) (any, error) {
 	}
 
 	if !serve {
-		return map[string]string{"message": "Use --serve to start local server and run code locally"}, nil
+		out := map[string]string{"message": "Use --serve to start local server and run code locally"}
+		if len(aiWorkflowInfo) > 0 {
+			out["aiWorkflowEntrypoint"] = aiWorkflowInfo["entrypoint"]
+			out["aiWorkflowHash"] = aiWorkflowInfo["hash"]
+		}
+		return out, nil
 	}
 
 	fmt.Printf("→ Dev server listening on http://%s (stage=%q)\n", addr, stage)
+	if len(aiWorkflowInfo) > 0 {
+		fmt.Printf("  aiWorkflow: entrypoint=%s hash=%s\n", aiWorkflowInfo["entrypoint"], aiWorkflowInfo["hash"])
+	}
 	server := &http.Server{Addr: addr, Handler: mux}
 	_ = server.ListenAndServe() // blocks until server stops
 	return map[string]string{"addr": addr, "stage": stage}, nil
@@ -50,13 +71,23 @@ func CallLocalServe(configPath, stage, host, port string) (shutdownChan <-chan s
 		return nil, nil, err
 	}
 
+	var aiWorkflowInfo map[string]string
+	if ctx.Config.AiWorkflow != nil && ctx.Config.AiWorkflow.Enable {
+		if g, compileErr := config.CompileAiWorkflow(ctx.Config.AiWorkflow); compileErr == nil && g != nil {
+			aiWorkflowInfo = map[string]string{"entrypoint": g.Entrypoint, "hash": g.Hash}
+		}
+	}
+
 	addr := host + ":" + port
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintf(w, `{"message":"RunFabric call-local","service":%q,"stage":%q,"functions":%d}`,
-			ctx.Config.Service, ctx.Stage, len(ctx.Config.Functions))
+		msg := fmt.Sprintf(`{"message":"RunFabric call-local","service":%q,"stage":%q,"functions":%d`, ctx.Config.Service, ctx.Stage, len(ctx.Config.Functions))
+		if len(aiWorkflowInfo) > 0 {
+			msg += fmt.Sprintf(`,"aiWorkflow":{"entrypoint":%q,"hash":%q}`, aiWorkflowInfo["entrypoint"], aiWorkflowInfo["hash"])
+		}
+		_, _ = fmt.Fprint(w, msg+"}")
 	})
 	for name := range ctx.Config.Functions {
 		fnName := name
@@ -77,6 +108,9 @@ func CallLocalServe(configPath, stage, host, port string) (shutdownChan <-chan s
 
 	go func() {
 		fmt.Printf("→ Dev server listening on http://%s (stage=%q)\n", addr, stage)
+		if len(aiWorkflowInfo) > 0 {
+			fmt.Printf("  aiWorkflow: entrypoint=%s hash=%s\n", aiWorkflowInfo["entrypoint"], aiWorkflowInfo["hash"])
+		}
 		_ = server.ListenAndServe()
 		close(done)
 	}()

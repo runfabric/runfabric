@@ -3,7 +3,7 @@ package lifecycle
 import (
 	"github.com/runfabric/runfabric/engine/internal/config"
 	appErrs "github.com/runfabric/runfabric/engine/internal/errors"
-	"github.com/runfabric/runfabric/engine/internal/providers"
+	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
 )
 
 func Invoke(reg *providers.Registry, cfg *config.Config, stage, function string, payload []byte) (*providers.InvokeResult, error) {

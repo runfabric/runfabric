@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 
-	awsprovider "github.com/runfabric/runfabric/engine/providers/aws"
+	awsprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/aws"
 )
 
 // PrepareDevStreamTunnel redirects the provider's invocation target (e.g. API Gateway) to tunnelURL

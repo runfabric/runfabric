@@ -3,18 +3,21 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/runfabric/runfabric/engine/internal/config"
+	"github.com/runfabric/runfabric/engine/internal/configpatch"
 	"github.com/spf13/cobra"
 )
 
 func newAddonsCmd(opts *GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "addons",
-		Short: "List or validate add-ons",
-		Long:  "Add-ons are declared in runfabric.yml under 'addons'. Use addons list to see the built-in catalog. Addon secrets are bound at deploy and injected into function environment.",
+		Use:     "addons",
+		Aliases: []string{"addon"},
+		Short:   "List or validate add-ons",
+		Long:    "RunFabric Addons: function/app-level augmentation. Declared in runfabric.yml under 'addons'; use 'addons list' as the v1 catalog view. Addon secrets are bound at deploy and injected into function environment. See also 'runfabric extension list' for plugins (providers, runtimes).",
 	}
-	cmd.AddCommand(newAddonsListCmd(opts))
+	cmd.AddCommand(newAddonsListCmd(opts), newAddonsValidateCmd(opts), newAddonsAddCmd(opts))
 	return cmd
 }
 
@@ -49,4 +52,94 @@ func newAddonsListCmd(opts *GlobalOptions) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newAddonsValidateCmd(opts *GlobalOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "validate [addon-id]",
+		Short: "Validate runfabric.yml and optional addon (e.g. sentry)",
+		RunE: func(c *cobra.Command, args []string) error {
+			cwd, _ := os.Getwd()
+			cfgPath, err := configpatch.ResolveConfigPath(opts.ConfigPath, cwd, 5)
+			if err != nil {
+				return err
+			}
+			cfg, err := config.Load(cfgPath)
+			if err != nil {
+				return err
+			}
+			if err := config.Validate(cfg); err != nil {
+				if opts.JSONOutput {
+					_ = json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"ok": false, "error": err.Error()})
+					return err
+				}
+				return err
+			}
+			if len(args) > 0 {
+				addonID := args[0]
+				if cfg.Addons != nil {
+					if _, ok := cfg.Addons[addonID]; !ok {
+						// check if it's attached to a function
+						found := false
+						for _, fn := range cfg.Functions {
+							for _, a := range fn.Addons {
+								if a == addonID {
+									found = true
+									break
+								}
+							}
+						}
+						if !found {
+							return fmt.Errorf("addon %q not declared in addons or functions.*.addons", addonID)
+						}
+					}
+				} else {
+					return fmt.Errorf("addon %q not declared (no addons block in config)", addonID)
+				}
+			}
+			if opts.JSONOutput {
+				_ = json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"ok": true})
+				return nil
+			}
+			if len(args) > 0 {
+				fmt.Fprintf(c.OutOrStdout(), "addon validate: %s ok\n", args[0])
+			} else {
+				fmt.Fprintln(c.OutOrStdout(), "addon validate: ok")
+			}
+			return nil
+		},
+	}
+}
+
+func newAddonsAddCmd(opts *GlobalOptions) *cobra.Command {
+	var function string
+	cmd := &cobra.Command{
+		Use:   "add [addon-id]",
+		Short: "Add an addon to a function (patches runfabric.yml)",
+		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) < 1 {
+				return fmt.Errorf("usage: runfabric addons add <addon-id> --function <name>")
+			}
+			if function == "" {
+				return fmt.Errorf("--function is required")
+			}
+			addonID := args[0]
+			cwd, _ := os.Getwd()
+			cfgPath, err := configpatch.ResolveConfigPath(opts.ConfigPath, cwd, 5)
+			if err != nil {
+				return err
+			}
+			if err := configpatch.AppendFunctionAddon(cfgPath, function, addonID); err != nil {
+				return err
+			}
+			if opts.JSONOutput {
+				_ = json.NewEncoder(c.OutOrStdout()).Encode(map[string]any{"ok": true, "addon": addonID, "function": function})
+				return nil
+			}
+			fmt.Fprintf(c.OutOrStdout(), "addon %q added to function %q\n", addonID, function)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&function, "function", "", "Function name to attach the addon to")
+	return cmd
 }

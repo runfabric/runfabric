@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/runfabric/runfabric/engine/internal/config"
-	"github.com/runfabric/runfabric/engine/internal/providers"
+	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
 	"github.com/runfabric/runfabric/engine/internal/state"
 )
 

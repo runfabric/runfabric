@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/runfabric/runfabric/engine/internal/aiflow"
 )
 
 func Validate(cfg *Config) error {
@@ -112,6 +114,57 @@ func Validate(cfg *Config) error {
 			if cfg.Deploy.CanaryPercent < 0 || cfg.Deploy.CanaryPercent > 100 {
 				return fmt.Errorf("deploy.canaryPercent must be 0-100 when strategy is canary (got %d)", cfg.Deploy.CanaryPercent)
 			}
+		}
+	}
+
+	if err := validateAiWorkflow(cfg.AiWorkflow, aiflow.ValidNodeType); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateAiWorkflow validates the AI workflow graph when present and enabled. nodeTypeOK is the registry check (e.g. aiflow.ValidNodeType).
+func validateAiWorkflow(aw *AiWorkflowConfig, nodeTypeOK func(string) bool) error {
+	if aw == nil || !aw.Enable {
+		return nil
+	}
+	if len(aw.Nodes) == 0 {
+		return fmt.Errorf("aiWorkflow.nodes is required when aiWorkflow.enable is true")
+	}
+	seen := make(map[string]bool)
+	for i, n := range aw.Nodes {
+		id := strings.TrimSpace(n.ID)
+		if id == "" {
+			return fmt.Errorf("aiWorkflow.nodes[%d].id is required", i)
+		}
+		if seen[id] {
+			return fmt.Errorf("aiWorkflow duplicate node id %q", id)
+		}
+		seen[id] = true
+		if !nodeTypeOK(strings.TrimSpace(n.Type)) {
+			return fmt.Errorf("aiWorkflow.nodes[%d].type %q is not supported (allowed: trigger, ai, data, logic, system, human)", i, n.Type)
+		}
+	}
+	if aw.Entrypoint != "" {
+		ep := strings.TrimSpace(aw.Entrypoint)
+		if !seen[ep] {
+			return fmt.Errorf("aiWorkflow.entrypoint %q must be a node id", aw.Entrypoint)
+		}
+	}
+	for i, e := range aw.Edges {
+		from := strings.TrimSpace(e.From)
+		to := strings.TrimSpace(e.To)
+		if from == "" {
+			return fmt.Errorf("aiWorkflow.edges[%d].from is required", i)
+		}
+		if to == "" {
+			return fmt.Errorf("aiWorkflow.edges[%d].to is required", i)
+		}
+		if !seen[from] {
+			return fmt.Errorf("aiWorkflow.edges[%d].from %q is not a node id", i, e.From)
+		}
+		if !seen[to] {
+			return fmt.Errorf("aiWorkflow.edges[%d].to %q is not a node id", i, e.To)
 		}
 	}
 	return nil

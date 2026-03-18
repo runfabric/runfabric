@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/runfabric/runfabric/engine/internal/runtime"
+	"github.com/runfabric/runfabric/engine/internal/extensions/runtime"
 )
 
 // JSONEnvelope is the standard --json result shape for dashboard tooling (Phase 13.11.4).

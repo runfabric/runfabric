@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/runfabric/runfabric/engine/internal/providers"
+	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
 )
 
 const CurrentReceiptVersion = 1
@@ -39,6 +39,9 @@ type Receipt struct {
 }
 
 func Save(root string, receipt *Receipt) error {
+	if receipt == nil {
+		return fmt.Errorf("nil receipt")
+	}
 	dir := filepath.Join(root, ".runfabric")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create state dir: %w", err)

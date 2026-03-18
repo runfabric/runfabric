@@ -3,8 +3,8 @@ package unit
 import (
 	"testing"
 
-	"github.com/runfabric/runfabric/engine/internal/providers"
-	awsprovider "github.com/runfabric/runfabric/engine/providers/aws"
+	awsprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/aws"
+	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
 )
 
 func TestRegistryGet(t *testing.T) {

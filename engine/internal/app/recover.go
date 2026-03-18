@@ -6,10 +6,10 @@ import (
 	"time"
 
 	appErrs "github.com/runfabric/runfabric/engine/internal/errors"
+	awsprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/aws"
 	"github.com/runfabric/runfabric/engine/internal/locking"
 	"github.com/runfabric/runfabric/engine/internal/recovery"
 	"github.com/runfabric/runfabric/engine/internal/transactions"
-	awsprovider "github.com/runfabric/runfabric/engine/providers/aws"
 )
 
 func Recover(configPath, stage string, mode recovery.Mode) (any, error) {

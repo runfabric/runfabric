@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/runfabric/runfabric/engine/internal/config"
-	awsprovider "github.com/runfabric/runfabric/engine/providers/aws"
+	awsprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/aws"
 )
 
 func TestRealAWSRemoteDriftDetectionIfEnabled(t *testing.T) {

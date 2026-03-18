@@ -2,7 +2,7 @@ package lifecycle
 
 import (
 	"github.com/runfabric/runfabric/engine/internal/config"
-	"github.com/runfabric/runfabric/engine/internal/providers"
+	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
 	"github.com/runfabric/runfabric/engine/internal/state"
 )
 
@@ -41,6 +41,7 @@ func Deploy(reg *providers.Registry, cfg *config.Config, stage, root string) (*p
 		Metadata:     result.Metadata,
 		Functions:    functions,
 	}
+	state.EnrichReceiptWithAiWorkflow(receipt, cfg)
 	if err := state.Save(root, receipt); err != nil {
 		return nil, err
 	}

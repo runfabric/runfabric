@@ -1,31 +1,10 @@
 package providers
 
-import "sync"
+import (
+	ext "github.com/runfabric/runfabric/engine/internal/extensions/providers"
+)
 
-type Registry struct {
-	mu        sync.RWMutex
-	providers map[string]Provider
-}
-
+// NewRegistry returns an empty provider registry.
 func NewRegistry() *Registry {
-	return &Registry{
-		providers: make(map[string]Provider),
-	}
-}
-
-func (r *Registry) Register(p Provider) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.providers[p.Name()] = p
-}
-
-func (r *Registry) Get(name string) (Provider, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	p, ok := r.providers[name]
-	if !ok {
-		return nil, ErrProviderNotFound(name)
-	}
-	return p, nil
+	return ext.NewRegistry()
 }

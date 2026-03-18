@@ -3,9 +3,10 @@ package app
 import (
 	"context"
 
-	awsprovider "github.com/runfabric/runfabric/engine/providers/aws"
-	azureprovider "github.com/runfabric/runfabric/engine/providers/azure"
-	gcpprovider "github.com/runfabric/runfabric/engine/providers/gcp"
+	awsprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/aws"
+	azureprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/azure"
+	gcpprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/gcp"
+	"github.com/runfabric/runfabric/engine/internal/state"
 )
 
 // Metrics returns metrics for the deployed service (from receipt/metadata or provider).
@@ -29,6 +30,16 @@ func Metrics(configPath, stage, providerOverride string, all bool) (any, error) 
 	if receipt != nil {
 		out["deploymentId"] = receipt.DeploymentID
 		out["functionCount"] = len(receipt.Functions)
+		if receipt.Metadata != nil {
+			if h := receipt.Metadata["aiWorkflowHash"]; h != "" {
+				out["aiWorkflowHash"] = h
+				runs, _ := state.ListWorkflowRuns(ctx.RootDir, ctx.Stage, 50)
+				if len(runs) > 0 {
+					out["workflowRuns"] = runs
+					out["aiWorkflowCost"] = state.WorkflowCostFromRuns(runs)
+				}
+			}
+		}
 	}
 	// Provider-specific metrics.
 	switch ctx.Config.Provider.Name {

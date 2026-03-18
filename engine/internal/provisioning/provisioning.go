@@ -32,16 +32,3 @@ func Get(provider string) Provisioner {
 	defer registryMu.RUnlock()
 	return registry[provider]
 }
-
-// Stub is a provisioner that always returns ErrNotImplemented. Used when a provider
-// does not yet implement provisioning (caller should fall back to connectionStringEnv/connectionString).
-type Stub struct{}
-
-func (Stub) Provision(context.Context, string, string, map[string]any) (string, error) {
-	return "", ErrNotImplemented
-}
-
-func init() {
-	// AWS provisioner is registered in providers/aws/provisioning.go when that package is loaded.
-	// Other providers can register in their own init.
-}

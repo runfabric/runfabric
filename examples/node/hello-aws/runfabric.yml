@@ -17,6 +17,22 @@ backend:
   s3Prefix: apps/dev
   lockTable: rf-locks
 
+aiWorkflow:
+  enable: true
+  entrypoint: start
+  nodes:
+    - id: start
+      type: trigger
+      params:
+        note: example-only (Phase 14)
+    - id: callHello
+      type: system
+      params:
+        function: hello
+  edges:
+    - from: start
+      to: callHello
+
 functions:
   hello:
     handler: src/handler.hello

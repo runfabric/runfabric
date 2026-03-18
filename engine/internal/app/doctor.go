@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/runfabric/runfabric/engine/internal/config"
 	"github.com/runfabric/runfabric/engine/internal/diagnostics"
 	"github.com/runfabric/runfabric/engine/internal/secrets"
 )
@@ -32,6 +33,26 @@ func BackendDoctor(configPath, stage string) (any, error) {
 			report.Checks = append(report.Checks, diagnostics.CheckResult{
 				Name: "provider-credentials", OK: false, Backend: name,
 				Message: fmt.Sprintf("missing or empty: %s (see docs/CREDENTIALS.md)", strings.Join(missing, ", ")),
+			})
+		}
+	}
+
+	// AI workflow validation + compile (Phase 14.3): surface graph metadata (hash/order/levels) for tooling.
+	if ctx.Config.AiWorkflow != nil && ctx.Config.AiWorkflow.Enable {
+		g, err := config.CompileAiWorkflow(ctx.Config.AiWorkflow)
+		if err != nil {
+			report.Checks = append(report.Checks, diagnostics.CheckResult{
+				Name:    "ai-workflow",
+				OK:      false,
+				Backend: "aiflow",
+				Message: fmt.Sprintf("compile failed: %v", err),
+			})
+		} else {
+			report.Checks = append(report.Checks, diagnostics.CheckResult{
+				Name:    "ai-workflow",
+				OK:      true,
+				Backend: "aiflow",
+				Message: fmt.Sprintf("compiled: entrypoint=%s hash=%s nodes=%d edges=%d levels=%d", g.Entrypoint, g.Hash, len(g.Nodes), len(g.Edges), len(g.Levels)),
 			})
 		}
 	}

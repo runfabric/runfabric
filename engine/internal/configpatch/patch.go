@@ -205,6 +205,52 @@ func AddProviderOverride(path string, key string, providerEntry map[string]any, 
 		"provider override %q already exists in runfabric.yml; choose another key or remove it first")
 }
 
+// AppendFunctionAddon appends addonID to functions.functionName.addons if not already present. Creates addons array if missing.
+func AppendFunctionAddon(path, functionName, addonID string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+	var root map[string]any
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return fmt.Errorf("parse yaml: %w", err)
+	}
+	fns, _ := root["functions"]
+	if fns == nil {
+		return fmt.Errorf("functions not found in runfabric.yml")
+	}
+	fnMap, ok := fns.(map[string]any)
+	if !ok {
+		return fmt.Errorf("functions must be a map")
+	}
+	fn, ok := fnMap[functionName]
+	if !ok {
+		return fmt.Errorf("function %q not found", functionName)
+	}
+	fnEntry, ok := fn.(map[string]any)
+	if !ok {
+		return fmt.Errorf("function %q entry must be a map", functionName)
+	}
+	var addons []any
+	if a := fnEntry["addons"]; a != nil {
+		addons, ok = a.([]any)
+		if !ok {
+			return fmt.Errorf("functions.%s.addons must be an array", functionName)
+		}
+		for _, v := range addons {
+			if s, ok := v.(string); ok && s == addonID {
+				return nil // already present
+			}
+		}
+	}
+	fnEntry["addons"] = append(addons, addonID)
+	out, err := yaml.Marshal(root)
+	if err != nil {
+		return fmt.Errorf("marshal yaml: %w", err)
+	}
+	return os.WriteFile(path, out, 0o644)
+}
+
 // ResolveConfigPath returns the absolute path to runfabric.yml. It uses path if non-empty,
 // otherwise looks for runfabric.yml or runfabric.yaml in dir, then in parent directories up to maxDepth.
 func ResolveConfigPath(path, dir string, maxDepth int) (string, error) {

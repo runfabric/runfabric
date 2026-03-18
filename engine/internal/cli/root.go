@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"github.com/runfabric/runfabric/engine/internal/runtime"
+	"github.com/runfabric/runfabric/engine/internal/extensions/runtime"
 	"github.com/spf13/cobra"
 )
 
@@ -31,6 +31,7 @@ func NewRootCmd() *cobra.Command {
 
 	cmd.AddCommand(
 		newDoctorCmd(opts),
+		newAiCmd(opts),
 		newPlanCmd(opts),
 		newDeployCmd(opts),
 		newDeployFunctionStandaloneCmd(opts),
@@ -54,6 +55,8 @@ func NewRootCmd() *cobra.Command {
 		newTracesCmd(opts),
 		newMetricsCmd(opts),
 		newAddonsCmd(opts),
+		newPluginCmd(opts),
+		newExtensionCmd(opts),
 		newProvidersCmd(opts),
 		newPrimitivesCmd(opts),
 		newComposeCmd(opts),

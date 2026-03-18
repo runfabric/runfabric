@@ -3,7 +3,7 @@ package wrapper
 import (
 	"runtime"
 
-	rt "github.com/runfabric/runfabric/engine/internal/runtime"
+	rt "github.com/runfabric/runfabric/engine/internal/extensions/runtime"
 )
 
 func CurrentHandshake() Handshake {

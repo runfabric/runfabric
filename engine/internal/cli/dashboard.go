@@ -170,6 +170,7 @@ const dashboardHTML = `<!DOCTYPE html>
     <p class="card-title">Deployment</p>
     %s
   </div>
+  %s
   <div class="card">
     <p class="card-title">Actions</p>
     <div class="actions">
@@ -407,7 +408,18 @@ func newDashboardCmd(opts *GlobalOptions) *cobra.Command {
 						deployBlock += "</dl>"
 					}
 				}
-				_, _ = fmt.Fprintf(w, dashboardHTML, d.Service, d.Service, d.Stage, appOrgBlock, stagesBlock, deployBlock)
+				aiWorkflowBlock := ""
+				if d.AiWorkflowHash != "" {
+					aiWorkflowBlock = "<div class=\"card\"><p class=\"card-title\">AI Workflow</p><p class=\"meta\">Entrypoint: <code>" + html.EscapeString(d.AiWorkflowEntry) + "</code> · Hash: <code>" + html.EscapeString(d.AiWorkflowHash) + "</code></p>"
+					if d.AiWorkflowCost != nil && d.AiWorkflowCost.RunCount > 0 {
+						aiWorkflowBlock += fmt.Sprintf("<p class=\"meta\">Runs: %d · Input tokens: %d · Output tokens: %d · Est. cost: $%.4f</p>",
+							d.AiWorkflowCost.RunCount, d.AiWorkflowCost.TotalInputTokens, d.AiWorkflowCost.TotalOutputTokens, d.AiWorkflowCost.EstimatedCostUSD)
+					}
+					aiWorkflowBlock += "</div>"
+				} else {
+					aiWorkflowBlock = "<div class=\"card\"><p class=\"card-title\">AI Workflow</p><p class=\"none\">Not configured. Set <code>aiWorkflow.enable: true</code> in runfabric.yml.</p></div>"
+				}
+				_, _ = fmt.Fprintf(w, dashboardHTML, d.Service, d.Service, d.Stage, appOrgBlock, stagesBlock, deployBlock, aiWorkflowBlock)
 			})
 			// Wrap mux to log every request to terminal and record GET / in activity log
 			loggingHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

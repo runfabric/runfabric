@@ -8,9 +8,11 @@ import (
 	"github.com/runfabric/runfabric/engine/internal/backends"
 	"github.com/runfabric/runfabric/engine/internal/config"
 	appErrs "github.com/runfabric/runfabric/engine/internal/errors"
-	"github.com/runfabric/runfabric/engine/internal/planner"
-	"github.com/runfabric/runfabric/engine/internal/providers"
-	awsprovider "github.com/runfabric/runfabric/engine/providers/aws"
+	"github.com/runfabric/runfabric/engine/internal/extensions/external"
+	awsprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/aws"
+	gcpprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/gcp"
+	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
+	extproviders "github.com/runfabric/runfabric/engine/internal/extensions/providers"
 )
 
 type AppContext struct {
@@ -24,17 +26,27 @@ type AppContext struct {
 // Bootstrap loads config, resolves and validates it, then optionally applies a provider override for multi-cloud (--provider).
 // providerOverride is the key from providerOverrides in runfabric.yml (e.g. "aws", "gcp"); use "" for single-provider config.
 func Bootstrap(configPath, stage, providerOverride string) (*AppContext, error) {
-	reg := providers.NewRegistry()
-	// AWS: register under both "aws" (legacy) and "aws-lambda" (docs / Trigger Capability Matrix)
+	reg := extproviders.NewRegistry()
 	aws := awsprovider.New()
 	reg.Register(aws)
-	reg.Register(providers.NewNamedProvider("aws-lambda", aws))
-	// Fallback providers for matrix providers without a full implementation; doctor/plan/deploy/remove/invoke/logs still resolve.
-	for _, name := range matrixProviderNames() {
-		if name == "aws-lambda" {
-			continue // already registered real AWS above
+	reg.Register(extproviders.NewNamedProvider("aws-lambda", aws))
+	gcp := gcpprovider.New()
+	reg.Register(gcp)
+	RegisterAPIProviders(reg)
+	// Phase 15c: register any discovered external provider plugins.
+	if res, err := external.Discover(external.DiscoverOptions{}); err == nil {
+		for _, m := range res.Plugins {
+			if m.Kind != "provider" || m.Executable == "" {
+				continue
+			}
+			// Default precedence: builtin wins. External providers can be forced via the registry
+			// by explicitly preferring external in the CLI for extension inspection; for lifecycle,
+			// use a provider name that is not built-in.
+			if _, err := reg.Get(m.ID); err == nil {
+				continue
+			}
+			reg.Register(external.NewExternalProviderAdapter(m.ID, m.Executable))
 		}
-		reg.Register(providers.NewStubProvider(name))
 	}
 
 	cfg, err := config.Load(configPath)
@@ -47,15 +59,14 @@ func Bootstrap(configPath, stage, providerOverride string) (*AppContext, error) 
 		return nil, appErrs.Wrap(appErrs.CodeConfigResolve, "failed to resolve config", err)
 	}
 
-	if err := config.Validate(cfg); err != nil {
-		return nil, appErrs.Wrap(appErrs.CodeConfigValidation, "config validation failed", err)
-	}
-
 	if err := config.ApplyProviderOverride(cfg, providerOverride); err != nil {
 		return nil, appErrs.Wrap(appErrs.CodeConfigValidation, err.Error(), err)
 	}
 	if err := config.Validate(cfg); err != nil {
-		return nil, appErrs.Wrap(appErrs.CodeConfigValidation, "config validation failed after provider override", err)
+		if providerOverride != "" {
+			return nil, appErrs.Wrap(appErrs.CodeConfigValidation, "config validation failed after provider override", err)
+		}
+		return nil, appErrs.Wrap(appErrs.CodeConfigValidation, "config validation failed", err)
 	}
 
 	rootDir := filepath.Dir(configPath)
@@ -177,13 +188,4 @@ func BackendOptionsForKind(ctx *AppContext, kindOverride string) backends.Option
 		SqlitePath:      sqlitePath,
 		ReceiptTable:    receiptTable,
 	}
-}
-
-// matrixProviderNames returns provider names from the Trigger Capability Matrix (for registration).
-func matrixProviderNames() []string {
-	names := make([]string, 0, len(planner.ProviderCapabilities))
-	for name := range planner.ProviderCapabilities {
-		names = append(names, name)
-	}
-	return names
 }

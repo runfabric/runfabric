@@ -1,10 +1,11 @@
 package app
 
 import (
+	"github.com/runfabric/runfabric/engine/internal/config"
 	"github.com/runfabric/runfabric/engine/internal/state"
 )
 
-// DashboardData is the data passed to the dashboard UI (project, stage, deploy status).
+// DashboardData is the data passed to the dashboard UI (project, stage, deploy status, optional AI workflow).
 type DashboardData struct {
 	Service       string
 	Stage         string
@@ -13,6 +14,10 @@ type DashboardData struct {
 	Stages        []state.ReleaseEntry
 	Receipt       *state.Receipt
 	HasDeployment bool
+	// AI Workflow (Phase 14): when aiWorkflow.enable is true
+	AiWorkflowHash  string
+	AiWorkflowEntry string
+	AiWorkflowCost  *state.WorkflowCostSummary
 }
 
 // Dashboard loads config and receipt for the given stage and returns data for the dashboard UI.
@@ -33,6 +38,23 @@ func Dashboard(configPath, stage string) (*DashboardData, error) {
 	if err == nil && receipt != nil {
 		data.Receipt = receipt
 		data.HasDeployment = true
+		if receipt.Metadata != nil {
+			data.AiWorkflowHash = receipt.Metadata["aiWorkflowHash"]
+			data.AiWorkflowEntry = receipt.Metadata["aiWorkflowEntrypoint"]
+		}
+	}
+	if ctx.Config.AiWorkflow != nil && ctx.Config.AiWorkflow.Enable {
+		if data.AiWorkflowHash == "" {
+			if g, _ := config.CompileAiWorkflow(ctx.Config.AiWorkflow); g != nil {
+				data.AiWorkflowHash = g.Hash
+				data.AiWorkflowEntry = g.Entrypoint
+			}
+		}
+		runs, _ := state.ListWorkflowRuns(ctx.RootDir, ctx.Stage, 20)
+		if len(runs) > 0 {
+			s := state.WorkflowCostFromRuns(runs)
+			data.AiWorkflowCost = &s
+		}
 	}
 	return data, nil
 }
