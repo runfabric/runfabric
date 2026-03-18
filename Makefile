@@ -1,6 +1,6 @@
 APP=runfabric
 
-.PHONY: all help build build-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-run docker-daemon-up docker-daemon-down
+.PHONY: all help build build-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-run docker-daemon-up docker-daemon-down registry-api
 
 # UPX: compress binaries for smaller distribution. Override with e.g. make build-upx UPX="upx --best"
 # On macOS, UPX requires --force-macos; compressed binaries may need re-signing for notarization.
@@ -44,10 +44,13 @@ help:
 	@echo "  make mcp           run MCP server (stdio; requires runfabric on PATH)"
 	@echo "  make daemon-background  start daemon in background (logs: .runfabric/daemon.log)"
 	@echo "  make daemon-stop   stop daemon started with daemon-background"
-	@echo "  make docker-daemon-build  build daemon Docker image (Dockerfile.daemon)"
-	@echo "  make docker-daemon-run    run daemon container (API on port 8766)"
-	@echo "  make docker-daemon-up    docker compose up daemon + Redis (docker-compose.daemon.yml)"
+	@echo "  make docker-daemon-build  build daemon Docker image (infra/Dockerfile.daemon)"
+	@echo "  make docker-daemon-tag    tag image as ghcr.io/runfabric/runfabric-daemon:latest"
+	@echo "  make docker-daemon-push  build, tag, and push daemon image to ghcr.io"
+	@echo "  make docker-daemon-run   run daemon container (API on port 8766)"
+	@echo "  make docker-daemon-up    docker compose up daemon + Redis (infra/docker-compose.daemon.yml)"
 	@echo "  make docker-daemon-down  docker compose down daemon stack"
+	@echo "  make registry-api    run local extension registry API (registry/)"
 
 VERSION_FILE := $(shell cat VERSION 2>/dev/null | tr -d '\n' || echo "0.0.0-dev")
 ENGINE_LDFLAGS := -s -w -X github.com/runfabric/runfabric/engine/internal/runtime.Version=$(VERSION_FILE) -X github.com/runfabric/runfabric/engine/internal/runtime.ProtocolVersion=1
@@ -179,6 +182,12 @@ lint:
 test:
 	cd engine && go test ./...
 
+# Local extension registry API (development scaffold).
+# Override listen address: make registry-api REGISTRY_LISTEN=0.0.0.0:8787
+REGISTRY_LISTEN ?= 127.0.0.1:8787
+registry-api:
+	cd registry && go run ./cmd/registry --listen $(REGISTRY_LISTEN)
+
 # Test coverage for engine. Target: 95%% for critical packages (internal/config, internal/planner). View: cd engine && go tool cover -html=coverage.out
 coverage:
 	@cd engine && go test -coverprofile=coverage.out ./...
@@ -261,13 +270,20 @@ daemon-stop:
 
 # Daemon Docker image (see docs/DAEMON.md). Image name override: make docker-daemon-build DAEMON_IMAGE=my-registry/runfabric-daemon
 DAEMON_IMAGE ?= runfabric-daemon
-DAEMON_COMPOSE ?= docker-compose.daemon.yml
+DAEMON_COMPOSE ?= infra/docker-compose.daemon.yml
 
 docker-daemon-build:
-	docker build -f Dockerfile.daemon -t $(DAEMON_IMAGE) .
+	docker build -f infra/Dockerfile.daemon -t $(DAEMON_IMAGE) .
+
+# Tag and push daemon image to GitHub Container Registry (ghcr.io/runfabric/runfabric-daemon:latest)
+GHCRIO_DAEMON_IMAGE ?= ghcr.io/runfabric/runfabric-daemon:latest
+docker-daemon-tag: docker-daemon-build
+	docker tag $(DAEMON_IMAGE) $(GHCRIO_DAEMON_IMAGE)
+docker-daemon-push: docker-daemon-tag
+	docker push $(GHCRIO_DAEMON_IMAGE)
 
 docker-daemon-run: docker-daemon-build
-	docker run -p 8766:8766 $(DAEMON_IMAGE)
+	docker run -d --name runfabric-daemon -p 8766:8766 $(DAEMON_IMAGE)
 
 docker-daemon-up:
 	docker compose -f $(DAEMON_COMPOSE) up -d

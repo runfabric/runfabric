@@ -1,0 +1,19 @@
+services:
+  daemon:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.daemon
+    ports:
+      - "8766:8766"
+    environment:
+      - RUNFABRIC_DAEMON_CACHE_URL=redis://redis:6379/0
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3

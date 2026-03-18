@@ -1,0 +1,27 @@
+name: Publish daemon image to GHCR
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build daemon image
+        run: docker build -f infra/Dockerfile.daemon -t ghcr.io/runfabric/runfabric-daemon:latest .
+
+      - name: Push daemon image
+        run: docker push ghcr.io/runfabric/runfabric-daemon:latest
+

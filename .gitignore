@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-
+*.runfabric*
 # Test binaries
 *.test
 
@@ -13,6 +13,14 @@
 
 # Go workspace file
 go.work
+*.tar.zstd.bz2
+*.tar.zstd.xz
+*.tar.zstd.lzma
+*.tar.zstd.lz
+*.tar.zstd.zst
+*.tar.zstd.zstd.gz
+*.tar.zstd.zstd.bz2
+*.tar.zstd.zstd.xz
 go.work.sum
 
 # Dependency directories (rare with Go modules but sometimes used)
