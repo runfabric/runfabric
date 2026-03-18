@@ -1,6 +1,6 @@
 # Command Reference
 
-Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-s`/`--stage` (stage name), `--json` (machine-readable output), `--non-interactive` (disable prompts; for CI/MCP), `-y`/`--yes` (assume yes for any confirmation).
+Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-s`/`--stage` (stage name), `--json` (machine-readable output), `--non-interactive` (disable prompts; for CI/MCP), `-y`/`--yes` (assume yes for any confirmation), `--auto-install-extensions` (prompt to auto-install missing external plugins from registry; combine with `-y` for CI).
 
 ## Quick navigation
 

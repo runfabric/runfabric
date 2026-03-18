@@ -43,7 +43,23 @@
     },
     "extensions": {
       "type": "object",
-      "description": "Provider-specific extensions (e.g. extensions.aws-lambda, extensions.kubernetes)."
+      "description": "Extensions and extension settings. Includes provider-specific extensions (e.g. extensions.aws-lambda, extensions.kubernetes) and global extension behavior flags.",
+      "properties": {
+        "autoInstallExtensions": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, and the configured provider plugin is not installed, RunFabric may prompt to install it from the registry (or auto-accept with -y)."
+        },
+        "runtimePlugin": {
+          "type": "string",
+          "description": "Optional runtime plugin ID to ensure is installed when autoInstallExtensions is enabled (kind=runtime)."
+        },
+        "simulatorPlugin": {
+          "type": "string",
+          "description": "Optional simulator plugin ID to ensure is installed when autoInstallExtensions is enabled (kind=simulator)."
+        }
+      },
+      "additionalProperties": true
     },
     "hooks": { "type": "array", "items": { "type": "string" } },
     "env": { "type": "object", "additionalProperties": { "type": "string" } },

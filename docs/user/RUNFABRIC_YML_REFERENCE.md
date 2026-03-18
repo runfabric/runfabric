@@ -44,7 +44,7 @@ triggers:
 - **Extensions**
   - `addons` (`Record<string, addon>`, optional) — Add-on declarations (marketplace-style). See [Add-ons](#add-ons) and `runfabric addons list`.
   - `addonCatalogUrl` (`string`, optional) — URL to fetch addon catalog entries (JSON array); merged with built-in when running `runfabric addons list`.
-  - `extensions` (`object`, optional)
+  - `extensions` (`object`, optional) — Extension settings and provider-specific extension config.
   - `hooks` (`string[]`, optional)
 
 - **Deploy, state, and environments**
@@ -95,6 +95,32 @@ providerOverrides:
 ```
 
 Then run e.g. `runfabric deploy --provider aws --stage prod` or `runfabric deploy --provider gcp --stage prod`. Without `--provider`, the top-level `provider` block is used. When a provider override includes `backend`, that backend is used for state (receipts, locks) when `--provider <key>` is set. Invoke, logs, metrics, and traces also accept `--provider` for multi-cloud.
+
+## Auto-install missing extensions (plugins)
+
+If your `provider.name` refers to an **external provider plugin** that is not installed on disk, lifecycle commands (plan/deploy/invoke/logs/etc.) will fail with “provider … not registered”.
+
+To let RunFabric auto-install the missing provider from the registry, enable:
+
+```yaml
+extensions:
+  autoInstallExtensions: true
+```
+
+Behavior:
+
+- **Interactive (default)**: prompts `Install from registry? [y/N]` and continues on yes.
+- **Non-interactive**: add `-y/--yes` to auto-accept, otherwise it fails safely.
+- **Registry URL/token**: uses `RUNFABRIC_REGISTRY_URL` / `RUNFABRIC_REGISTRY_TOKEN` (or `.runfabricrc` `registry.url` / `registry.token` when present).
+
+You can also ensure other plugin kinds are installed (best-effort) when auto-install is enabled:
+
+```yaml
+extensions:
+  autoInstallExtensions: true
+  runtimePlugin: nodejs        # kind=runtime
+  simulatorPlugin: local       # kind=simulator
+```
 
 ## Real deploy and unsafe defaults
 

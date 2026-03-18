@@ -9,15 +9,21 @@ Copyright (c) 2026 RunFabric and contributors. All rights reserved.
 
    "Cloud Service" (or "Service Offering") means making the Software, or a product
    or service that substantially incorporates or depends on the Software, available
-   to third parties as a hosted, managed, software-as-a-service (SaaS), platform-
-   as-a-service (PaaS), or similar offering—including where You operate the
-   Software or a derivative on behalf of others or allow third parties to use it
-   as a service. Examples include: offering "RunFabric as a Service," operating a
+   to third parties as a hosted, managed, or software-as-a-service (SaaS)
+   offering (hosted/managed/SaaS), including platform-as-a-service (PaaS) or
+   similar offering—including where You operate the Software or a derivative on
+   behalf of others or allow third parties to use it as a service. Examples include: offering "RunFabric as a Service," operating a
    deployment or serverless platform built on the Software for customers, or
    reselling or white-labeling the Software as a hosted offering.
 
    "You" (or "Your") means the individual or entity exercising rights under this
    license.
+
+   "Contribution" means any code, documentation, or other content submitted to
+   the Software for inclusion in the project (e.g., via pull request or similar).
+
+   "Creator" (or "First Contributor") means Yogesh Nishad (Rabson), the original author of
+   the Software.
 
 2. GRANT OF RIGHTS
 
@@ -27,41 +33,71 @@ Copyright (c) 2026 RunFabric and contributors. All rights reserved.
    based on the Software, for Your own projects. You may use the Software for
    personal, educational, internal, or commercial projects—including to build,
    deploy, and operate Your own applications and services—provided that such use
-   does not constitute a Cloud Service under Section 3.
+   does not constitute a Cloud Service under Section 5.
 
-3. RESTRICTIONS
+3. CONTRIBUTOR GRANT
+
+   If You submit a Contribution to the Software, You grant to RunFabric and its
+   successors a perpetual, worldwide, non-exclusive, royalty-free, irrevocable
+   license to use, reproduce, modify, distribute, and sublicense Your
+   Contribution as part of the Software, including under different terms (such
+   as a separate commercial or Cloud Service license). RunFabric does not need
+   additional permission from You or any other contributor to offer the
+   Software as a Cloud Service or to grant third-party licenses for such use.
+
+4. CREATOR RIGHTS
+
+   The Creator retains: (a) the right to be identified as the original author in
+   the Software and in derivative works (attribution); and (b) a perpetual,
+   worldwide, irrevocable, royalty-free license to use, copy, modify, and create
+   derivative works based on the Software for the Creator's own projects,
+   including commercial use. RunFabric may offer the Software as a Cloud Service
+   only with the prior written permission of the Creator. The Software shall
+   remain open source and free to use under this license (or a successor
+   license that preserves the same rights to use, copy, modify, and distribute
+   for non-Cloud-Service use). No party, including RunFabric, may relicense the
+   Software under a more restrictive or proprietary license, or take actions
+   that would prevent the Software from remaining freely available under these
+   terms, without the prior written permission of the Creator. Nothing in this
+   license waives the Creator's moral rights where such rights cannot be waived
+   under applicable law.
+
+5. RESTRICTIONS
 
    (a) No Cloud Service. You may not use the Software to provide a Cloud Service
-       to third parties. Offering the Software (or a derivative or service based
-       on it) as a hosted, managed, or cloud offering to others is prohibited
-       under this license. A separate license from the copyright holders is
-       required for any such use.
+   to third parties. Offering the Software (or a derivative or service based
+   on it) as a hosted, managed, SaaS, or other hosted/managed/SaaS offering
+   to others is prohibited under this license. A separate license from the copyright holders is
+   required for any such use. RunFabric may grant such separate licenses
+   without obtaining permission from individual contributors by virtue of
+   the Contributor Grant in Section 3. RunFabric may offer the Software as a
+   Cloud Service only with the prior written permission of the Creator.
 
    (b) No Sublicensing. You may not grant sublicenses under this license. Any
-       distribution of the Software or derivative works must be under this same
-       license and must comply with Section 4.
+   distribution of the Software or derivative works must be under this same
+   license and must comply with Section 6.
 
    (c) No Warranty or Support. The Software is provided without warranty of any
-       kind. The copyright holders are under no obligation to provide support,
-       updates, or maintenance.
+   kind. The copyright holders are under no obligation to provide support,
+   updates, or maintenance.
 
-4. CONDITIONS ON DISTRIBUTION
+6. CONDITIONS ON DISTRIBUTION
 
    If You distribute the Software or any derivative work, You must:
 
    (a) retain all copyright, patent, trademark, and attribution notices that exist
-       in the Software;
+   in the Software;
 
    (b) include a copy of this license with every copy of the Software or
-       derivative work You distribute;
+   derivative work You distribute;
 
    (c) cause any modified files to carry prominent notices stating that You
-       changed the Software and the date of any change; and
+   changed the Software and the date of any change; and
 
    (d) make the source code of the Software (and of any derivative work You
-       distribute) freely available under this same license.
+   distribute) freely available under this same license.
 
-5. INTELLECTUAL PROPERTY
+7. INTELLECTUAL PROPERTY
 
    The copyright holders retain all right, title, and interest in and to the
    Software. This license does not grant You any rights to trademarks, service
@@ -69,7 +105,7 @@ Copyright (c) 2026 RunFabric and contributors. All rights reserved.
    granted except as may be necessary to use the Software as permitted under
    Section 2.
 
-6. DISCLAIMER OF WARRANTY
+8. DISCLAIMER OF WARRANTY
 
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -79,7 +115,7 @@ Copyright (c) 2026 RunFabric and contributors. All rights reserved.
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE.
 
-7. LIMITATION OF LIABILITY
+9. LIMITATION OF LIABILITY
 
    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY DIRECT,
    INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
@@ -89,21 +125,21 @@ Copyright (c) 2026 RunFabric and contributors. All rights reserved.
    NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
    EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-8. TERMINATION
+10. TERMINATION
 
-   This license is effective until terminated. Your rights under this license will
-   terminate automatically without notice if You fail to comply with any of its
-   terms. Upon termination, You must cease all use of the Software and destroy all
-   copies. Sections 5, 6, 7, and this Section 8 shall survive termination.
+This license is effective until terminated. Your rights under this license will
+terminate automatically without notice if You fail to comply with any of its
+terms. Upon termination, You must cease all use of the Software and destroy all
+copies. Sections 7, 8, 9, and this Section 10 shall survive termination.
 
-9. GOVERNING LAW
+11. GOVERNING LAW
 
-   This license shall be governed by and construed in accordance with the laws of
-   the jurisdiction of the copyright holder, without regard to its conflict of
-   law provisions. Any disputes arising under this license shall be subject to
-   the exclusive jurisdiction of the courts in that jurisdiction.
+This license shall be governed by and construed in accordance with the laws of
+the jurisdiction of the copyright holder, without regard to its conflict of
+law provisions. Any disputes arising under this license shall be subject to
+the exclusive jurisdiction of the courts in that jurisdiction.
 
-10. ENTIRE AGREEMENT
+12. ENTIRE AGREEMENT
 
     This license constitutes the entire agreement between You and the copyright
     holders regarding the Software and supersedes all prior or contemporaneous

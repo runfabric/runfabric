@@ -24,6 +24,8 @@ const (
 	defaultRegistryURL = "https://registry.runfabric.cloud"
 )
 
+func DefaultRegistryURL() string { return defaultRegistryURL }
+
 func RegistryURLFromEnv() string {
 	v := strings.TrimSpace(os.Getenv(envRegistryURL))
 	if v == "" {
@@ -96,6 +98,19 @@ type ResolveOptions struct {
 	Timeout     time.Duration
 }
 
+type registryErrorEnvelope struct {
+	Error registryAPIError `json:"error"`
+}
+
+type registryAPIError struct {
+	Code      string         `json:"code"`
+	Message   string         `json:"message"`
+	Details   map[string]any `json:"details,omitempty"`
+	Hint      string         `json:"hint,omitempty"`
+	DocsURL   string         `json:"docsUrl,omitempty"`
+	RequestID string         `json:"requestId"`
+}
+
 func Resolve(opts ResolveOptions) (*ResolveResponse, error) {
 	reg := strings.TrimRight(strings.TrimSpace(opts.RegistryURL), "/")
 	if reg == "" {
@@ -156,7 +171,23 @@ func Resolve(opts ResolveOptions) (*ResolveResponse, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
-		return nil, fmt.Errorf("resolve: %s: %s", resp.Status, strings.TrimSpace(string(b)))
+		msg := strings.TrimSpace(string(b))
+		var env registryErrorEnvelope
+		if err := json.Unmarshal(b, &env); err == nil && strings.TrimSpace(env.Error.Code) != "" && strings.TrimSpace(env.Error.Message) != "" {
+			parts := []string{fmt.Sprintf("resolve: %s: %s", env.Error.Code, env.Error.Message)}
+			if strings.TrimSpace(env.Error.Hint) != "" {
+				parts = append(parts, "hint: "+strings.TrimSpace(env.Error.Hint))
+			}
+			if strings.TrimSpace(env.Error.RequestID) != "" {
+				parts = append(parts, "requestId: "+strings.TrimSpace(env.Error.RequestID))
+			}
+			// Use a constant format string to satisfy go vet.
+			return nil, fmt.Errorf("%s", strings.Join(parts, " | "))
+		}
+		if msg == "" {
+			msg = resp.Status
+		}
+		return nil, fmt.Errorf("resolve: %s", msg)
 	}
 	var rr ResolveResponse
 	if err := json.NewDecoder(resp.Body).Decode(&rr); err != nil {
