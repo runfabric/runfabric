@@ -26,6 +26,9 @@ go.work.sum
 # Dependency directories (rare with Go modules but sometimes used)
 vendor/
 
+# Registry runtime data (local DB, uploads)
+registry/data/
+
 # Build directories (root only; engine/internal/runtime/build is source code)
 bin/
 /build/
