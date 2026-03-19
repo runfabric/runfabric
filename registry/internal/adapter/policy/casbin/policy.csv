@@ -1,0 +1,16 @@
+# format:
+# p, role, object, action, allow|deny
+# g, subject, role, tenant
+p, admin, package, package:read, allow
+p, admin, package, package:publish, allow
+p, admin, package, package:delete, allow
+p, admin, package, package:manage_visibility, allow
+p, admin, registry, registry:audit:read, allow
+p, publisher, package, package:read, allow
+p, publisher, package, package:publish, allow
+p, publisher, package, package:manage_visibility, allow
+p, reader, package, package:read, allow
+p, anonymous, package, package:read, allow
+g, runfabric-dev, admin, tenant_runfabric
+g, runfabric-official, publisher, tenant_runfabric
+g, ci-bot, admin, tenant_runfabric

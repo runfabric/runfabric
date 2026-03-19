@@ -1,0 +1,9 @@
+{
+  "name": "@runfabric/registry-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "RunFabric registry SPA (docs + marketplace + auth UX)",
+  "scripts": {
+    "build": "node ./scripts/build.mjs"
+  }
+}

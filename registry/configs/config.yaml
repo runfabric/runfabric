@@ -1,0 +1,47 @@
+# RunFabric Registry — simplified config.
+# Override with REGISTRY_CONFIG or -config.
+
+server:
+  listen: "127.0.0.1:8787"
+  web_dir: "./web/dist"
+  ui_auth_url: "https://auth.runfabric.cloud/device"
+  ui_docs_url: "https://runfabric.cloud/docs"
+
+storage:
+  provider: "json" # auto|json|postgres|mongodb
+  config:
+    dsn: ""
+    driver: "pgx"
+    uri: ""
+    database: "runfabric_registry"
+    db_path: "./data/registry.db.json"
+    uploads_dir: "./data/uploads"
+  cache:
+    redis_addr: ""
+
+auth:
+  allow_anonymous_read: true
+  artifact_signing_secret: "change-me"
+  oidc:
+    issuer: "https://auth.runfabric.cloud"
+    audience: "registry"
+    jwks_url: "https://auth.runfabric.cloud/.well-known/jwks.json"
+    subject_claim: "sub"
+    tenant_claim: "tenant_id"
+    roles_claim: "roles"
+    role_modes: "roles,realm_access.roles,resource_access.<client>.roles,scope"
+    role_client_id: "registry"
+    audience_mode: "exact" # exact|includes|skip
+    allowed_jwt_algs: "RS256,ES256"
+  casbin_policy_path: "internal/adapter/policy/casbin/policy.csv"
+
+artifacts:
+  provider: "s3"
+  config:
+    base_url: ""
+    bucket: ""
+    region: ""
+    endpoint: ""
+    access_key_id: ""
+    secret_access_key: ""
+    session_token: ""
