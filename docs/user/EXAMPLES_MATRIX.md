@@ -1,6 +1,6 @@
 # Examples and Trigger Capability Matrix
 
-This document describes which **triggers** each provider supports. The Go engine enforces this matrix in `internal/planner` (see [ARCHITECTURE.md](ARCHITECTURE.md)).
+This document describes which **triggers** each provider supports. The Go engine enforces this matrix in `internal/planner` (see [ARCHITECTURE.md](../developer/ARCHITECTURE.md)).
 
 ## Quick navigation
 

@@ -66,8 +66,8 @@ Input to `apply`: `functionName`, `functionConfig`, `addonConfig`, `projectRoot`
 ### 1.5 References (addons)
 
 - [ADDON_CONTRACT.md](ADDON_CONTRACT.md) — Full TypeScript interface and semantics.  
-- [ADDONS.md](ADDONS.md) — Declarative usage in `runfabric.yml`.  
-- [RUNFABRIC_YML_REFERENCE.md](RUNFABRIC_YML_REFERENCE.md) — `addons` and `addonCatalogUrl`.
+- [ADDONS.md](../user/ADDONS.md) — Declarative usage in `runfabric.yml`.  
+- [RUNFABRIC_YML_REFERENCE.md](../user/RUNFABRIC_YML_REFERENCE.md) — `addons` and `addonCatalogUrl`.
 
 ---
 
@@ -160,7 +160,7 @@ See [EXTERNAL_EXTENSIONS_PLAN.md](EXTERNAL_EXTENSIONS_PLAN.md) for on-disk layou
 
 - [PLUGINS.md](PLUGINS.md) — Provider plugin interface, ProviderRegistry, lifecycle hooks.  
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Deploy flow and provider layout.  
-- [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) — `plugin list|info|doctor|capabilities`, `extension list|info|search`.  
+- [COMMAND_REFERENCE.md](../user/COMMAND_REFERENCE.md) — `plugin list|info|doctor|capabilities`, `extension list|info|search`.  
 - [EXTERNAL_EXTENSIONS_PLAN.md](EXTERNAL_EXTENSIONS_PLAN.md) — External plugins on disk, stdio protocol, install flow.
 
 ---
@@ -176,4 +176,4 @@ See [EXTERNAL_EXTENSIONS_PLAN.md](EXTERNAL_EXTENSIONS_PLAN.md) for on-disk layou
 
 ---
 
-See also: [ROADMAP.md](ROADMAP.md) (Phase 15 extensions), [RUNFABRIC_YML_REFERENCE.md](RUNFABRIC_YML_REFERENCE.md) (addons and provider config).
+See also: [ROADMAP.md](ROADMAP.md) (Phase 15 extensions), [RUNFABRIC_YML_REFERENCE.md](../user/RUNFABRIC_YML_REFERENCE.md) (addons and provider config).

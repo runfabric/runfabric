@@ -163,4 +163,4 @@ export default {
 
 ---
 
-See also: [RUNFABRIC_YML_REFERENCE.md](RUNFABRIC_YML_REFERENCE.md) (build order), [ADDONS.md](ADDONS.md) (declarative integrations).
+See also: [RUNFABRIC_YML_REFERENCE.md](../user/RUNFABRIC_YML_REFERENCE.md) (build order), [ADDONS.md](../user/ADDONS.md) (declarative integrations).

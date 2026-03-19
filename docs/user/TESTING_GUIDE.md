@@ -162,4 +162,4 @@ Keep handler logic pure where possible (payload in, response out) so it’s easy
 ## See also
 
 - [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) — All CLI commands and flags.
-- [REPO_DEVELOPMENT.md](REPO_DEVELOPMENT.md) — Building and testing the RunFabric repo itself (engine, Makefile, release-check).
+- [REPO_DEVELOPMENT.md](../developer/REPO_DEVELOPMENT.md) — Building and testing the RunFabric repo itself (engine, Makefile, release-check).

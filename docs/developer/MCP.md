@@ -60,5 +60,5 @@ All tools run the CLI with `--json`, `--non-interactive`, and `--yes` so output 
 
 ## See also
 
-- [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) — CLI commands and flags.
+- [COMMAND_REFERENCE.md](../user/COMMAND_REFERENCE.md) — CLI commands and flags.
 - [Model Context Protocol](https://modelcontextprotocol.io/) — MCP specification.

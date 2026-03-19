@@ -229,5 +229,5 @@ Registry: e.g. `function/http`, `function/cron`, `function/queue`.
 ## 14. See also
 
 - [ROADMAP.md](ROADMAP.md) — P1 phase entry for generate  
-- [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) — will list `generate` once implemented  
-- [QUICKSTART.md](QUICKSTART.md) — will reference generate for adding functions  
+- [COMMAND_REFERENCE.md](../user/COMMAND_REFERENCE.md) — will list `generate` once implemented  
+- [QUICKSTART.md](../user/QUICKSTART.md) — will reference generate for adding functions  

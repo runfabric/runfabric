@@ -48,5 +48,5 @@ runfabric dev --stream-from dev --tunnel-url https://abc.ngrok.io
 
 ## See also
 
-- [ROADMAP.md](ROADMAP.md) — Next steps (Dev mode).
+- [ROADMAP.md](../developer/ROADMAP.md) — Next steps (Dev mode).
 - [TESTING_GUIDE.md](TESTING_GUIDE.md) — `call-local` and invoke patterns.

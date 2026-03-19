@@ -147,7 +147,7 @@ runfabric generate function worker --trigger queue --queue-name my-queue
 runfabric generate function cron-job --trigger cron --schedule "rate(5 minutes)"
 ```
 
-Use `--dry-run` to preview, `--force` to overwrite an existing handler file. See [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) and [GENERATE_PROPOSAL.md](GENERATE_PROPOSAL.md).
+Use `--dry-run` to preview, `--force` to overwrite an existing handler file. See [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) and [GENERATE_PROPOSAL.md](../developer/GENERATE_PROPOSAL.md).
 
 Migrate existing `serverless.yml` (best-effort bootstrap):
 
