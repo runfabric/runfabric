@@ -1,6 +1,6 @@
 APP=runfabric
 
-.PHONY: all help build build-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-run docker-daemon-up docker-daemon-down registry-api
+.PHONY: all help build build-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-run docker-daemon-up docker-daemon-down registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down
 
 # UPX: compress binaries for smaller distribution. Override with e.g. make build-upx UPX="upx --best"
 # On macOS, UPX requires --force-macos; compressed binaries may need re-signing for notarization.
@@ -51,6 +51,11 @@ help:
 	@echo "  make docker-daemon-up    docker compose up daemon + Redis (infra/docker-compose.daemon.yml)"
 	@echo "  make docker-daemon-down  docker compose down daemon stack"
 	@echo "  make registry-api    run local extension registry API (registry/)"
+	@echo "  make docker-registry-build  build registry Docker image (registry/Dockerfile)"
+	@echo "  make docker-registry-run    run registry container (port 8787)"
+	@echo "  make docker-registry-stop   stop registry container"
+	@echo "  make docker-registry-up     docker compose up registry stack (infra/docker-compose.registry.yml)"
+	@echo "  make docker-registry-down   docker compose down registry stack"
 
 VERSION_FILE := $(shell cat VERSION 2>/dev/null | tr -d '\n' || echo "0.0.0-dev")
 ENGINE_LDFLAGS := -s -w -X github.com/runfabric/runfabric/engine/internal/runtime.Version=$(VERSION_FILE) -X github.com/runfabric/runfabric/engine/internal/runtime.ProtocolVersion=1
@@ -124,10 +129,11 @@ release-check:
 	@echo "release-check OK"
 
 # Verify docs: (1) relative .md links in docs/ resolve to existing files; (2) no outdated refs to packages/planner, packages/core.
+# Validates docs/*.md, docs/user/**/*.md, and docs/developer/**/*.md.
 check-docs-sync:
 	@echo "Checking doc links..."
 	@tmp=$$(mktemp); \
-	for f in docs/*.md; do \
+	for f in $$(find docs -name '*.md' 2>/dev/null); do \
 	  [ -f "$$f" ] || continue; \
 	  base=$$(dirname "$$f"); \
 	  grep -hoE '\]\([^)]+\)' "$$f" 2>/dev/null | sed 's/](\(.*\))/\1/' | while read link; do \
@@ -140,7 +146,7 @@ check-docs-sync:
 	    [ -f "$$target" ] || [ -d "$$target" ] || echo "  Broken: $$f -> $$link ($$target)" >> "$$tmp"; \
 	  done; \
 	done; \
-	outdated=$$(grep -rE 'packages/planner|packages/core' docs/*.md 2>/dev/null | grep -v ROADMAP_PHASES || true); \
+	outdated=$$(grep -rE 'packages/planner|packages/core' docs/ 2>/dev/null | grep -v ROADMAP_PHASES || true); \
 	if [ -n "$$outdated" ]; then echo "  Outdated refs (packages/planner or packages/core) in docs/" >> "$$tmp"; fi; \
 	if [ -s "$$tmp" ]; then cat "$$tmp"; rm -f "$$tmp"; exit 1; fi; \
 	rm -f "$$tmp"; echo "check-docs-sync OK"
@@ -187,6 +193,29 @@ test:
 REGISTRY_LISTEN ?= 127.0.0.1:8787
 registry-api:
 	cd registry && go run ./cmd/registry --listen $(REGISTRY_LISTEN)
+
+# Build registry Docker image. Image name: make docker-registry-build REGISTRY_IMAGE=myorg/runfabric-registry
+REGISTRY_IMAGE ?= runfabric-registry:latest
+REGISTRY_CONTAINER ?= runfabric-registry
+REGISTRY_COMPOSE ?= infra/docker-compose.registry.yml
+
+docker-registry-build:
+	docker build -t $(REGISTRY_IMAGE) -f registry/Dockerfile .
+
+docker-registry-run: docker-registry-build
+	docker run -d --name $(REGISTRY_CONTAINER) -p 8787:8787 $(REGISTRY_IMAGE)
+
+docker-registry-stop:
+	docker stop $(REGISTRY_CONTAINER) 2>/dev/null || true
+	docker rm $(REGISTRY_CONTAINER) 2>/dev/null || true
+
+docker-registry-up:
+	docker rm -f $(REGISTRY_CONTAINER) 2>/dev/null || true
+	docker compose -f $(REGISTRY_COMPOSE) up -d --build
+
+docker-registry-down:
+	docker compose -f $(REGISTRY_COMPOSE) down
+	docker rm -f $(REGISTRY_CONTAINER) 2>/dev/null || true
 
 # Test coverage for engine. Target: 95%% for critical packages (internal/config, internal/planner). View: cd engine && go tool cover -html=coverage.out
 coverage:
@@ -238,7 +267,7 @@ unlock:
 	cd engine && go run ./cmd/runfabric unlock --config ../examples/node/hello-aws/runfabric.yml --stage dev --force
 
 inspect-remote:
-	cd engine && RUNFABRIC_BACKEND=aws-remote \
+	cd engine && RUNFABRIC_BACKEND=aws \
 	RUNFABRIC_S3_BUCKET=$(RUNFABRIC_S3_BUCKET) \
 	RUNFABRIC_S3_PREFIX=$(RUNFABRIC_S3_PREFIX) \
 	RUNFABRIC_DYNAMODB_TABLE=$(RUNFABRIC_DYNAMODB_TABLE) \
@@ -248,7 +277,7 @@ lock-steal:
 	cd engine && go run ./cmd/runfabric lock-steal --config ../examples/node/hello-aws/runfabric.yml --stage dev
 
 backend-migrate:
-	cd engine && go run ./cmd/runfabric backend-migrate --config ../examples/node/hello-aws/runfabric.yml --stage dev --target aws-remote
+	cd engine && go run ./cmd/runfabric backend-migrate --config ../examples/node/hello-aws/runfabric.yml --stage dev --target aws
 
 # MCP server (protocol/mcp). Requires Node.js. Use with Cursor/IDE MCP client (stdio).
 mcp-install:
