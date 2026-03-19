@@ -158,7 +158,7 @@ External plugins are **out-of-process** (separate binary). The engine talks to t
 
 **Current implementation note (Phase 15c):** The external provider adapter starts a **fresh subprocess per call** (Doctor/Plan/Deploy/Remove/Invoke/Logs). Process reuse + idle timeout is a follow-up optimization.
 
-**Go SDK for plugin authors:** A separate **Go SDK** for extension development is planned so plugin binaries can be built without importing the engine. The SDK will provide wire types and a stdio server loop; you implement an interface and get a runnable binary. See [EXTENSION_DEVELOPMENT_GUIDE.md](EXTENSION_DEVELOPMENT_GUIDE.md) §2.5 and the ROADMAP item “Go SDK for extension development”.
+**Go SDK for plugin authors:** A separate **Go SDK** for extension development is available at `packages/go/plugin-sdk`, so plugin binaries can be built without importing engine internals. It provides wire types and a stdio server loop; you implement handlers and run the server. See [EXTENSION_DEVELOPMENT_GUIDE.md](EXTENSION_DEVELOPMENT_GUIDE.md) §2.5.
 
 ---
 

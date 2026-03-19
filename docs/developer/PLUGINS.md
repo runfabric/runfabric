@@ -5,9 +5,9 @@ Plugins are **system/capability-level implementations** (providers, runtimes, si
 - **Use plugins for**: providers, runtimes, simulators.
 - **Do not use plugins for**: Sentry/Datadog wrapping, simple build hooks, or project notifications (those belong in addons).
 
-There is also an existing **Node hook mechanism** (top-level `hooks` in `runfabric.yml`) which behaves like a “plugin” system today, but in the future this will be formalized as the **addon lifecycle hook surface** while provider/runtime/simulator plugins move to Go-side capability interfaces.
+There is also an existing **Node hook mechanism** (top-level `hooks` in `runfabric.yml`). It is treated as the **addon lifecycle hook surface**; provider/runtime/simulator plugins are Go-side extension contracts.
 
-**Go CLI support:** The Go binary today treats providers/runtimes as in-process implementations but the roadmap is to route them via a plugin-style registry (see `engine/internal/providers`, `engine/internal/extensions/runtime`). It does **not** execute Node hook modules.
+**Go CLI support:** The Go binary treats providers/runtimes/simulators as in-process implementations resolved through the extension boundary in `engine/internal/extensions/resolution` (provider registry + runtime/simulator resolution). It does **not** execute Node hook modules.
 
 **Node CLI support:** The Node CLI (`@runfabric/cli`) executes lifecycle hook modules referenced via `hooks:` in config. Think of those as **addon hooks**, not provider plugins.
 
@@ -16,7 +16,16 @@ There is also an existing **Node hook mechanism** (top-level `hooks` in `runfabr
 ## Quick navigation
 
 - **Go provider plugins**: Provider plugin interface
+- **Engine boundary**: `internal/extensions/resolution`
 - **Node lifecycle hooks**: Lifecycle hooks + Hook API contract
+
+## Engine extension boundary (Go)
+
+Provider/runtime resolution in the Go engine should happen through `engine/internal/extensions/resolution`:
+
+- Build a provider registry with built-ins + API-backed provider adapters.
+- Merge discoverable external plugins from `RUNFABRIC_HOME/plugins` while preserving built-in precedence.
+- Keep `aws` and `aws-lambda` internal until the provider plugin contract is stable.
 
 ## Provider plugin interface (Go, recommended)
 

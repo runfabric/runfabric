@@ -52,7 +52,10 @@ For production, avoid committing credentials. Store them in your cloud’s secre
 | **GCP** | [Secret Manager](https://cloud.google.com/secret-manager/docs) | Use `gcloud secrets versions access latest --secret=runfabric-gcp-key` or workload identity to inject into CI. |
 | **Azure** | [Key Vault](https://azure.microsoft.com/products/key-vault) | Use `az keyvault secret show` or managed identity in CI to populate `AZURE_CLIENT_SECRET` and related env vars. |
 
-In CI (e.g. GitHub Actions), use the provider’s “secret” or “vault” integration to set env vars from the secret manager before running `runfabric doctor`, `runfabric deploy`, etc. The RunFabric engine reads credentials only from the environment; it does not call secret managers directly. To resolve `${secret:...}` placeholders in `runfabric.yml`, use a pre-step or the internal secrets resolver once wired to your backend (see `internal/secrets`).
+In CI (e.g. GitHub Actions), use the provider’s “secret” or “vault” integration to set env vars before running `runfabric doctor`, `runfabric deploy`, etc. The RunFabric engine reads credentials from environment variables and now resolves `${secret:KEY}` in `runfabric.yml` via:
+
+1. Top-level `secrets.KEY` value (including `secret://OTHER_KEY` indirection), then
+2. Environment variable `KEY`.
 
 ## Deploy Mode Controls
 

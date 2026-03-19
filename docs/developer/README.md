@@ -8,7 +8,7 @@ Start here if you’re contributing to RunFabric or building extensions/registry
 - **Architecture**: [ARCHITECTURE.md](ARCHITECTURE.md)
 - **Build & release**: [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md)
 - **Roadmap**: [ROADMAP.md](ROADMAP.md)
-- **Project TODO**: [TODO.md](TODO.md)
+- **Frontend V1 plan**: [FRONTEND_V1_PLAN.md](FRONTEND_V1_PLAN.md)
 
 ## Extensions + plugins + registry
 
@@ -25,4 +25,3 @@ Start here if you’re contributing to RunFabric or building extensions/registry
 
 - **SDK frameworks**: [SDK_FRAMEWORKS.md](SDK_FRAMEWORKS.md)
 - **Handler scenarios**: [HANDLER_SCENARIOS.md](HANDLER_SCENARIOS.md)
-

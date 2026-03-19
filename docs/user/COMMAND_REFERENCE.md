@@ -9,12 +9,13 @@ Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-
 - **Local dev**: Local development and debugging
 - **Ops**: Invocation/logs/observability
 - **Extensions**: Addons and plugins
+- **Auth**: Auth and identity
 - **Daemon/UI**: Daemon, dashboard, and config API
 - **State/recovery**: State + Recovery and inspection
 
 ## Project setup and scaffolding
 
-- `runfabric init [--dir <path>] [--template <api|worker|queue|cron|storage|eventbridge|pubsub>] [--provider <name>] [--state-backend <local|postgres|s3|gcs|azblob>] [--lang <node|ts|js|python|go>] [--service <name>] [--pm <npm|pnpm|yarn|bun>] [--skip-install] [--call-local] [--with-build] [--with-ci <github-actions>] [--no-interactive]` — Use `--with-ci github-actions` to add `.github/workflows/deploy.yml` (doctor → plan → deploy on push).
+- `runfabric init [--dir <path>] [--template <api|worker|queue|cron|storage|eventbridge|pubsub>] [--provider <name>] [--state-backend <local|postgres|s3|gcs|azblob>] [--lang <node|ts|js|python|go>] [--service <name>] [--pm <npm|pnpm|yarn|bun>] [--skip-install] [--call-local] [--with-build] [--with-ci <github-actions>] [--no-interactive]` — Use `--with-ci github-actions` to add `.github/workflows/deploy.yml` (doctor → plan → deploy on push). `init` currently scaffolds a subset of backends for simplicity.
 - `runfabric generate` — Scaffold artifacts in an existing project: `generate function`, `generate resource`, `generate addon`, `generate provider-override`.
 - `runfabric generate function <name> [--trigger http|cron|queue] [--route <method>:<path>] [--schedule <cron>] [--queue-name <name>] [--provider <key>] [--lang js|ts|python|go] [--entry <path>] [--dry-run] [--force] [--no-backup] [--json]` — Add a new function: creates handler file and patches runfabric.yml. Infers provider and language from config and project; use `--trigger` (default http), `--route` (e.g. GET:/hello), `--schedule`, `--queue-name`. Fails if function name already exists; `--force` overwrites handler file only. See [GENERATE_PROPOSAL.md](GENERATE_PROPOSAL.md).
 - `runfabric generate resource <name> [--type database|cache|queue] [--connection-env <VAR>] [--dry-run] [--no-backup] [--json]` — Add `resources.<name>` to runfabric.yml (type and connection env var for DATABASE_URL, REDIS_URL, etc.).
@@ -27,6 +28,7 @@ Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-
 - `runfabric docs sync [--config <path>] [--stage <name>] [--readme <path>] [--dry-run] [--json]`
 - `runfabric ai validate -c <config> [--json]` — Validate `runfabric.yml`; when `aiWorkflow.enable: true`, validates AI workflow nodes/edges/types/entrypoint.
 - `runfabric ai graph -c <config> [--json]` — Compile and export the AI workflow DAG (order/levels/hash) for tooling.
+- AI replay (`runfabric ai replay` / re-run-from-node) is currently out of scope in the Go CLI.
 
 ## Core lifecycle (doctor → plan → build/package → deploy → operate → remove)
 
@@ -55,9 +57,9 @@ Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-
 ## Invocation, logs, and observability
 
 - `runfabric invoke -c <config> [--stage <name>] [--provider <key>] --function <name> [--payload <text-or-json>] [--json]` — Use `--provider` when `runfabric.yml` has `providerOverrides` (multi-cloud).
-- `runfabric logs -c <config> [--stage <name>] [--provider <key>] (--function <name> | --all) [--service <name>] [--json]` — Unified source: provider logs (AWS: CloudWatch; GCP: Cloud Logging, last 1h) plus optional local files from `logs.path` in config (default `.runfabric/logs`: `<stage>.log`, `<function>_<stage>.log`). `--all` aggregates by service/stage; `--provider` for multi-cloud.
-- `runfabric traces [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] ... [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS: X-Ray trace summaries (last 1h). GCP: Cloud Trace summaries (when available). Azure: Application Insights traces (when available).
-- `runfabric metrics [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] [--since <iso>] [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS Lambda: CloudWatch (Invocations, Errors, Duration, last 1h). GCP: Cloud Monitoring metrics (when available). Azure: Application Insights metrics (when available).
+- `runfabric logs -c <config> [--stage <name>] [--provider <key>] (--function <name> | --all) [--service <name>] [--json]` — Unified source: provider logs (AWS: CloudWatch; GCP: Cloud Logging, last 1h) plus optional local files from `logs.path` in config (default `.runfabric/logs`: `<stage>.log`, `<function>_<stage>.log`). `--all` aggregates by service/stage; `--provider` for multi-cloud. When `--service` is provided, it must match `service` in `runfabric.yml`.
+- `runfabric traces [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] ... [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS: X-Ray trace summaries (last 1h). GCP: Cloud Trace summaries (when available). Azure: Application Insights traces (when available). When `--service` is provided, it must match `service` in `runfabric.yml`.
+- `runfabric metrics [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] [--since <iso>] [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS Lambda: CloudWatch (Invocations, Errors, Duration, last 1h). GCP: Cloud Monitoring metrics (when available). Azure: Application Insights metrics (when available). When `--service` is provided, it must match `service` in `runfabric.yml`.
 
 ## Extensions (addons and plugins)
 
@@ -76,7 +78,21 @@ Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-
 - `runfabric extension install <id> [--source <url|path>] [--registry <url>] [--registry-token <token>] [--kind provider|runtime|simulator] [--version <v>] [--json]` — Install an external plugin. If `--source` is provided, installs from a `.zip`/`.tar.gz` archive (URL or local file) and validates `plugin.yaml`. If `--source` is omitted, installs via the registry **resolve** endpoint (default registry: `https://registry.runfabric.cloud`, override via `--registry`, `RUNFABRIC_REGISTRY_URL`, or `.runfabricrc` `registry.url`). Auth can be provided via `--registry-token`, `RUNFABRIC_REGISTRY_TOKEN`, or `.runfabricrc` `registry.token`.
 - `runfabric extension uninstall <id> [--kind provider|runtime|simulator] [--version <v>] [--json]` — Uninstall an installed external plugin (remove one version or all versions).
 - `runfabric extension upgrade <id> [--source <url|path>] [--registry <url>] [--registry-token <token>] [--kind provider|runtime|simulator] [--json]` — Upgrade an external plugin by reinstalling it from the given source (archive or registry resolve). Registry config/auth can also come from `.runfabricrc`.
-- `runfabric primitives` — Placeholder command (prints a message); implement or remove.
+- `runfabric extension publish init <id> --version <v> --artifact <path> [--type plugin|addon] [--plugin-kind provider|runtime|simulator] [--registry <url>] [--registry-token <token>] [--json]` — Create a publish session and receive signed upload URLs. Saves local session metadata under `RUNFABRIC_HOME/publish-sessions/<publishId>.json`.
+- `runfabric extension publish upload --publish-id <id> [--key <file-key>] [--artifact <path>] [--json]` — Upload staged files for a publish session using saved upload URLs.
+- `runfabric extension publish finalize --publish-id <id> [--registry <url>] [--registry-token <token>] [--json]` — Finalize publish after uploads complete.
+- `runfabric extension publish status --publish-id <id> [--registry <url>] [--registry-token <token>] [--json]` — Check publish session status (`staged`, `uploaded`, `published`, etc.).
+- `runfabric primitives [--kind triggers|resources|workflows|all] [--provider <id>] [--json]` — Discover supported primitives: trigger capability matrix, managed resource primitives, and workflow step primitives.
+
+## Auth and identity
+
+- `runfabric login [--auth-url <url>] [--client-id <id>] [--scope <scopes>] [--json]` — Start OAuth device-code login: request device code, show verification URL/user code, poll token endpoint, store local tokens, and set active session.
+- `runfabric whoami [--auth-url <url>] [--json]` — Call `/me` with active token and print current identity.
+- `runfabric logout [--auth-url <url>] [--remote] [--json]` — Delete local tokens and optionally call `/auth/logout`.
+- `runfabric token list [--json]` — List local token/session metadata (redacted; no raw token values).
+- `runfabric token revoke [<token-id>] [--all] [--auth-url <url>] [--json]` — Revoke selected token(s) via auth API and remove local token records.
+
+Auth URL resolution order: `--auth-url` -> `RUNFABRIC_AUTH_URL` -> `.runfabricrc` `auth.url` -> `.runfabricrc` `registry.url` -> `https://auth.runfabric.cloud`.
 
 ## Daemon, dashboard, and config API
 
@@ -96,7 +112,7 @@ Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-
 - `runfabric recover-dry-run -c <config> [--stage <name>] [--json]` — Inspect recovery feasibility without mutating state.
 - `runfabric unlock -c <config> [--stage <name>] [--force] [--json]` — Release the deploy lock (use with care).
 - `runfabric lock-steal -c <config> [--stage <name>] [--json]` — Steal the deploy lock (e.g. after a crashed process).
-- `runfabric backend-migrate -c <config> [--stage <name>] [--target <local|aws-remote|...>] [--json]` — Migrate receipt and journal to another backend.
+- `runfabric backend-migrate -c <config> [--stage <name>] [--target <local|postgres|sqlite|s3|aws|dynamodb|gcs|azblob>] [--json]` — Migrate receipt and journal to another backend.
 
 ## Runtime fabric
 
@@ -114,13 +130,15 @@ Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-
 
 ## State
 
-- `runfabric state pull --provider <name> [--config <path>] [--backend <local|postgres|s3|gcs|azblob>] [--stage <name>] [--service <name>] [--json]`
-- `runfabric state list [--config <path>] [--backend <local|postgres|s3|gcs|azblob>] [--stage <name>] [--service <name>] [--provider <name>] [--json]`
-- `runfabric state backup [--config <path>] [--backend <local|postgres|s3|gcs|azblob>] [--stage <name>] [--service <name>] [--provider <name>] [--out <path>] [--json]`
-- `runfabric state restore --file <path> [--config <path>] [--backend <local|postgres|s3|gcs|azblob>] [--stage <name>] [--json]`
-- `runfabric state force-unlock --provider <name> [--config <path>] [--backend <local|postgres|s3|gcs|azblob>] [--stage <name>] [--service <name>] [--json]`
-- `runfabric state migrate --from <backend> --to <backend> [--config <path>] [--backend <local|postgres|s3|gcs|azblob>] [--stage <name>] [--service <name>] [--provider <name>] [--json]`
-- `runfabric state reconcile [--config <path>] [--backend <local|postgres|s3|gcs|azblob>] [--stage <name>] [--service <name>] [--provider <name>] [--json]`
+Supported backend kinds for state commands: `local`, `postgres`, `sqlite`, `s3`, `aws`, `dynamodb`, `gcs`, `azblob`.
+
+- `runfabric state pull --provider <name> [--config <path>] [--backend <kind>] [--stage <name>] [--service <name>] [--json]`
+- `runfabric state list [--config <path>] [--backend <kind>] [--stage <name>] [--service <name>] [--provider <name>] [--json]`
+- `runfabric state backup [--config <path>] [--backend <kind>] [--stage <name>] [--service <name>] [--provider <name>] [--out <path>] [--json]`
+- `runfabric state restore --file <path> [--config <path>] [--backend <kind>] [--stage <name>] [--json]`
+- `runfabric state force-unlock --provider <name> [--config <path>] [--backend <kind>] [--stage <name>] [--service <name>] [--json]`
+- `runfabric state migrate --from <backend> --to <backend> [--config <path>] [--backend <kind>] [--stage <name>] [--service <name>] [--provider <name>] [--json]`
+- `runfabric state reconcile [--config <path>] [--backend <kind>] [--stage <name>] [--service <name>] [--provider <name>] [--json]`
 
 ## Failure and recovery notes
 

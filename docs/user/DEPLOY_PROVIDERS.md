@@ -1,6 +1,6 @@
 # Deploy by Provider
 
-How deployment works per cloud provider. The Go engine uses REST/SDK for deploy where implemented; otherwise it may run in simulated or stub mode.
+How deployment works per cloud provider. The Go engine resolves providers through the extension boundary, then dispatches to control-plane, API, or provider-plugin execution paths.
 
 - **Credentials and wiring:** [PROVIDER_SETUP.md](PROVIDER_SETUP.md)
 - **Credentials matrix:** [CREDENTIALS.md](CREDENTIALS.md)
@@ -20,6 +20,8 @@ How deployment works per cloud provider. The Go engine uses REST/SDK for deploy 
 4. `runfabric deploy` — deploy to the configured provider.
 
 Real deploy is opt-in: set **`RUNFABRIC_REAL_DEPLOY=1`** or provider-specific **`RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1`**.
+
+If a provider is not registered (built-in or installed external plugin), commands fail with a provider registration error instead of a stub fallback.
 
 ## Providers wired to deploy API
 

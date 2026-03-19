@@ -7,6 +7,7 @@ RunFabric SDKs let you run the same handler logic in your preferred framework (N
 - **Node**: `@runfabric/sdk` handlers + adapters
 - **Python**: framework mounts + raw ASGI/WSGI
 - **Go/Java/.NET**: handler + HTTP wrappers
+- **Hook parity**: lifecycle hooks across SDKs
 
 ## Node (`@runfabric/cli` + `@runfabric/sdk`)
 
@@ -65,6 +66,12 @@ const handler = (event, context) => ({ ok: true });
 const httpHandler = createHttpHandler(handler);
 // use httpHandler(req, res) in any Node HTTP server
 ```
+
+## Hook parity
+
+- **Node SDK**: lifecycle hook contract is implemented (`beforeBuild`, `afterBuild`, `beforeDeploy`, `afterDeploy`) via `loadHookModules` and `runLifecycleHooks`.
+- **Python / Go / Java / .NET SDKs**: handler and HTTP adapter parity is implemented; lifecycle hook execution is not part of SDK runtime execution yet.
+- **Engine boundary**: Go engine treats Node hook modules as addon hooks and provider/runtime/simulator plugins as Go-side extension contracts.
 
 ---
 

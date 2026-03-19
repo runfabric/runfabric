@@ -140,22 +140,21 @@ Request types (`DoctorRequest`, `PlanRequest`, etc.) carry `Config`, `Stage`, `R
 
 ### 2.5 Go SDK for extension development (external plugins)
 
-When building **external** plugins (standalone binaries installed under `~/.runfabric/plugins/`), you should not import the full engine (it pulls in config, planner, and many internal packages). RunFabric will provide a **Go SDK** for extension development so you can:
+When building **external** plugins (standalone binaries installed under `~/.runfabric/plugins/`), use the Go plugin SDK module instead of importing the engine internals:
 
-- **Implement the provider contract** using SDK types only (no engine imports). The SDK defines wire-compatible request/response structs (e.g. `DoctorRequest`, `DoctorResult`) that match the engine’s protocol.
-- **Run a stdio server** that the engine talks to: the SDK handles reading line-delimited JSON from stdin, dispatching to your implementation (Doctor, Plan, Deploy, Remove, Invoke, Logs), and writing JSON responses to stdout. You implement an interface; the SDK runs the loop.
-- **Optionally** validate or emit `plugin.yaml` (manifest) and handle `--runfabric-protocol=stdio` / `--version` flags so your binary is a drop-in for the [external extensions layout](EXTERNAL_EXTENSIONS_PLAN.md).
+- **Module:** `packages/go/plugin-sdk` (`github.com/runfabric/runfabric/plugin-sdk/go`)
+- **Wire types:** `protocol.Request`, `protocol.Response`, `protocol.ResponseError`
+- **Stdio loop:** `server.New(...).Serve(ctx, stdin, stdout)` for line-delimited JSON request/response handling
 
-**Planned SDK surface (v1):**
+This keeps external plugin repos small and avoids engine-internal dependencies while still matching the engine protocol shape.
 
-- **Module:** A separate Go module (e.g. `github.com/runfabric/runfabric-plugin-sdk` or in-repo `packages/go/plugin-sdk`) with minimal dependencies (stdlib, `encoding/json`).
-- **Types:** Wire request/response types for Meta, ValidateConfig, Doctor, Plan, Deploy, Remove, Invoke, Logs (JSON tags aligned with engine).
-- **Server:** `sdk.Serve(Provider)` or `sdk.Run()` that reads stdin line-by-line, decodes `{"method":"Plan","params":{...}}`, calls your provider, encodes `{"result":{...}}` or `{"error":{...}}`, writes to stdout.
-- **Provider interface:** You implement an interface that takes the SDK’s request types and returns the SDK’s result types; no `*config.Config` or `*planner.Plan` from the engine.
+Minimal flow:
 
-**Today:** External plugins are not yet loadable; the engine only runs built-in plugins. Once [external extensions](EXTERNAL_EXTENSIONS_PLAN.md) Phase 15c (subprocess protocol) and the Go SDK are implemented, you will be able to build a provider in a separate repo, depend on the SDK, build a single binary, and install it via `runfabric extension install <id>`.
+1. Build a plugin binary that registers handlers in `server.Options.Methods`.
+2. Support `handshake` and provider methods you implement (e.g. `provider.doctor`).
+3. Package with `plugin.yaml` and install via `runfabric extension install ...`.
 
-See [EXTERNAL_EXTENSIONS_PLAN.md](EXTERNAL_EXTENSIONS_PLAN.md) for the protocol (line-delimited JSON over stdio) and [ROADMAP.md](ROADMAP.md) for the “Go SDK for extension development” item.
+See [EXTERNAL_EXTENSIONS_PLAN.md](EXTERNAL_EXTENSIONS_PLAN.md) for on-disk layout/protocol details and [packages/go/plugin-sdk/README.md](../../packages/go/plugin-sdk/README.md) for a runnable example.
 
 ### 2.6 References (extensions)
 
@@ -172,7 +171,7 @@ See [EXTERNAL_EXTENSIONS_PLAN.md](EXTERNAL_EXTENSIONS_PLAN.md) for the protocol 
 |---------------------------------|------------------------|-----------------------------------------------|
 | Inject env, patch files, wrap handler | **Addon** (Node/TS)   | Addon interface; `supports`, `apply`, AddonResult |
 | Add a new cloud provider        | **Provider plugin** (Go) | ProviderPlugin; Meta, Doctor, Plan, Deploy, Remove, Invoke, Logs |
-| Add a new runtime (build/run)   | **Runtime plugin** (Go)  | (Future) runtime interface; today use engine’s built-in runtimes |
+| Add a new runtime (build/run)   | **Runtime plugin** (Go)  | Runtime plugin contract (`engine/internal/extensions/runtimes`) resolved through the extension boundary |
 | Run hooks before/after build/deploy | **Lifecycle hooks** (Node) | `hooks` in config; see [PLUGINS.md](PLUGINS.md) |
 
 ---

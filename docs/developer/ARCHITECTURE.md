@@ -7,6 +7,8 @@ In this repo the Go engine lives under **`engine/`**; paths below refer to `engi
 ## Quick navigation
 
 - **End-to-end routing**: Deploy flow (CLI → app → provider routing)
+- **Visual flow**: Engine request routing diagram
+- **Extension boundary**: Provider/runtime resolution boundary
 - **Where provider implementations live**: Provider code layout
 - **Why AWS is special**: Control plane + deployrunner + deployexec
 
@@ -15,6 +17,10 @@ In this repo the Go engine lives under **`engine/`**; paths below refer to `engi
 ## Deploy flow: CLI → app → controlplane / deployapi / deployexec
 
 How **deployrunner**, **controlplane**, **deployapi**, **deployexec**, and **deployplan** connect to the CLI and provider actions.
+
+### Engine request routing diagram
+
+![RunFabric engine request routing flow](architecture_engine_flow.svg)
 
 ### 1. Entry: CLI commands
 
@@ -29,11 +35,21 @@ How **deployrunner**, **controlplane**, **deployapi**, **deployexec**, and **dep
 
 **Location:** `internal/app/` — `deploy.go`, `remove.go`, `invoke.go`, `logs.go`
 
-Each app function calls **`app.Bootstrap(configPath, stage)`**, reads **`ctx.Config.Provider.Name`**, and routes:
+Each app function calls **`app.Bootstrap(configPath, stage)`**, which builds the extension boundary (`internal/extensions/resolution`) and resolves providers/runtimes through that boundary first.
 
-- **Deploy:** `provider == "aws"` → controlplane + deployrunner; else **deployapi.HasRunner(provider)** → deployapi.Run; else lifecycle stub.
-- **Remove:** deployapi.HasRemover → deployapi.Remove; else controlplane + registry.
-- **Invoke / Logs:** deployapi.HasInvoker / HasLogger → deployapi; else lifecycle stub.
+Routing is selected by boundary resolution mode (not ad-hoc provider checks in each command):
+
+- **Internal providers** (currently `aws`, `aws-lambda`) → controlplane + deployrunner path.
+- **API-dispatched providers** (provider IDs in the API capability set) → `internal/deploy/api` for deploy/remove/invoke/logs.
+- **Plugin providers** (non-internal, non-API dispatch) → provider interface path via lifecycle (`Plan/Doctor/Deploy/Remove/Invoke/Logs`).
+- **Unknown provider** → hard error (`provider "<name>" not registered`) rather than lifecycle stub fallback.
+
+### Extension boundary (`internal/extensions/resolution`)
+
+- Central place for provider/runtime resolution in the Go engine.
+- Builds built-in provider registry, registers API-backed provider adapters, and merges external plugins from `RUNFABRIC_HOME/plugins`.
+- Preserves built-in precedence on ID conflicts.
+- Keeps AWS providers (`aws`, `aws-lambda`) internal while the contract stabilizes.
 
 ### 3. Control plane (`internal/controlplane/`)
 
@@ -53,7 +69,17 @@ Generic phase engine: list of phases with checkpoints; journal records progress.
 
 ### 7. Deploy API (`internal/deploy/api/`)
 
-For **non-AWS** providers: deploy/remove/invoke/logs via provider REST/SDK. Dispatches to **providers/<name>/**; handles receipt load/save.
+For **non-AWS** providers: deploy/remove/invoke/logs via provider REST/SDK.
+
+- Uses a single capability registry (`internal/deploy/api/registry.go`) with one provider entry per non-AWS provider.
+- `run.go`, `remove.go`, `invoke.go`, and `logs.go` all dispatch through that unified registry (not separate per-operation maps).
+- Legacy `Runner`/`Remover`/`Invoker`/`Logger` adapters are preserved as migration shims behind the unified provider interface.
+
+### 7.1 CLI deploy runner status (`internal/deploy/cli/`)
+
+- `internal/deploy/cli` is now a deprecated/experimental compatibility path.
+- Supported lifecycle routing in the engine is API/plugin based (`internal/deploy/api`) plus AWS controlplane.
+- Docs and roadmap treat CLI deploy runners as out of active feature development unless explicitly reactivated.
 
 ### 8. Recovery and deploy_resume
 

@@ -14,14 +14,16 @@ Quick credentials matrix (providers + state backends): [CREDENTIALS.md](CREDENTI
 
 ## Supported Backends
 
+Current engine-accepted backend kinds:
+
 - `local` (default)
-- `postgres` — receipts stored in Postgres; set `backend.postgresConnectionStringEnv` (env var name for DSN) and optional `backend.postgresTable` (default `runfabric_receipts`).
-- `sqlite` — receipts in a SQLite file; set `backend.sqlitePath` (default `.runfabric/state.db`; resolved relative to project root).
-- `dynamodb` — receipts in DynamoDB; set `backend.receiptTable` or `backend.lockTable`, and use provider region for AWS.
+- `postgres` — receipts stored in Postgres; set `backend.postgresConnectionStringEnv` (env var name for DSN) and optional `backend.postgresTable` (default `runfabric_receipts`)
+- `sqlite` — receipts in a SQLite file; set `backend.sqlitePath` (default `.runfabric/state.db`; resolved relative to project root)
+- `dynamodb` — receipts in DynamoDB; set `backend.receiptTable` or `backend.lockTable`, and use provider region for AWS
 - `s3`
 - `gcs`
 - `azblob`
-- `aws-remote` — S3 for receipts + DynamoDB for locks (existing).
+- `aws` — legacy AWS remote bundle (S3 receipts + DynamoDB locks/journal)
 
 `runfabric init` prompts for state backend selection and defaults to `local`.
 
@@ -31,7 +33,7 @@ Quick credentials matrix (providers + state backends): [CREDENTIALS.md](CREDENTI
 
 ```yaml
 state:
-  backend: local | postgres | s3 | gcs | azblob
+  backend: local | postgres | sqlite | s3 | aws | dynamodb | gcs | azblob
   keyPrefix: runfabric/state
   lock:
     enabled: true

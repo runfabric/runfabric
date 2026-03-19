@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
+  <title id="title">RunFabric Engine Request Routing Flow</title>
+  <desc id="desc">Flow diagram showing CLI to app bootstrap, extension boundary routing to AWS control plane, API dispatch, plugin path, and state receipts.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 28px "Segoe UI", Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 15px "Segoe UI", Arial, sans-serif; fill: #334155; }
+      .box { fill: #ffffff; stroke: #334155; stroke-width: 2; rx: 12; ry: 12; }
+      .decision { fill: #fff7ed; stroke: #9a3412; stroke-width: 2; }
+      .aws { fill: #eff6ff; stroke: #1d4ed8; stroke-width: 2; }
+      .api { fill: #ecfeff; stroke: #0e7490; stroke-width: 2; }
+      .plugin { fill: #f5f3ff; stroke: #6d28d9; stroke-width: 2; }
+      .state { fill: #f0fdf4; stroke: #166534; stroke-width: 2; }
+      .label { font: 600 14px "Segoe UI", Arial, sans-serif; fill: #0f172a; }
+      .small { font: 400 13px "Segoe UI", Arial, sans-serif; fill: #334155; }
+      .edge { stroke: #334155; stroke-width: 2.2; fill: none; }
+      .edgeLabel { font: 600 12px "Segoe UI", Arial, sans-serif; fill: #334155; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L12,4 L0,8 z" fill="#334155" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="980" />
+  <text class="title" x="50" y="50">RunFabric Engine Request Routing</text>
+  <text class="subtitle" x="50" y="76">CLI to extension boundary routing across AWS control plane, API-dispatched providers, plugin providers, and shared state.</text>
+
+  <rect class="box" x="80" y="150" width="280" height="92" />
+  <text class="label" x="110" y="184">CLI (internal/cli)</text>
+  <text class="small" x="110" y="210">deploy / remove / invoke / logs</text>
+
+  <rect class="box" x="440" y="150" width="300" height="92" />
+  <text class="label" x="470" y="184">App layer (internal/app)</text>
+  <text class="small" x="470" y="210">Bootstrap(configPath, stage)</text>
+
+  <rect class="box" x="820" y="150" width="320" height="92" />
+  <text class="label" x="850" y="184">Extension boundary</text>
+  <text class="small" x="850" y="210">internal/extensions/resolution</text>
+
+  <polygon class="decision" points="1270,196 1360,130 1450,196 1360,262" />
+  <text class="label" x="1308" y="190">Resolved</text>
+  <text class="label" x="1320" y="210">provider mode</text>
+
+  <rect class="aws" x="1070" y="360" width="290" height="82" rx="12" ry="12" />
+  <text class="label" x="1100" y="392">Control plane</text>
+  <text class="small" x="1100" y="414">internal/controlplane</text>
+
+  <rect class="aws" x="1070" y="500" width="290" height="82" rx="12" ry="12" />
+  <text class="label" x="1100" y="532">Deployrunner</text>
+  <text class="small" x="1100" y="554">internal/deployrunner</text>
+
+  <rect class="aws" x="1070" y="640" width="290" height="82" rx="12" ry="12" />
+  <text class="label" x="1100" y="672">Deployexec phase engine</text>
+  <text class="small" x="1100" y="694">internal/deployexec</text>
+
+  <rect class="aws" x="1070" y="780" width="290" height="82" rx="12" ry="12" />
+  <text class="label" x="1100" y="812">AWS provider implementation</text>
+  <text class="small" x="1100" y="834">internal/extensions/provider/aws</text>
+
+  <rect class="api" x="650" y="420" width="300" height="82" rx="12" ry="12" />
+  <text class="label" x="680" y="452">Deploy API dispatcher</text>
+  <text class="small" x="680" y="474">internal/deploy/api</text>
+
+  <rect class="api" x="650" y="560" width="300" height="82" rx="12" ry="12" />
+  <text class="label" x="680" y="592">Non-AWS providers</text>
+  <text class="small" x="680" y="614">internal/extensions/provider/&lt;name&gt;</text>
+
+  <rect class="plugin" x="300" y="420" width="300" height="82" rx="12" ry="12" />
+  <text class="label" x="330" y="452">Provider plugin path</text>
+  <text class="small" x="330" y="474">Plan/Doctor/Deploy/Remove/Invoke/Logs</text>
+
+  <rect class="plugin" x="300" y="560" width="300" height="82" rx="12" ry="12" />
+  <text class="label" x="330" y="592">Registered provider plugins</text>
+  <text class="small" x="330" y="614">internal/extensions/providers</text>
+
+  <rect class="state" x="620" y="790" width="360" height="90" rx="12" ry="12" />
+  <text class="label" x="650" y="824">State + receipt / journal</text>
+  <text class="small" x="650" y="846">internal/state + internal/transactions</text>
+
+  <path class="edge" marker-end="url(#arrow)" d="M360 196 L440 196" />
+  <path class="edge" marker-end="url(#arrow)" d="M740 196 L820 196" />
+  <path class="edge" marker-end="url(#arrow)" d="M1140 196 L1270 196" />
+
+  <path class="edge" marker-end="url(#arrow)" d="M1360 262 L1360 360" />
+  <text class="edgeLabel" x="1370" y="320">internal aws/aws-lambda</text>
+  <path class="edge" marker-end="url(#arrow)" d="M1215 442 L1215 500" />
+  <path class="edge" marker-end="url(#arrow)" d="M1215 582 L1215 640" />
+  <path class="edge" marker-end="url(#arrow)" d="M1215 722 L1215 780" />
+
+  <path class="edge" marker-end="url(#arrow)" d="M1315 236 C1220 300, 970 360, 800 420" />
+  <text class="edgeLabel" x="930" y="354">api-dispatched provider</text>
+  <path class="edge" marker-end="url(#arrow)" d="M800 502 L800 560" />
+
+  <path class="edge" marker-end="url(#arrow)" d="M1310 160 C1180 120, 720 260, 450 420" />
+  <text class="edgeLabel" x="760" y="220">plugin provider</text>
+  <path class="edge" marker-end="url(#arrow)" d="M450 502 L450 560" />
+
+  <path class="edge" marker-end="url(#arrow)" d="M1215 862 C1215 905, 980 905, 900 880" />
+  <path class="edge" marker-end="url(#arrow)" d="M800 642 L800 790" />
+  <path class="edge" marker-end="url(#arrow)" d="M450 642 C450 740, 620 760, 700 790" />
+</svg>

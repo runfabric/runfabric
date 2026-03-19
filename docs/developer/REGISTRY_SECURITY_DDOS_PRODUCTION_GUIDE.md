@@ -2,7 +2,8 @@
 
 This is a practical security blueprint for protecting:
 
-- **`registry.runfabric.cloud`** (control plane: trust + metadata + auth)
+- **`registry.runfabric.cloud`** (control plane: trust + metadata)
+- **`auth.runfabric.cloud`** (control plane: authentication + token issuance)
 - **`cdn.runfabric.cloud`** (data plane: artifact delivery)
 
 It complements the API contract in:
@@ -362,4 +363,3 @@ If you’re starting:
 | Registry | trust, metadata, auth |
 | CDN | fast immutable delivery |
 | CLI | verification & enforcement |
-

@@ -38,6 +38,7 @@ runfabric dev --stream-from dev --tunnel-url https://abc.ngrok.io
 
 - Streaming logs from the deployed function to the terminal (use `runfabric logs`).
 - Multi-function streaming (start with single function or default handler).
+- GCP auto-wire parity with AWS. Current GCP flow is explicit manual tunnel/emulator wiring.
 
 ## Implementation notes
 

@@ -52,7 +52,7 @@ triggers:
   - `state` (`object`, optional)
   - `logs` (`object`, optional) — Local log file source for `runfabric logs`. When set, logs are read from provider (e.g. CloudWatch) and merged with lines from local files. See [Logs](#logs).
   - `stages` (`Record<string, override>`, optional)
-  - `providerOverrides` (`Record<string, provider>`, optional) — Multi-cloud: named provider configs. Use with `runfabric deploy --provider <key>`, `runfabric plan --provider <key>`, `runfabric remove --provider <key>`. Key is a logical name (e.g. `aws`, `gcp`); value is the same shape as `provider` (name, runtime, region).
+  - `providerOverrides` (`Record<string, provider>`, optional) — Multi-cloud: named provider configs. Use with `runfabric deploy --provider <key>`, `runfabric plan --provider <key>`, `runfabric remove --provider <key>`. Key is a logical name (e.g. `aws`, `gcp`); value is the same shape as `provider` (name, runtime, region, optional `source`/`version` for external plugin selection).
   - `fabric` (`object`, optional) — Runtime fabric for active-active deploy, health checks, and failover/latency routing. Requires `providerOverrides`. See [Runtime fabric](#runtime-fabric).
 
 - **Org / UI**
@@ -63,7 +63,7 @@ triggers:
   - `workflows` (`workflow[]`, optional)
   - `alerts` (`object`, optional) — Optional alerting config (webhook, Slack, triggers). See [Alerts](#alerts).
   - `build` (`object`, optional) — Build-step ordering. See [Build order](#build-order).
-  - `secrets` (`Record<string,string>`, optional; value format `secret://<ref>`)
+  - `secrets` (`Record<string,string>`, optional) — Secret map used by `${secret:KEY}` resolution. Values can be literals, `${env:VAR}` expressions, or `secret://OTHER_KEY` indirection.
 
 ## Multi-cloud (providerOverrides)
 
@@ -88,6 +88,8 @@ providerOverrides:
     name: gcp-functions
     runtime: nodejs
     region: us-central1
+    source: external             # optional: prefer external plugin over built-in
+    version: 1.2.3               # optional: pin external plugin version
     backend:                    # optional: e.g. gcs for GCP
       kind: gcs
 
@@ -106,6 +108,22 @@ To let RunFabric auto-install the missing provider from the registry, enable:
 extensions:
   autoInstallExtensions: true
 ```
+
+You can force external provider resolution and pin a plugin version directly in provider config:
+
+```yaml
+provider:
+  name: vercel
+  runtime: nodejs
+  source: external
+  version: 1.2.3
+```
+
+Rules:
+
+- `source` supports `builtin` (default) or `external`.
+- `version` is valid only when `source: external`.
+- `aws` / `aws-lambda` remain internal while the plugin contract stabilizes; `source: external` is rejected for AWS.
 
 Behavior:
 
@@ -128,7 +146,7 @@ Real deploy is opt-in: set **`RUNFABRIC_REAL_DEPLOY=1`** or provider-specific **
 
 - **Credentials:** Provider-specific env vars (API keys, region, project ID) must be set; otherwise deploy will fail. Run `runfabric doctor` to check; it reports missing required env per provider (see [CREDENTIALS.md](CREDENTIALS.md), [PROVIDER_SETUP.md](PROVIDER_SETUP.md)).
 - **Public HTTP:** Deploying HTTP endpoints without auth (no `authorizer` on the trigger) exposes the function to the internet. Prefer auth (e.g. `authorizer.type: jwt` or IAM) for production.
-- **Secrets:** Use `secrets` and resource bindings rather than plain env for sensitive values; ensure secret refs are resolved at deploy time.
+- **Secrets:** Use `secrets` and resource bindings rather than plain env for sensitive values.
 
 ## First-class layers
 
@@ -186,6 +204,28 @@ triggers:
 ```
 
 If `${env:VAR_NAME}` is used without a default and the variable is missing, config parsing fails with an explicit error.
+
+## Secret References
+
+String values can also resolve `${secret:KEY}` placeholders. Resolution order:
+
+1. `secrets.KEY` from top-level config.
+2. Environment variable `KEY`.
+
+Top-level `secrets` entries support `secret://OTHER_KEY` indirection:
+
+```yaml
+secrets:
+  db_url: secret://DATABASE_URL
+
+functions:
+  api:
+    handler: src/handler.default
+    environment:
+      DATABASE_URL: "${secret:db_url}"
+```
+
+If a `${secret:KEY}` reference cannot be resolved, config resolution fails with an explicit error.
 
 ## Deploy Policy
 
@@ -354,7 +394,7 @@ extensions:
 
 ```yaml
 state:
-  backend: local # local|postgres|s3|gcs|azblob
+  backend: local # local|postgres|sqlite|s3|aws|dynamodb|gcs|azblob
   keyPrefix: runfabric/state
   lock:
     enabled: true
@@ -374,6 +414,8 @@ Backend-specific options:
 **DB-backed deploy state (receipts):** Set `backend.kind` to `postgres`, `sqlite`, or `dynamodb` (and the corresponding `backend.*` options) to store and fetch deploy receipts from a database. See [STATE_BACKENDS.md](STATE_BACKENDS.md).
 
 Detailed backend behavior: [STATE_BACKENDS.md](STATE_BACKENDS.md).
+
+`aws` is the canonical backend kind for the legacy AWS remote bundle (S3 receipts + DynamoDB locks/journal).
 
 ## Logs
 
@@ -569,8 +611,8 @@ See `engine/internal/config/validate.go`: provider name and runtime required (af
 | File | Purpose |
 |------|---------|
 | [schemas/runfabric.schema.json](../schemas/runfabric.schema.json) | Full schema (legacy + reference). |
-| [schemas/resource.schema.json](../schemas/resource.schema.json) | Resource definition stub. |
-| [schemas/workflow.schema.json](../schemas/workflow.schema.json) | Workflow definition stub. |
+| [schemas/resource.schema.json](../schemas/resource.schema.json) | Resource definition schema (binding + optional provisioning fields). |
+| [schemas/workflow.schema.json](../schemas/workflow.schema.json) | Workflow definition schema (`name`, `steps`, optional retry policy). |
 | [schemas/secrets.schema.json](../schemas/secrets.schema.json) | Secrets map shape. |
 
 ## AI workflows (`aiWorkflow`)
@@ -618,6 +660,7 @@ Related commands:
 
 - `runfabric ai validate -c <config> [--json]` — validates `runfabric.yml` and, when `aiWorkflow.enable: true`, validates AI workflow nodes/edges/types/entrypoint.
 - `runfabric ai graph -c <config> [--json]` — compiles the workflow DAG and returns a deterministic representation (entrypoint, hash, topological order, execution levels, edges).
+- AI workflow replay (re-run from a node) is currently out of scope in the Go CLI; use `runfabric invoke` plus function-level inputs for iterative testing.
 
 ## Related Docs
 

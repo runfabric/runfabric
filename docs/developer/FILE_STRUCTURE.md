@@ -28,7 +28,8 @@ runfabric/
 │   │   └── runfabric/           # publishes runfabric (CLI + SDK); future: cli/ + sdk/
 │   │
 │   ├── go/
-│   │   └── sdk/                 # module .../packages/go/sdk
+│   │   ├── sdk/                 # module .../packages/go/sdk
+│   │   └── plugin-sdk/          # module .../packages/go/plugin-sdk (external plugin authoring)
 │   │
 │   ├── java/
 │   │   └── sdk/                 # artifact io.runfabric:runfabric-sdk
@@ -38,6 +39,10 @@ runfabric/
 │
 ├── schemas/                  # JSON schemas (runfabric.yml, resources, workflows, protocol)
 │
+├── registry/                 # extension registry service (API + SPA)
+│   ├── internal/             # backend APIs and data services
+│   └── web/                  # registry UI (extension docs + marketplace + auth)
+│
 └── examples/
     ├── node/
     ├── python/
@@ -45,6 +50,12 @@ runfabric/
     ├── java/
     └── dotnet/
 ```
+
+Notes:
+
+- `docs/` remains the source of truth for long-form docs content.
+- `registry/web/` renders extension-dev docs and marketplace UX; it should not duplicate markdown trees from `docs/`.
+- `registry/` owns both API and UI deployment; keep backend business rules in `registry/internal/*` and UI consumption in `registry/web/*`.
 
 ## Package naming conventions
 
@@ -78,3 +89,8 @@ implementation "io.runfabric:runfabric-sdk:1.0.0"
 ```csharp
 using RunFabric.Sdk;
 ```
+
+### Go modules
+
+- `packages/go/sdk` — in-function Go runtime SDK (`github.com/runfabric/runfabric/sdk/go`)
+- `packages/go/plugin-sdk` — external plugin SDK (`github.com/runfabric/runfabric/plugin-sdk/go`)

@@ -6,7 +6,7 @@ It complements:
 
 - [EXTERNAL_EXTENSIONS_PLAN.md](EXTERNAL_EXTENSIONS_PLAN.md) — how plugins are discovered/loaded on disk.
 - [EXTENSION_DEVELOPMENT_GUIDE.md](EXTENSION_DEVELOPMENT_GUIDE.md) — how addons/plugins are authored.
-- **Repo layout scaffolding**: `registry/`, `web/extensions/`, `schemas/registry/` (see project root).
+- **Repo layout scaffolding**: `registry/` (API + `registry/web` SPA), `schemas/registry/` (see project root).
 
 ---
 
@@ -27,8 +27,8 @@ It complements:
 
 Recommended separation:
 
-- **`runfabric.cloud`**: single frontend for **docs + marketplace UI**
-- **`registry.runfabric.cloud`**: registry API (**resolve/search/publish/auth**)
+- **`registry.runfabric.cloud`**: registry API + registry UI (extension docs + marketplace)
+- **`auth.runfabric.cloud`**: auth API (**device login/token/me/logout**)
 - **`cdn.runfabric.cloud`**: immutable artifact delivery (**bytes only**)
 
 ## 1. Core principle: “Resolve” returns a complete install decision
@@ -266,4 +266,3 @@ If you want the smallest registry that the CLI can use safely:
 - **Provide sha256** for all artifacts
 - **Ship official public key(s)** in the CLI and return signatures for official extensions
 - **Add later**: search, advisories, publisher endpoints, publishing workflow
-
