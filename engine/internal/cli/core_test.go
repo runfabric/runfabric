@@ -140,6 +140,26 @@ functions:
 	}
 }
 
+func TestLogs_ServiceScopeMismatchFails(t *testing.T) {
+	dir := t.TempDir()
+	cfg := `service: test-logs
+provider:
+  name: aws-lambda
+  runtime: nodejs
+functions:
+  api:
+    handler: index.handler
+`
+	cfgPath := writeConfig(t, dir, cfg)
+	root := NewRootCmd()
+	root.SetArgs([]string{"logs", "-c", cfgPath, "--stage", "dev", "--all", "--service", "other-service"})
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	if err := root.Execute(); err == nil {
+		t.Fatal("logs with mismatched --service should fail")
+	}
+}
+
 // TestMetrics_AllFlagAccepted ensures metrics --all is accepted.
 func TestMetrics_AllFlagAccepted(t *testing.T) {
 	dir := t.TempDir()
@@ -157,6 +177,26 @@ functions:
 	root.SetOut(&bytes.Buffer{})
 	root.SetErr(&bytes.Buffer{})
 	_ = root.Execute()
+}
+
+func TestMetrics_ServiceScopeMismatchFails(t *testing.T) {
+	dir := t.TempDir()
+	cfg := `service: test-metrics
+provider:
+  name: aws-lambda
+  runtime: nodejs
+functions:
+  api:
+    handler: index.handler
+`
+	cfgPath := writeConfig(t, dir, cfg)
+	root := NewRootCmd()
+	root.SetArgs([]string{"metrics", "-c", cfgPath, "--stage", "dev", "--all", "--service", "other-service"})
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	if err := root.Execute(); err == nil {
+		t.Fatal("metrics with mismatched --service should fail")
+	}
 }
 
 // TestTraces_AllFlagAccepted ensures traces --all and --provider are accepted (--provider requires providerOverrides).
@@ -180,6 +220,30 @@ functions:
 	root.SetOut(&bytes.Buffer{})
 	root.SetErr(&bytes.Buffer{})
 	_ = root.Execute()
+}
+
+func TestTraces_ServiceScopeMismatchFails(t *testing.T) {
+	dir := t.TempDir()
+	cfg := `service: test-traces
+provider:
+  name: aws-lambda
+  runtime: nodejs
+providerOverrides:
+  aws-lambda:
+    name: aws-lambda
+    runtime: nodejs
+functions:
+  api:
+    handler: index.handler
+`
+	cfgPath := writeConfig(t, dir, cfg)
+	root := NewRootCmd()
+	root.SetArgs([]string{"traces", "-c", cfgPath, "--stage", "dev", "--provider", "aws-lambda", "--all", "--service", "other-service"})
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	if err := root.Execute(); err == nil {
+		t.Fatal("traces with mismatched --service should fail")
+	}
 }
 
 // TestInspect_RunsWithMinimalConfig ensures inspect runs (may fail if no receipt; we only check the command runs).

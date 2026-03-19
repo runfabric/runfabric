@@ -53,3 +53,40 @@ func TestPluginRegistry_Search(t *testing.T) {
 		t.Errorf("Search(nonexistent) expected 0, got %d", len(none))
 	}
 }
+
+func TestNormalizePluginKind(t *testing.T) {
+	tests := []struct {
+		in   string
+		want PluginKind
+	}{
+		{in: "provider", want: KindProvider},
+		{in: "providers", want: KindProvider},
+		{in: "runtime", want: KindRuntime},
+		{in: "runtimes", want: KindRuntime},
+		{in: "simulator", want: KindSimulator},
+		{in: "simulators", want: KindSimulator},
+		{in: "unknown", want: "unknown"},
+	}
+
+	for _, tt := range tests {
+		got := NormalizePluginKind(tt.in)
+		if got != tt.want {
+			t.Fatalf("NormalizePluginKind(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestIsSupportedPluginKind(t *testing.T) {
+	if !IsSupportedPluginKind(KindProvider) {
+		t.Fatal("provider should be supported")
+	}
+	if !IsSupportedPluginKind(KindRuntime) {
+		t.Fatal("runtime should be supported")
+	}
+	if !IsSupportedPluginKind(KindSimulator) {
+		t.Fatal("simulator should be supported")
+	}
+	if IsSupportedPluginKind("providers") {
+		t.Fatal("raw alias should not be supported until normalized")
+	}
+}

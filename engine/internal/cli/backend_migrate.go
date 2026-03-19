@@ -26,6 +26,6 @@ func newBackendMigrateCmd(opts *GlobalOptions) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&target, "target", "local", "Target backend kind")
+	cmd.Flags().StringVar(&target, "target", "local", "Target backend kind: local|postgres|sqlite|s3|aws|dynamodb|gcs|azblob")
 	return cmd
 }

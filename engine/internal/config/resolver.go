@@ -5,58 +5,72 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/runfabric/runfabric/engine/internal/secrets"
 )
 
 var envPattern = regexp.MustCompile(`\$\{env:([A-Za-z_][A-Za-z0-9_]*)(?:,([^}]+))?\}`)
 
 func Resolve(cfg *Config, stage string) (*Config, error) {
 	out := *cfg
+	resolvedSecrets := map[string]string{}
+	for k, v := range out.Secrets {
+		rv, err := resolveEnvAndSecretsStrict(v, out.Secrets)
+		if err != nil {
+			return nil, err
+		}
+		resolvedSecrets[k] = rv
+	}
+	out.Secrets = resolvedSecrets
 
 	var err error
-	out.Service, err = resolveEnvStrict(out.Service)
+	resolveValue := func(v string) (string, error) {
+		return resolveEnvAndSecretsStrict(v, out.Secrets)
+	}
+	out.Service, err = resolveValue(out.Service)
 	if err != nil {
 		return nil, err
 	}
 	if out.App != "" {
-		out.App, err = resolveEnvStrict(out.App)
+		out.App, err = resolveValue(out.App)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if out.Org != "" {
-		out.Org, err = resolveEnvStrict(out.Org)
+		out.Org, err = resolveValue(out.Org)
 		if err != nil {
 			return nil, err
 		}
 	}
-	out.Provider.Name, err = resolveEnvStrict(out.Provider.Name)
+	out.Provider.Name, err = resolveValue(out.Provider.Name)
 	if err != nil {
 		return nil, err
 	}
-	out.Provider.Runtime, err = resolveEnvStrict(out.Provider.Runtime)
+	out.Provider.Runtime, err = resolveValue(out.Provider.Runtime)
 	if err != nil {
 		return nil, err
 	}
-	out.Provider.Region, err = resolveEnvStrict(out.Provider.Region)
+	out.Provider.Region, err = resolveValue(out.Provider.Region)
 	if err != nil {
 		return nil, err
 	}
 
 	if out.Backend != nil {
 		b := *out.Backend
-		b.Kind, err = resolveEnvStrict(b.Kind)
+		b.Kind, err = resolveValue(b.Kind)
 		if err != nil {
 			return nil, err
 		}
-		b.S3Bucket, err = resolveEnvStrict(b.S3Bucket)
+		b.S3Bucket, err = resolveValue(b.S3Bucket)
 		if err != nil {
 			return nil, err
 		}
-		b.S3Prefix, err = resolveEnvStrict(b.S3Prefix)
+		b.S3Prefix, err = resolveValue(b.S3Prefix)
 		if err != nil {
 			return nil, err
 		}
-		b.LockTable, err = resolveEnvStrict(b.LockTable)
+		b.LockTable, err = resolveValue(b.LockTable)
 		if err != nil {
 			return nil, err
 		}
@@ -66,20 +80,20 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 	if out.Layers != nil {
 		resolvedLayers := make(map[string]LayerConfig, len(out.Layers))
 		for k, v := range out.Layers {
-			arn, err := resolveEnvStrict(v.Arn)
+			arn, err := resolveValue(v.Arn)
 			if err != nil {
 				return nil, err
 			}
 			name := v.Name
 			if name != "" {
-				name, err = resolveEnvStrict(name)
+				name, err = resolveValue(name)
 				if err != nil {
 					return nil, err
 				}
 			}
 			version := v.Version
 			if version != "" {
-				version, err = resolveEnvStrict(version)
+				version, err = resolveValue(version)
 				if err != nil {
 					return nil, err
 				}
@@ -92,7 +106,7 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 	if out.Build != nil && len(out.Build.Order) > 0 {
 		order := make([]string, 0, len(out.Build.Order))
 		for _, s := range out.Build.Order {
-			resolved, err := resolveEnvStrict(s)
+			resolved, err := resolveValue(s)
 			if err != nil {
 				return nil, err
 			}
@@ -104,13 +118,13 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 	if out.Alerts != nil {
 		a := *out.Alerts
 		if a.Webhook != "" {
-			a.Webhook, err = resolveEnvStrict(a.Webhook)
+			a.Webhook, err = resolveValue(a.Webhook)
 			if err != nil {
 				return nil, err
 			}
 		}
 		if a.Slack != "" {
-			a.Slack, err = resolveEnvStrict(a.Slack)
+			a.Slack, err = resolveValue(a.Slack)
 			if err != nil {
 				return nil, err
 			}
@@ -128,15 +142,15 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 				newFn.Events[i] = copyEventConfig(fn.Events[i])
 			}
 		}
-		newFn.Handler, err = resolveEnvStrict(fn.Handler)
+		newFn.Handler, err = resolveValue(fn.Handler)
 		if err != nil {
 			return nil, err
 		}
-		newFn.Runtime, err = resolveEnvStrict(fn.Runtime)
+		newFn.Runtime, err = resolveValue(fn.Runtime)
 		if err != nil {
 			return nil, err
 		}
-		newFn.Architecture, err = resolveEnvStrict(fn.Architecture)
+		newFn.Architecture, err = resolveValue(fn.Architecture)
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +158,7 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 		if fn.Environment != nil {
 			newFn.Environment = map[string]string{}
 			for k, v := range fn.Environment {
-				newFn.Environment[k], err = resolveEnvStrict(v)
+				newFn.Environment[k], err = resolveValue(v)
 				if err != nil {
 					return nil, err
 				}
@@ -154,7 +168,7 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 		if fn.Secrets != nil {
 			newFn.Secrets = map[string]string{}
 			for k, v := range fn.Secrets {
-				newFn.Secrets[k], err = resolveEnvStrict(v)
+				newFn.Secrets[k], err = resolveValue(v)
 				if err != nil {
 					return nil, err
 				}
@@ -164,7 +178,7 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 		if fn.Tags != nil {
 			newFn.Tags = map[string]string{}
 			for k, v := range fn.Tags {
-				newFn.Tags[k], err = resolveEnvStrict(v)
+				newFn.Tags[k], err = resolveValue(v)
 				if err != nil {
 					return nil, err
 				}
@@ -180,7 +194,7 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 						arn = lc.Arn
 					}
 				}
-				s, e := resolveEnvStrict(arn)
+				s, e := resolveValue(arn)
 				if e != nil {
 					return nil, e
 				}
@@ -191,40 +205,40 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 		for i := range newFn.Events {
 			if newFn.Events[i].HTTP != nil {
 				h := newFn.Events[i].HTTP
-				h.Path, err = resolveEnvStrict(h.Path)
+				h.Path, err = resolveValue(h.Path)
 				if err != nil {
 					return nil, err
 				}
-				h.Method, err = resolveEnvStrict(h.Method)
+				h.Method, err = resolveValue(h.Method)
 				if err != nil {
 					return nil, err
 				}
 
 				if h.Authorizer != nil {
-					h.Authorizer.Type, err = resolveEnvStrict(h.Authorizer.Type)
+					h.Authorizer.Type, err = resolveValue(h.Authorizer.Type)
 					if err != nil {
 						return nil, err
 					}
-					h.Authorizer.Name, err = resolveEnvStrict(h.Authorizer.Name)
+					h.Authorizer.Name, err = resolveValue(h.Authorizer.Name)
 					if err != nil {
 						return nil, err
 					}
-					h.Authorizer.Issuer, err = resolveEnvStrict(h.Authorizer.Issuer)
+					h.Authorizer.Issuer, err = resolveValue(h.Authorizer.Issuer)
 					if err != nil {
 						return nil, err
 					}
-					h.Authorizer.Function, err = resolveEnvStrict(h.Authorizer.Function)
+					h.Authorizer.Function, err = resolveValue(h.Authorizer.Function)
 					if err != nil {
 						return nil, err
 					}
 					for j := range h.Authorizer.IdentitySources {
-						h.Authorizer.IdentitySources[j], err = resolveEnvStrict(h.Authorizer.IdentitySources[j])
+						h.Authorizer.IdentitySources[j], err = resolveValue(h.Authorizer.IdentitySources[j])
 						if err != nil {
 							return nil, err
 						}
 					}
 					for j := range h.Authorizer.Audience {
-						h.Authorizer.Audience[j], err = resolveEnvStrict(h.Authorizer.Audience[j])
+						h.Authorizer.Audience[j], err = resolveValue(h.Authorizer.Audience[j])
 						if err != nil {
 							return nil, err
 						}
@@ -243,19 +257,19 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 
 			if stageCfg.Provider != nil {
 				if stageCfg.Provider.Name != "" {
-					out.Provider.Name, err = resolveEnvStrict(stageCfg.Provider.Name)
+					out.Provider.Name, err = resolveValue(stageCfg.Provider.Name)
 					if err != nil {
 						return nil, err
 					}
 				}
 				if stageCfg.Provider.Runtime != "" {
-					out.Provider.Runtime, err = resolveEnvStrict(stageCfg.Provider.Runtime)
+					out.Provider.Runtime, err = resolveValue(stageCfg.Provider.Runtime)
 					if err != nil {
 						return nil, err
 					}
 				}
 				if stageCfg.Provider.Region != "" {
-					out.Provider.Region, err = resolveEnvStrict(stageCfg.Provider.Region)
+					out.Provider.Region, err = resolveValue(stageCfg.Provider.Region)
 					if err != nil {
 						return nil, err
 					}
@@ -267,25 +281,25 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 					out.Backend = &BackendConfig{}
 				}
 				if stageCfg.Backend.Kind != "" {
-					out.Backend.Kind, err = resolveEnvStrict(stageCfg.Backend.Kind)
+					out.Backend.Kind, err = resolveValue(stageCfg.Backend.Kind)
 					if err != nil {
 						return nil, err
 					}
 				}
 				if stageCfg.Backend.S3Bucket != "" {
-					out.Backend.S3Bucket, err = resolveEnvStrict(stageCfg.Backend.S3Bucket)
+					out.Backend.S3Bucket, err = resolveValue(stageCfg.Backend.S3Bucket)
 					if err != nil {
 						return nil, err
 					}
 				}
 				if stageCfg.Backend.S3Prefix != "" {
-					out.Backend.S3Prefix, err = resolveEnvStrict(stageCfg.Backend.S3Prefix)
+					out.Backend.S3Prefix, err = resolveValue(stageCfg.Backend.S3Prefix)
 					if err != nil {
 						return nil, err
 					}
 				}
 				if stageCfg.Backend.LockTable != "" {
-					out.Backend.LockTable, err = resolveEnvStrict(stageCfg.Backend.LockTable)
+					out.Backend.LockTable, err = resolveValue(stageCfg.Backend.LockTable)
 					if err != nil {
 						return nil, err
 					}
@@ -299,13 +313,13 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 			for fnName, fnOverride := range stageCfg.Functions {
 				base := out.Functions[fnName]
 				if fnOverride.Handler != "" {
-					base.Handler, err = resolveEnvStrict(fnOverride.Handler)
+					base.Handler, err = resolveValue(fnOverride.Handler)
 					if err != nil {
 						return nil, err
 					}
 				}
 				if fnOverride.Runtime != "" {
-					base.Runtime, err = resolveEnvStrict(fnOverride.Runtime)
+					base.Runtime, err = resolveValue(fnOverride.Runtime)
 					if err != nil {
 						return nil, err
 					}
@@ -338,8 +352,16 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 
 // resolveEnvStrict resolves ${env:VAR} and ${env:VAR,default}. Returns error if VAR is unset and no default given.
 func resolveEnvStrict(input string) (string, error) {
+	return resolveEnvAndSecretsStrict(input, nil)
+}
+
+func resolveEnvAndSecretsStrict(input string, configSecrets map[string]string) (string, error) {
+	withSecrets, err := secrets.ResolveString(input, configSecrets, os.LookupEnv)
+	if err != nil {
+		return "", err
+	}
 	var firstErr error
-	out := envPattern.ReplaceAllStringFunc(input, func(match string) string {
+	out := envPattern.ReplaceAllStringFunc(withSecrets, func(match string) string {
 		sub := envPattern.FindStringSubmatch(match)
 		key := sub[1]
 		def := ""

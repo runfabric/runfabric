@@ -56,6 +56,34 @@ func TestDiscoverLatest_SelectsLatestVersionPerID(t *testing.T) {
 	}
 }
 
+func TestDiscoverLatest_SupportsKindAliasesAndDirectoryAliases(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv(envHome, tmp)
+
+	writePlugin(t, filepath.Join(tmp, "plugins", "provider", "alias-provider", "1.2.3"), pluginYAML{
+		APIVersion: "runfabric.io/plugin/v1",
+		Kind:       "providers",
+		ID:         "alias-provider",
+		Name:       "Alias Provider",
+		Version:    "1.2.3",
+		Executable: "runfabric-provider-alias",
+	})
+
+	plugins, err := DiscoverLatest()
+	if err != nil {
+		t.Fatalf("DiscoverLatest error: %v", err)
+	}
+	if len(plugins) != 1 {
+		t.Fatalf("expected 1 plugin, got %d", len(plugins))
+	}
+	if plugins[0].Kind != "provider" {
+		t.Fatalf("expected normalized kind provider, got %q", plugins[0].Kind)
+	}
+	if plugins[0].ID != "alias-provider" {
+		t.Fatalf("expected alias-provider, got %q", plugins[0].ID)
+	}
+}
+
 func writePlugin(t *testing.T, dir string, m pluginYAML) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {

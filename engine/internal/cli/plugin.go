@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 
 	"github.com/runfabric/runfabric/engine/internal/app"
+	"github.com/runfabric/runfabric/engine/internal/extensions"
 	"github.com/runfabric/runfabric/engine/internal/extensions/manifests"
-	awsprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/aws"
-	gcpprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/gcp"
 	extproviders "github.com/runfabric/runfabric/engine/internal/extensions/providers"
+	"github.com/runfabric/runfabric/engine/internal/extensions/resolution"
 	"github.com/runfabric/runfabric/engine/internal/lifecycle"
 	"github.com/spf13/cobra"
 )
@@ -36,14 +36,14 @@ func newPluginCmd(opts *GlobalOptions) *cobra.Command {
 }
 
 func builtinProviderRegistry() *extproviders.Registry {
-	reg := extproviders.NewRegistry()
-	aws := awsprovider.New()
-	reg.Register(aws)
-	reg.Register(extproviders.NewNamedProvider("aws-lambda", aws))
-	gcp := gcpprovider.New()
-	reg.Register(gcp)
-	app.RegisterAPIProviders(reg)
-	return reg
+	b, err := resolution.NewCached(resolution.Options{IncludeExternal: false})
+	if err != nil {
+		// IncludeExternal=false should be deterministic; keep a safe fallback.
+		reg := extensions.NewBuiltinProviderRegistry()
+		resolution.RegisterAPIProviders(reg)
+		return reg
+	}
+	return b.ProviderRegistry()
 }
 
 func newPluginListCmd(opts *GlobalOptions) *cobra.Command {

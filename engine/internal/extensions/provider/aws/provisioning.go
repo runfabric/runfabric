@@ -22,12 +22,12 @@ import (
 //   - (RDS only) engine: "postgres" | "mysql" for scheme (default postgres)
 func (p *AWSProvisioner) Provision(ctx context.Context, provider, resourceKey string, spec map[string]any) (string, error) {
 	if spec == nil {
-		return "", provisioning.ErrNotImplemented
+		return "", provisioning.ErrProvisioningUnsupported
 	}
 	typ, _ := spec["type"].(string)
 	id, _ := spec["identifier"].(string)
 	if id == "" {
-		return "", provisioning.ErrNotImplemented
+		return "", provisioning.ErrProvisioningUnsupported
 	}
 
 	region := os.Getenv("AWS_REGION")
@@ -49,7 +49,7 @@ func (p *AWSProvisioner) Provision(ctx context.Context, provider, resourceKey st
 	case "cache", "elasticache":
 		return p.provisionElastiCache(ctx, cfg, spec, id)
 	default:
-		return "", provisioning.ErrNotImplemented
+		return "", provisioning.ErrProvisioningUnsupported
 	}
 }
 
@@ -104,7 +104,7 @@ func (p *AWSProvisioner) provisionRDS(ctx context.Context, cfg aws.Config, spec 
 	}
 
 	if user == "" || password == "" {
-		return "", provisioning.ErrNotImplemented
+		return "", provisioning.ErrProvisioningUnsupported
 	}
 
 	// Build URL: scheme://user:password@host:port/dbname

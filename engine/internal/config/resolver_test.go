@@ -24,6 +24,48 @@ func TestResolve_EnvInterpolation(t *testing.T) {
 	}
 }
 
+func TestResolve_SecretInterpolation_FromConfigSecrets(t *testing.T) {
+	cfg := &Config{
+		Service: "svc",
+		Provider: ProviderConfig{
+			Name:    "aws",
+			Runtime: "nodejs",
+		},
+		Secrets: map[string]string{
+			"db_password": "s3cr3t",
+		},
+		Functions: map[string]FunctionConfig{
+			"api": {Handler: "src/handler", Runtime: "nodejs20.x", Environment: map[string]string{"DB_PASSWORD": "${secret:db_password}"}},
+		},
+	}
+	out, err := Resolve(cfg, "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := out.Functions["api"].Environment["DB_PASSWORD"]; got != "s3cr3t" {
+		t.Fatalf("DB_PASSWORD=%q want s3cr3t", got)
+	}
+}
+
+func TestResolve_SecretInterpolation_FromEnv(t *testing.T) {
+	os.Setenv("API_TOKEN", "token-123")
+	defer os.Unsetenv("API_TOKEN")
+	cfg := &Config{
+		Service:  "svc",
+		Provider: ProviderConfig{Name: "aws", Runtime: "nodejs"},
+		Functions: map[string]FunctionConfig{
+			"api": {Handler: "src/handler", Environment: map[string]string{"API_TOKEN": "${secret:API_TOKEN}"}},
+		},
+	}
+	out, err := Resolve(cfg, "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := out.Functions["api"].Environment["API_TOKEN"]; got != "token-123" {
+		t.Fatalf("API_TOKEN=%q want token-123", got)
+	}
+}
+
 func TestResolve_DoesNotMutateInput(t *testing.T) {
 	cfg := &Config{
 		Service:  "svc",

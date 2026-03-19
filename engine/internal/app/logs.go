@@ -16,9 +16,12 @@ const defaultLogsPath = ".runfabric/logs"
 
 // Logs returns logs for one function or, when function is "", for all functions (aggregated by service/stage).
 // Unified source: provider logs (e.g. CloudWatch) plus optional local log files from config.logs.path (default .runfabric/logs).
-func Logs(configPath, stage, function, providerOverride string) (any, error) {
+func Logs(configPath, stage, function, providerOverride, service string) (any, error) {
 	ctx, err := Bootstrap(configPath, stage, providerOverride)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateServiceScope(ctx.Config.Service, service); err != nil {
 		return nil, err
 	}
 	if function != "" {
@@ -29,14 +32,17 @@ func Logs(configPath, stage, function, providerOverride string) (any, error) {
 }
 
 func logsSingle(ctx *AppContext, function string) (any, error) {
-	provider := ctx.Config.Provider.Name
+	provider, err := resolveProvider(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var receipt *state.Receipt
 	if ctx.Backends != nil && ctx.Backends.Receipts != nil {
 		receipt, _ = ctx.Backends.Receipts.Load(ctx.Stage)
 	}
 	var result *providers.LogsResult
-	if deployapi.HasLogger(provider) {
-		r, err := deployapi.Logs(context.Background(), provider, ctx.Config, ctx.Stage, function, ctx.RootDir, receipt)
+	if provider.mode == dispatchAPI {
+		r, err := deployapi.Logs(context.Background(), provider.name, ctx.Config, ctx.Stage, function, ctx.RootDir, receipt)
 		if err != nil {
 			return nil, err
 		}
@@ -58,7 +64,10 @@ func logsSingle(ctx *AppContext, function string) (any, error) {
 }
 
 func logsAll(ctx *AppContext) (any, error) {
-	provider := ctx.Config.Provider.Name
+	provider, err := resolveProvider(ctx)
+	if err != nil {
+		return nil, err
+	}
 	byFunction := make(map[string]any)
 	var receipt *state.Receipt
 	if ctx.Backends != nil && ctx.Backends.Receipts != nil {
@@ -67,8 +76,8 @@ func logsAll(ctx *AppContext) (any, error) {
 	for name := range ctx.Config.Functions {
 		var result *providers.LogsResult
 		var err error
-		if deployapi.HasLogger(provider) {
-			result, err = deployapi.Logs(context.Background(), provider, ctx.Config, ctx.Stage, name, ctx.RootDir, receipt)
+		if provider.mode == dispatchAPI {
+			result, err = deployapi.Logs(context.Background(), provider.name, ctx.Config, ctx.Stage, name, ctx.RootDir, receipt)
 		} else {
 			result, err = lifecycle.Logs(ctx.Registry, ctx.Config, ctx.Stage, name)
 		}
@@ -82,7 +91,7 @@ func logsAll(ctx *AppContext) (any, error) {
 	return map[string]any{
 		"service":        ctx.Config.Service,
 		"stage":          ctx.Stage,
-		"provider":       provider,
+		"provider":       provider.name,
 		"logsByFunction": byFunction,
 	}, nil
 }

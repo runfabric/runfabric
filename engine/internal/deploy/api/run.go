@@ -5,30 +5,19 @@ package api
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/runfabric/runfabric/engine/internal/config"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/alibaba"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/azure"
-	cf "github.com/runfabric/runfabric/engine/internal/extensions/provider/cloudflare"
-	do "github.com/runfabric/runfabric/engine/internal/extensions/provider/digitalocean"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/fly"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/gcp"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/ibm"
-	k8s "github.com/runfabric/runfabric/engine/internal/extensions/provider/kubernetes"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/netlify"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/vercel"
 	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
 	"github.com/runfabric/runfabric/engine/internal/state"
 )
 
 // Run deploys via the provider's API and returns a DeployResult. Saves receipt to root.
 func Run(ctx context.Context, provider string, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
-	runner, ok := runners[provider]
+	p, ok := getProvider(provider)
 	if !ok {
-		return nil, fmt.Errorf("deploy via API not implemented for provider %q", provider)
+		return nil, fmt.Errorf("deploy via API is not supported for unregistered provider %q", provider)
 	}
-	result, err := runner.Deploy(ctx, cfg, stage, root)
+	result, err := p.Deploy(ctx, cfg, stage, root)
 	if err != nil {
 		return nil, err
 	}
@@ -52,37 +41,7 @@ func Run(ctx context.Context, provider string, cfg *config.Config, stage, root s
 	return result, nil
 }
 
-// Runner deploys via provider API (no CLI).
-type Runner interface {
-	Deploy(ctx context.Context, cfg *config.Config, stage, root string) (*providers.DeployResult, error)
-}
-
-var runners = map[string]Runner{
-	"digitalocean-functions": &do.Runner{},
-	"cloudflare-workers":     &cf.Runner{},
-	"vercel":                 &vercel.Runner{},
-	"netlify":                &netlify.Runner{},
-	"fly-machines":           &fly.Runner{},
-	"gcp-functions":          &gcp.Runner{},
-	"azure-functions":        &azure.Runner{},
-	"kubernetes":             &k8s.Runner{},
-	"alibaba-fc":             &alibaba.Runner{},
-	"ibm-openwhisk":          &ibm.Runner{},
-}
-
 // HasRunner returns whether the provider has an API-based deploy runner.
 func HasRunner(provider string) bool {
-	_, ok := runners[provider]
-	return ok
-}
-
-// APIProviderNames returns the list of provider names that have an API-based deploy runner.
-// Used by tests and doc-sync checks so DEPLOY_PROVIDERS.md stays in sync with code.
-func APIProviderNames() []string {
-	names := make([]string, 0, len(runners))
-	for k := range runners {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	return names
+	return hasProvider(provider)
 }

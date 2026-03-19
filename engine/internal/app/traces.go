@@ -11,9 +11,12 @@ import (
 
 // Traces returns trace data for the deployed service (from receipt/metadata or provider).
 // When all is true, output is aggregated by service/stage. For AWS, fetches X-Ray trace summaries when available.
-func Traces(configPath, stage, providerOverride string, all bool) (any, error) {
+func Traces(configPath, stage, providerOverride string, all bool, service string) (any, error) {
 	ctx, err := Bootstrap(configPath, stage, providerOverride)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateServiceScope(ctx.Config.Service, service); err != nil {
 		return nil, err
 	}
 	receipt, _ := ctx.Backends.Receipts.Load(ctx.Stage)

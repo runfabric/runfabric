@@ -13,7 +13,7 @@ import (
 	"github.com/runfabric/runfabric/engine/internal/transactions"
 
 	"github.com/runfabric/runfabric/engine/internal/extensions/provider/aws/triggers"
-	"github.com/runfabric/runfabric/engine/internal/extensions/runtime/build"
+	"github.com/runfabric/runfabric/engine/internal/extensions/runtimes"
 	"github.com/runfabric/runfabric/engine/internal/planner"
 )
 
@@ -135,21 +135,25 @@ func newDeployEngine(
 		deployexec.PhaseFunc{
 			PhaseName: deployexec.CheckpointPackageArtifacts,
 			Fn: func(ctx context.Context, ectx *deployexec.Context) error {
+				runtimeRegistry := runtimes.NewBuiltinRegistry()
 				for fnName, fn := range cfg.Functions {
 					configSig, err := buildConfigSignature(fn)
 					if err != nil {
 						return err
 					}
 
-					var artifact *providers.Artifact
-					switch fn.Runtime {
-					case "nodejs18.x", "nodejs20.x":
-						artifact, err = build.PackageNodeFunction(root, fnName, fn, configSig)
-						if err != nil {
-							return err
-						}
-					default:
-						return fmt.Errorf("unsupported runtime %s", fn.Runtime)
+					rt, err := runtimeRegistry.Get(fn.Runtime)
+					if err != nil {
+						return err
+					}
+					artifact, err := rt.Build(ctx, runtimes.BuildRequest{
+						Root:            root,
+						FunctionName:    fnName,
+						FunctionConfig:  fn,
+						ConfigSignature: configSig,
+					})
+					if err != nil {
+						return err
 					}
 
 					ectx.Artifacts[fnName] = *artifact

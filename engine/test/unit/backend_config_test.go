@@ -19,7 +19,7 @@ provider:
   runtime: nodejs20.x
   region: ap-southeast-1
 backend:
-  kind: aws-remote
+  kind: aws
   s3Bucket: my-bucket
   s3Prefix: apps/dev
   lockTable: rf-locks
@@ -41,7 +41,7 @@ functions:
 		t.Fatal(err)
 	}
 
-	if cfg.Backend == nil || cfg.Backend.Kind != "aws-remote" {
-		t.Fatal("expected backend kind aws-remote")
+	if cfg.Backend == nil || cfg.Backend.Kind != "aws" {
+		t.Fatal("expected backend kind aws")
 	}
 }

@@ -5,43 +5,15 @@ import (
 	"fmt"
 
 	"github.com/runfabric/runfabric/engine/internal/config"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/alibaba"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/azure"
-	cf "github.com/runfabric/runfabric/engine/internal/extensions/provider/cloudflare"
-	do "github.com/runfabric/runfabric/engine/internal/extensions/provider/digitalocean"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/fly"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/gcp"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/ibm"
-	k8s "github.com/runfabric/runfabric/engine/internal/extensions/provider/kubernetes"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/netlify"
-	"github.com/runfabric/runfabric/engine/internal/extensions/provider/vercel"
 	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
 	"github.com/runfabric/runfabric/engine/internal/state"
 )
 
-// Invoker invokes a deployed function via provider API or HTTP.
-type Invoker interface {
-	Invoke(ctx context.Context, cfg *config.Config, stage, function string, payload []byte, receipt *state.Receipt) (*providers.InvokeResult, error)
-}
-
-var invokers = map[string]Invoker{
-	"digitalocean-functions": &do.Invoker{},
-	"cloudflare-workers":     &cf.Invoker{},
-	"vercel":                 &vercel.Invoker{},
-	"netlify":                &netlify.Invoker{},
-	"fly-machines":           &fly.Invoker{},
-	"gcp-functions":          &gcp.Invoker{},
-	"azure-functions":        &azure.Invoker{},
-	"kubernetes":             &k8s.Invoker{},
-	"alibaba-fc":             &alibaba.Invoker{},
-	"ibm-openwhisk":          &ibm.Invoker{},
-}
-
 // Invoke invokes the deployed function via provider API.
 func Invoke(ctx context.Context, provider string, cfg *config.Config, stage, function string, payload []byte, root string) (*providers.InvokeResult, error) {
-	invoker, ok := invokers[provider]
+	p, ok := getProvider(provider)
 	if !ok {
-		return nil, fmt.Errorf("invoke via API not implemented for provider %q", provider)
+		return nil, fmt.Errorf("invoke via API is not supported for unregistered provider %q", provider)
 	}
 	receipt, err := state.Load(root, stage)
 	if err != nil {
@@ -50,11 +22,10 @@ func Invoke(ctx context.Context, provider string, cfg *config.Config, stage, fun
 	if receipt.Provider != provider {
 		return nil, fmt.Errorf("receipt provider %q does not match %q", receipt.Provider, provider)
 	}
-	return invoker.Invoke(ctx, cfg, stage, function, payload, receipt)
+	return p.Invoke(ctx, cfg, stage, function, payload, receipt)
 }
 
 // HasInvoker returns whether the provider has an API-based invoker.
 func HasInvoker(provider string) bool {
-	_, ok := invokers[provider]
-	return ok
+	return hasProvider(provider)
 }

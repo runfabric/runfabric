@@ -1,5 +1,6 @@
 // Package cli runs provider-native CLIs to perform deploys (wrangler, vercel, fly, gcloud, az, kubectl, etc.).
-// Part of internal/deploy; prefer internal/deploy/api for API-based deploy (no CLI required).
+// Deprecated: this is an experimental compatibility path. Engine lifecycle uses internal/deploy/api
+// (and AWS controlplane) as the supported deploy path.
 package cli
 
 import (
@@ -19,7 +20,7 @@ import (
 func Run(ctx context.Context, provider string, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
 	runner, ok := runners[provider]
 	if !ok {
-		return nil, fmt.Errorf("deploy via CLI not implemented for provider %q; add runner in internal/deploy/cli", provider)
+		return nil, fmt.Errorf("deploy via CLI is deprecated for provider %q; use API/plugin deploy path", provider)
 	}
 	result, err := runner.Deploy(ctx, cfg, stage, root)
 	if err != nil {

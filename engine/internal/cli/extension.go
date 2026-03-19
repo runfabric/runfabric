@@ -7,6 +7,7 @@ import (
 
 	"github.com/runfabric/runfabric/engine/internal/extensions/external"
 	"github.com/runfabric/runfabric/engine/internal/extensions/manifests"
+	"github.com/runfabric/runfabric/engine/internal/extensions/resolution"
 	extRuntime "github.com/runfabric/runfabric/engine/internal/extensions/runtime"
 	"github.com/spf13/cobra"
 )
@@ -27,6 +28,7 @@ func newExtensionCmd(opts *GlobalOptions) *cobra.Command {
 		newExtensionInstallCmd(opts),
 		newExtensionUninstallCmd(opts),
 		newExtensionUpgradeCmd(opts),
+		newExtensionPublishCmd(opts),
 	)
 	return cmd
 }
@@ -53,17 +55,28 @@ func newExtensionInstallCmd(opts *GlobalOptions) *cobra.Command {
 			if registryToken == "" && external.RegistryTokenFromEnv() == "" && rc.RegistryToken != "" {
 				registryToken = rc.RegistryToken
 			}
+			if registryToken == "" && external.RegistryTokenFromEnv() == "" && rc.RegistryToken == "" {
+				tok, terr := registryTokenFromAuthStore(c.Context(), "")
+				if terr != nil {
+					return terr
+				}
+				registryToken = tok
+			}
 			var res any
 			var err error
 			if source != "" {
-				if kind != "provider" && kind != "runtime" && kind != "simulator" {
-					return fmt.Errorf("--kind must be provider, runtime, or simulator")
+				parsedKind, perr := parsePluginKindFlag(kind)
+				if perr != nil {
+					return perr
 				}
 				res, err = external.Install(external.InstallOptions{
-					ID:      id,
-					Kind:    manifests.PluginKind(kind),
-					Version: version,
-					Source:  source,
+					ID:          id,
+					Kind:        parsedKind,
+					Version:     version,
+					Source:      source,
+					RegistryURL: registry,
+					AuthToken:   registryToken,
+					CoreVersion: extRuntime.Version,
 				})
 			} else {
 				// Registry path: resolve + download + install.
@@ -117,10 +130,11 @@ func newExtensionUninstallCmd(opts *GlobalOptions) *cobra.Command {
 			id := args[0]
 			var k manifests.PluginKind
 			if kind != "" {
-				if kind != "provider" && kind != "runtime" && kind != "simulator" {
-					return fmt.Errorf("--kind must be provider, runtime, or simulator")
+				parsedKind, perr := parsePluginKindFlag(kind)
+				if perr != nil {
+					return perr
 				}
-				k = manifests.PluginKind(kind)
+				k = parsedKind
 			}
 			if err := external.Uninstall(external.UninstallOptions{ID: id, Kind: k, Version: version}); err != nil {
 				return err
@@ -159,16 +173,27 @@ func newExtensionUpgradeCmd(opts *GlobalOptions) *cobra.Command {
 			if registryToken == "" && external.RegistryTokenFromEnv() == "" && rc.RegistryToken != "" {
 				registryToken = rc.RegistryToken
 			}
+			if registryToken == "" && external.RegistryTokenFromEnv() == "" && rc.RegistryToken == "" {
+				tok, terr := registryTokenFromAuthStore(c.Context(), "")
+				if terr != nil {
+					return terr
+				}
+				registryToken = tok
+			}
 			var res any
 			var err error
 			if source != "" {
-				if kind != "provider" && kind != "runtime" && kind != "simulator" {
-					return fmt.Errorf("--kind must be provider, runtime, or simulator")
+				parsedKind, perr := parsePluginKindFlag(kind)
+				if perr != nil {
+					return perr
 				}
 				res, err = external.Install(external.InstallOptions{
-					ID:     id,
-					Kind:   manifests.PluginKind(kind),
-					Source: source,
+					ID:          id,
+					Kind:        parsedKind,
+					Source:      source,
+					RegistryURL: registry,
+					AuthToken:   registryToken,
+					CoreVersion: extRuntime.Version,
 				})
 			} else {
 				r, ierr := external.InstallFromRegistry(
@@ -212,37 +237,28 @@ func newExtensionListCmd(opts *GlobalOptions) *cobra.Command {
 		Use:   "list",
 		Short: "List RunFabric plugins (providers, runtimes, simulators)",
 		RunE: func(c *cobra.Command, args []string) error {
-			reg := manifests.NewPluginRegistry()
-			res, err := external.Discover(external.DiscoverOptions{
-				PreferExternal: preferExternal || external.PreferExternalFromEnv(),
+			prefer := preferExternal || external.PreferExternalFromEnv()
+			catalog, err := resolution.DiscoverPluginCatalog(external.DiscoverOptions{
+				PreferExternal: prefer,
 				IncludeInvalid: showInvalid,
 				PinnedVersions: nil,
 			})
-			if err == nil {
-				for _, m := range res.Plugins {
-					// Default: builtin wins (don't overwrite). When preferExternal is set,
-					// allow external manifests to overwrite builtin entries.
-					if m.Source == "external" && !(preferExternal || external.PreferExternalFromEnv()) {
-						if reg.Get(m.ID) != nil {
-							continue
-						}
-					}
-					reg.Register(m)
-				}
-				if showInvalid && opts.JSONOutput {
-					enc := json.NewEncoder(c.OutOrStdout())
-					enc.SetIndent("", "  ")
-					return enc.Encode(map[string]any{"plugins": reg.List(""), "invalid": res.Invalid})
-				}
+			reg := catalog.Registry
+			if showInvalid && opts.JSONOutput {
+				enc := json.NewEncoder(c.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(map[string]any{"plugins": reg.List(""), "invalid": catalog.Invalid})
 			}
 			var k manifests.PluginKind
-			switch kind {
-			case "provider", "runtime", "simulator":
-				k = manifests.PluginKind(kind)
-			case "":
+			switch {
+			case kind == "":
 				// all
 			default:
-				return fmt.Errorf("--kind must be provider, runtime, or simulator")
+				parsedKind, perr := parsePluginKindFlag(kind)
+				if perr != nil {
+					return perr
+				}
+				k = parsedKind
 			}
 			list := reg.List(k)
 			if opts.JSONOutput {
@@ -268,15 +284,18 @@ func newExtensionListCmd(opts *GlobalOptions) *cobra.Command {
 				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", m.ID, m.Kind, src, ver, desc)
 			}
-			if showInvalid && len(res.Invalid) > 0 {
+			if showInvalid && len(catalog.Invalid) > 0 {
 				fmt.Fprintln(c.OutOrStdout(), "\nInvalid / skipped external plugins:")
-				for _, inv := range res.Invalid {
+				for _, inv := range catalog.Invalid {
 					where := inv.Path
 					if where == "" {
 						where = inv.ID
 					}
 					fmt.Fprintf(c.OutOrStdout(), "- %s (%s) %s: %s\n", inv.ID, inv.Kind, where, inv.Reason)
 				}
+			}
+			if err != nil {
+				fmt.Fprintf(c.OutOrStdout(), "\nWarning: external discovery failed: %v\n", err)
 			}
 			return tw.Flush()
 		},
@@ -303,18 +322,11 @@ func newExtensionInfoCmd(opts *GlobalOptions) *cobra.Command {
 			if version != "" {
 				pins[id] = version
 			}
-			res, _ := external.Discover(external.DiscoverOptions{
+			catalog, _ := resolution.DiscoverPluginCatalog(external.DiscoverOptions{
 				PreferExternal: preferExternal || external.PreferExternalFromEnv(),
 				PinnedVersions: pins,
 			})
-			for _, m := range res.Plugins {
-				if m.Source == "external" && !(preferExternal || external.PreferExternalFromEnv()) {
-					if reg.Get(m.ID) != nil {
-						continue
-					}
-				}
-				reg.Register(m)
-			}
+			reg = catalog.Registry
 			m := reg.Get(id)
 			if m == nil {
 				return fmt.Errorf("plugin %q not found", id)
@@ -358,19 +370,10 @@ func newExtensionSearchCmd(opts *GlobalOptions) *cobra.Command {
 			if len(args) > 0 {
 				query = args[0]
 			}
-			reg := manifests.NewPluginRegistry()
-			res, _ := external.Discover(external.DiscoverOptions{
+			catalog, _ := resolution.DiscoverPluginCatalog(external.DiscoverOptions{
 				PreferExternal: preferExternal || external.PreferExternalFromEnv(),
 			})
-			for _, m := range res.Plugins {
-				if m.Source == "external" && !(preferExternal || external.PreferExternalFromEnv()) {
-					if reg.Get(m.ID) != nil {
-						continue
-					}
-				}
-				reg.Register(m)
-			}
-			list := reg.Search(query)
+			list := catalog.Registry.Search(query)
 			if opts.JSONOutput {
 				out := map[string]any{"plugins": list}
 				enc := json.NewEncoder(c.OutOrStdout())
@@ -389,4 +392,12 @@ func newExtensionSearchCmd(opts *GlobalOptions) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&preferExternal, "prefer-external", false, "Prefer external plugin manifests when IDs conflict with built-ins")
 	return cmd
+}
+
+func parsePluginKindFlag(raw string) (manifests.PluginKind, error) {
+	kind := manifests.NormalizePluginKind(raw)
+	if !manifests.IsSupportedPluginKind(kind) {
+		return "", fmt.Errorf("--kind must be provider, runtime, or simulator")
+	}
+	return kind, nil
 }

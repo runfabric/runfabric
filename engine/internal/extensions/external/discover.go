@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/runfabric/runfabric/engine/internal/extensions/manifests"
 	"golang.org/x/mod/semver"
@@ -68,6 +70,23 @@ type DiscoverResult struct {
 	Invalid []InvalidPlugin             `json:"invalid,omitempty"`
 }
 
+type discoverCacheEntry struct {
+	rootExists bool
+	rootMod    int64
+	result     DiscoverResult
+}
+
+var (
+	discoverCacheMu sync.RWMutex
+	discoverCache   = map[string]discoverCacheEntry{}
+)
+
+func invalidateDiscoverCache() {
+	discoverCacheMu.Lock()
+	discoverCache = map[string]discoverCacheEntry{}
+	discoverCacheMu.Unlock()
+}
+
 func PreferExternalFromEnv() bool {
 	v := strings.ToLower(strings.TrimSpace(os.Getenv(envPreferExternal)))
 	return v == "1" || v == "true" || v == "yes"
@@ -83,25 +102,36 @@ func Discover(opts DiscoverOptions) (DiscoverResult, error) {
 		return DiscoverResult{}, err
 	}
 	root := filepath.Join(home, "plugins")
-	if _, err := os.Stat(root); err != nil {
+	rootExists := false
+	rootMod := int64(0)
+	if info, statErr := os.Stat(root); statErr == nil {
+		rootExists = true
+		rootMod = info.ModTime().UnixNano()
+	}
+
+	key := discoverCacheKey(home, opts)
+	if cached, ok := lookupDiscoverCache(key, rootExists, rootMod); ok {
+		return cached, nil
+	}
+
+	if !rootExists {
+		storeDiscoverCache(key, rootExists, rootMod, DiscoverResult{})
 		// No plugins dir is not an error.
 		return DiscoverResult{}, nil
 	}
 	res := DiscoverResult{}
-	for _, kindDir := range []struct {
-		dir  string
-		kind manifests.PluginKind
-	}{
-		{"providers", manifests.KindProvider},
-		{"runtimes", manifests.KindRuntime},
-		{"simulators", manifests.KindSimulator},
+	for _, kind := range []manifests.PluginKind{
+		manifests.KindProvider,
+		manifests.KindRuntime,
+		manifests.KindSimulator,
 	} {
-		found, invalid, _ := discoverKind(filepath.Join(root, kindDir.dir), kindDir.kind, opts)
+		found, invalid := discoverKindAcrossAliases(root, kind, opts)
 		res.Plugins = append(res.Plugins, found...)
 		if opts.IncludeInvalid {
 			res.Invalid = append(res.Invalid, invalid...)
 		}
 	}
+	storeDiscoverCache(key, rootExists, rootMod, res)
 	return res, nil
 }
 
@@ -112,6 +142,113 @@ func DiscoverLatest() ([]*manifests.PluginManifest, error) {
 		return nil, err
 	}
 	return res.Plugins, nil
+}
+
+func discoverCacheKey(home string, opts DiscoverOptions) string {
+	pins := make([]string, 0, len(opts.PinnedVersions))
+	for id, version := range opts.PinnedVersions {
+		pins = append(pins, id+"="+version)
+	}
+	sort.Strings(pins)
+	return strings.Join([]string{
+		home,
+		fmt.Sprintf("prefer=%t", opts.PreferExternal),
+		fmt.Sprintf("invalid=%t", opts.IncludeInvalid),
+		strings.Join(pins, ","),
+	}, "|")
+}
+
+func lookupDiscoverCache(key string, rootExists bool, rootMod int64) (DiscoverResult, bool) {
+	discoverCacheMu.RLock()
+	entry, ok := discoverCache[key]
+	discoverCacheMu.RUnlock()
+	if !ok || entry.rootExists != rootExists || entry.rootMod != rootMod {
+		return DiscoverResult{}, false
+	}
+	return cloneDiscoverResult(entry.result), true
+}
+
+func storeDiscoverCache(key string, rootExists bool, rootMod int64, result DiscoverResult) {
+	discoverCacheMu.Lock()
+	discoverCache[key] = discoverCacheEntry{
+		rootExists: rootExists,
+		rootMod:    rootMod,
+		result:     cloneDiscoverResult(result),
+	}
+	discoverCacheMu.Unlock()
+}
+
+func cloneDiscoverResult(in DiscoverResult) DiscoverResult {
+	out := DiscoverResult{
+		Plugins: make([]*manifests.PluginManifest, 0, len(in.Plugins)),
+		Invalid: append([]InvalidPlugin(nil), in.Invalid...),
+	}
+	for _, m := range in.Plugins {
+		if m == nil {
+			continue
+		}
+		copyManifest := *m
+		out.Plugins = append(out.Plugins, &copyManifest)
+	}
+	return out
+}
+
+func discoverKindAcrossAliases(root string, kind manifests.PluginKind, opts DiscoverOptions) ([]*manifests.PluginManifest, []InvalidPlugin) {
+	bestByID := map[string]*manifests.PluginManifest{}
+	bestByIDSemver := map[string]string{}
+	var invalid []InvalidPlugin
+
+	for _, dir := range pluginKindDirs(kind) {
+		found, localInvalid, err := discoverKind(filepath.Join(root, dir), kind, opts)
+		if err != nil {
+			// Missing alias dir is fine.
+			if os.IsNotExist(err) {
+				continue
+			}
+			if opts.IncludeInvalid {
+				invalid = append(invalid, InvalidPlugin{
+					Kind:   kind,
+					Path:   filepath.Join(root, dir),
+					Reason: fmt.Sprintf("failed to scan kind directory: %v", err),
+				})
+			}
+			continue
+		}
+		if opts.IncludeInvalid {
+			invalid = append(invalid, localInvalid...)
+		}
+		for _, m := range found {
+			if m == nil {
+				continue
+			}
+			current, ok := bestByID[m.ID]
+			if !ok {
+				bestByID[m.ID] = m
+				bestByIDSemver[m.ID] = normalizeDirSemver(m.Version)
+				continue
+			}
+			prevNorm := bestByIDSemver[m.ID]
+			nextNorm := normalizeDirSemver(m.Version)
+			cmp := compareSemverNormalized(nextNorm, prevNorm)
+			if cmp > 0 {
+				bestByID[m.ID] = m
+				bestByIDSemver[m.ID] = nextNorm
+				continue
+			}
+			// Keep deterministic tie-breaker by canonical directory preference.
+			if cmp == 0 && current.Path > m.Path {
+				bestByID[m.ID] = m
+				bestByIDSemver[m.ID] = nextNorm
+			}
+		}
+	}
+
+	out := make([]*manifests.PluginManifest, 0, len(bestByID))
+	for _, m := range bestByID {
+		out = append(out, m)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, invalid
 }
 
 func discoverKind(kindRoot string, kind manifests.PluginKind, opts DiscoverOptions) ([]*manifests.PluginManifest, []InvalidPlugin, error) {
@@ -141,7 +278,7 @@ func discoverKind(kindRoot string, kind manifests.PluginKind, opts DiscoverOptio
 			}
 			continue
 		}
-		if manifests.PluginKind(m.Kind) != kind {
+		if manifests.NormalizePluginKind(m.Kind) != kind {
 			if opts.IncludeInvalid {
 				invalid = append(invalid, InvalidPlugin{Kind: kind, ID: id, Version: bestVer, Path: bestPath, Reason: "kind mismatch"})
 			}
@@ -249,6 +386,32 @@ func normalizeDirSemver(v string) string {
 	return v
 }
 
+func compareSemverNormalized(a, b string) int {
+	if a == "" && b == "" {
+		return 0
+	}
+	if a == "" {
+		return -1
+	}
+	if b == "" {
+		return 1
+	}
+	return semver.Compare(a, b)
+}
+
+func pluginKindDirs(kind manifests.PluginKind) []string {
+	switch kind {
+	case manifests.KindProvider:
+		return []string{"providers", "provider"}
+	case manifests.KindRuntime:
+		return []string{"runtimes", "runtime"}
+	case manifests.KindSimulator:
+		return []string{"simulators", "simulator"}
+	default:
+		return nil
+	}
+}
+
 func readPluginYAML(dir string) (*pluginYAML, error) {
 	p := filepath.Join(dir, "plugin.yaml")
 	data, err := os.ReadFile(p)
@@ -259,8 +422,7 @@ func readPluginYAML(dir string) (*pluginYAML, error) {
 	if err := yaml.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", p, err)
 	}
-	// Normalize kind synonyms if any are introduced later.
-	m.Kind = strings.TrimSpace(m.Kind)
+	m.Kind = string(manifests.NormalizePluginKind(m.Kind))
 	m.ID = strings.TrimSpace(m.ID)
 	m.Version = strings.TrimSpace(m.Version)
 	return &m, nil

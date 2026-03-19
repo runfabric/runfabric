@@ -6,8 +6,11 @@ import (
 	"sync"
 )
 
-// ErrNotImplemented is returned when a provider does not support resource provisioning yet.
-var ErrNotImplemented = errors.New("resource provisioning not implemented for this provider; use connectionStringEnv or connectionString")
+// ErrProvisioningUnsupported is returned when resource provisioning cannot be resolved from provider metadata.
+var ErrProvisioningUnsupported = errors.New("resource provisioning is unavailable for this configuration; use connectionStringEnv or connectionString")
+
+// ErrNotImplemented is kept as a compatibility alias.
+var ErrNotImplemented = ErrProvisioningUnsupported
 
 // Provisioner provisions a managed resource (e.g. RDS, ElastiCache) and returns its connection string.
 type Provisioner interface {

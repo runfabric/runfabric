@@ -27,3 +27,8 @@ func isLogsNotFound(err error) bool {
 	var e *cloudwatchlogstypes.ResourceNotFoundException
 	return errors.As(err, &e)
 }
+
+func isLogsAlreadyExists(err error) bool {
+	var e *cloudwatchlogstypes.ResourceAlreadyExistsException
+	return errors.As(err, &e)
+}

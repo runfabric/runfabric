@@ -123,12 +123,24 @@ func TestValidateBackendKinds(t *testing.T) {
 		},
 	}
 
-	for _, kind := range []string{"local", "s3", "gcs", "azblob", "postgres", "aws-remote"} {
+	for _, kind := range []string{"local", "s3", "gcs", "azblob", "postgres", "aws"} {
 		cfg := *base
 		cfg.Backend = &config.BackendConfig{Kind: kind}
-		if kind == "s3" || kind == "aws-remote" {
+		if kind == "s3" || kind == "aws" {
 			cfg.Backend.S3Bucket = "my-bucket"
 			cfg.Backend.LockTable = "my-lock-table"
+		}
+		if kind == "gcs" {
+			cfg.State = &config.StateConfig{
+				Backend: "gcs",
+				GCS:     &config.StateGCS{Bucket: "my-bucket", Prefix: "runfabric/state"},
+			}
+		}
+		if kind == "azblob" {
+			cfg.State = &config.StateConfig{
+				Backend: "azblob",
+				Azblob:  &config.StateAzblob{Container: "runfabric-state", Prefix: "runfabric/state"},
+			}
 		}
 		if err := config.Validate(&cfg); err != nil {
 			t.Errorf("backend.kind %q should be valid: %v", kind, err)

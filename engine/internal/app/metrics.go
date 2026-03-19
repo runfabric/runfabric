@@ -11,9 +11,12 @@ import (
 
 // Metrics returns metrics for the deployed service (from receipt/metadata or provider).
 // When all is true, output is aggregated by service/stage. For AWS Lambda, fetches CloudWatch metrics (Invocations, Errors, Duration) when available.
-func Metrics(configPath, stage, providerOverride string, all bool) (any, error) {
+func Metrics(configPath, stage, providerOverride string, all bool, service string) (any, error) {
 	ctx, err := Bootstrap(configPath, stage, providerOverride)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateServiceScope(ctx.Config.Service, service); err != nil {
 		return nil, err
 	}
 	receipt, _ := ctx.Backends.Receipts.Load(ctx.Stage)

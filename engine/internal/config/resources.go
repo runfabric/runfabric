@@ -6,12 +6,12 @@ import (
 )
 
 // ResourceProvisionFn is an optional callback to provision a resource (e.g. RDS, ElastiCache) and return its connection string.
-// When a resource has "provision: true", this is called first; if it returns ErrNotImplemented or error, binding falls back to connectionStringEnv/connectionString.
+// When a resource has "provision: true", this is called first; if it returns ErrProvisioningUnsupported or error, binding falls back to connectionStringEnv/connectionString.
 type ResourceProvisionFn func(provider, resourceKey string, spec map[string]any) (connectionString string, err error)
 
 // ResolveResourceBindings interprets cfg.Resources and returns a map of env var name -> value
 // to inject into function environment at deploy. Supports:
-//   - provision: true — optional; when set, provisionFn is called to obtain connection string (e.g. RDS, ElastiCache); fallback to connectionStringEnv/connectionString if not implemented.
+//   - provision: true — optional; when set, provisionFn is called to obtain connection string (e.g. RDS, ElastiCache); fallback to connectionStringEnv/connectionString if unsupported.
 //   - connectionStringEnv: name of an env var to read the value from (e.g. DATABASE_URL in CI).
 //   - connectionString: literal or ${env:VAR} expression (resolved via resolveEnvStrict).
 //

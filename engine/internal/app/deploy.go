@@ -72,11 +72,14 @@ func Deploy(configPath, stage, functionName string, rollbackOnFailure, noRollbac
 	// Resolve rollback preference: CLI flag > runfabric.yml deploy.rollbackOnFailure > env
 	rollback := resolveRollbackOnFailure(ctx, rollbackOnFailure, noRollbackOnFailure)
 
-	provider := ctx.Config.Provider.Name
+	provider, err := resolveProvider(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var result any
 
-	// AWS: full controlplane + adapter (real deploy via SDK).
-	if provider == "aws" || provider == "aws-lambda" {
+	// Internal providers (currently AWS): full controlplane + adapter.
+	if provider.mode == dispatchInternal {
 		coord := &controlplane.Coordinator{
 			Locks:     ctx.Backends.Locks,
 			Journals:  ctx.Backends.Journals,
@@ -95,14 +98,14 @@ func Deploy(configPath, stage, functionName string, rollbackOnFailure, noRollbac
 		if err != nil {
 			return nil, err
 		}
-	} else if deployapi.HasRunner(provider) {
-		// Other providers: real deploy via REST/SDK (no CLI).
-		result, err = deployapi.Run(context.Background(), provider, ctx.Config, ctx.Stage, ctx.RootDir)
+	} else if provider.mode == dispatchAPI {
+		// API-dispatched providers: use deployapi path with stage/root-aware receipt handling.
+		result, err = deployapi.Run(context.Background(), provider.name, ctx.Config, ctx.Stage, ctx.RootDir)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		// Fallback: lifecycle (simulated deploy for providers without API implementation).
+		// Plugin-dispatched providers: use provider interface path.
 		result, err = lifecycle.Deploy(ctx.Registry, ctx.Config, ctx.Stage, ctx.RootDir)
 		if err != nil {
 			return nil, err

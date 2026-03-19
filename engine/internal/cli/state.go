@@ -16,6 +16,8 @@ type stateOpts struct {
 	Service  string
 }
 
+const stateBackendFlagHelp = "Backend: local|postgres|sqlite|s3|aws|dynamodb|gcs|azblob"
+
 func newStateCmd(opts *GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "state",
@@ -59,7 +61,7 @@ func newStatePullCmd(opts *GlobalOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&so.Provider, "provider", "", "Provider name")
-	cmd.Flags().StringVar(&so.Backend, "backend", "", "Backend: local|postgres|s3|gcs|azblob")
+	cmd.Flags().StringVar(&so.Backend, "backend", "", stateBackendFlagHelp)
 	return cmd
 }
 
@@ -84,7 +86,7 @@ func newStateListCmd(opts *GlobalOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&so.Provider, "provider", "", "Provider name")
-	cmd.Flags().StringVar(&so.Backend, "backend", "", "Backend: local|postgres|s3|gcs|azblob")
+	cmd.Flags().StringVar(&so.Backend, "backend", "", stateBackendFlagHelp)
 	cmd.Flags().StringVar(&so.Service, "service", "", "Service name (default: from config)")
 	return cmd
 }
@@ -109,7 +111,7 @@ func newStateBackupCmd(opts *GlobalOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&so.Provider, "provider", "", "Provider name")
-	cmd.Flags().StringVar(&so.Backend, "backend", "", "Backend: local|postgres|s3|gcs|azblob")
+	cmd.Flags().StringVar(&so.Backend, "backend", "", stateBackendFlagHelp)
 	cmd.Flags().StringVar(&so.Out, "out", "", "Output path for backup file")
 	cmd.Flags().StringVar(&so.Service, "service", "", "Service name (default: from config)")
 	return cmd
@@ -135,7 +137,7 @@ func newStateRestoreCmd(opts *GlobalOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&so.File, "file", "", "Path to backup file to restore")
-	cmd.Flags().StringVar(&so.Backend, "backend", "", "Backend: local|postgres|s3|gcs|azblob")
+	cmd.Flags().StringVar(&so.Backend, "backend", "", stateBackendFlagHelp)
 	return cmd
 }
 
@@ -160,7 +162,7 @@ func newStateForceUnlockCmd(opts *GlobalOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&so.Provider, "provider", "", "Provider name")
-	cmd.Flags().StringVar(&so.Backend, "backend", "", "Backend: local|postgres|s3|gcs|azblob")
+	cmd.Flags().StringVar(&so.Backend, "backend", "", stateBackendFlagHelp)
 	cmd.Flags().StringVar(&so.Service, "service", "", "Service name (default: from config)")
 	return cmd
 }
@@ -187,7 +189,7 @@ func newStateMigrateCmd(opts *GlobalOptions) *cobra.Command {
 	cmd.Flags().StringVar(&so.From, "from", "", "Source backend")
 	cmd.Flags().StringVar(&so.To, "to", "", "Target backend")
 	cmd.Flags().StringVar(&so.Provider, "provider", "", "Provider name")
-	cmd.Flags().StringVar(&so.Backend, "backend", "", "Backend: local|postgres|s3|gcs|azblob")
+	cmd.Flags().StringVar(&so.Backend, "backend", "", stateBackendFlagHelp)
 	cmd.Flags().StringVar(&so.Service, "service", "", "Service name (default: from config)")
 	return cmd
 }
@@ -213,7 +215,7 @@ func newStateReconcileCmd(opts *GlobalOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&so.Provider, "provider", "", "Provider name")
-	cmd.Flags().StringVar(&so.Backend, "backend", "", "Backend: local|postgres|s3|gcs|azblob")
+	cmd.Flags().StringVar(&so.Backend, "backend", "", stateBackendFlagHelp)
 	cmd.Flags().StringVar(&so.Service, "service", "", "Service name (default: from config)")
 	return cmd
 }

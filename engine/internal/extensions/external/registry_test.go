@@ -1,7 +1,9 @@
 package external
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -21,6 +23,14 @@ func TestInstallFromRegistry_InstallsPluginWithGeneratedManifest(t *testing.T) {
 	binBytes := []byte("fake-binary-bytes")
 	sum := sha256.Sum256(binBytes)
 	sumHex := hex.EncodeToString(sum[:])
+	// Signature (ed25519 over the exact downloaded bytes).
+	seed := make([]byte, 32)
+	for i := range seed {
+		seed[i] = byte(i)
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	sig := ed25519.Sign(priv, binBytes)
+	sigB64 := base64.StdEncoding.EncodeToString(sig)
 
 	wantAuth := "Bearer test-token"
 	mux := http.NewServeMux()
@@ -46,6 +56,9 @@ func TestInstallFromRegistry_InstallsPluginWithGeneratedManifest(t *testing.T) {
 				"pluginKind":  "provider",
 				"version":     "1.0.0",
 				"description": "test",
+				"publisher": map[string]any{
+					"verified": true,
+				},
 				"artifact": map[string]any{
 					"type":      "binary",
 					"format":    "executable",
@@ -54,6 +67,11 @@ func TestInstallFromRegistry_InstallsPluginWithGeneratedManifest(t *testing.T) {
 					"checksum": map[string]any{
 						"algorithm": "sha256",
 						"value":     sumHex,
+					},
+					"signature": map[string]any{
+						"algorithm":   "ed25519",
+						"value":       sigB64,
+						"publicKeyId": "local-dev",
 					},
 				},
 			},
@@ -87,6 +105,23 @@ func TestInstallFromRegistry_InstallsPluginWithGeneratedManifest(t *testing.T) {
 	}
 	if _, err := os.Stat(res.Plugin.Executable); err != nil {
 		t.Fatalf("expected executable: %v", err)
+	}
+
+	receiptPath := filepath.Join(home, "registry-installs", "provider", "provider-aws", "1.0.0", "receipt.json")
+	if _, err := os.Stat(receiptPath); err != nil {
+		t.Fatalf("expected receipt.json: %v", err)
+	}
+
+	var receipt map[string]any
+	b, err := os.ReadFile(receiptPath)
+	if err != nil {
+		t.Fatalf("read receipt: %v", err)
+	}
+	if err := json.Unmarshal(b, &receipt); err != nil {
+		t.Fatalf("unmarshal receipt: %v", err)
+	}
+	if receipt["requestId"] != "t" {
+		t.Fatalf("expected receipt requestId=%q, got %v", "t", receipt["requestId"])
 	}
 }
 

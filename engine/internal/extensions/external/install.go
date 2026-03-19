@@ -19,10 +19,13 @@ import (
 )
 
 type InstallOptions struct {
-	ID      string
-	Kind    manifests.PluginKind // provider|runtime|simulator
-	Version string               // optional: expected version (best-effort)
-	Source  string               // URL or local file path
+	ID          string
+	Kind        manifests.PluginKind // provider|runtime|simulator; required for source installs
+	Version     string               // optional: expected version (best-effort)
+	Source      string               // URL or local file path
+	RegistryURL string               // optional; used when Source is empty
+	AuthToken   string               // optional; used when Source is empty
+	CoreVersion string               // required for registry resolve path; defaults to "dev"
 }
 
 type InstallResult struct {
@@ -33,11 +36,23 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 	if strings.TrimSpace(opts.ID) == "" {
 		return nil, fmt.Errorf("install: id required")
 	}
-	if opts.Kind != manifests.KindProvider && opts.Kind != manifests.KindRuntime && opts.Kind != manifests.KindSimulator {
-		return nil, fmt.Errorf("install: kind must be provider, runtime, or simulator")
-	}
 	if strings.TrimSpace(opts.Source) == "" {
-		return nil, fmt.Errorf("install: --source is required (marketplace index not implemented yet)")
+		coreVersion := strings.TrimSpace(opts.CoreVersion)
+		if coreVersion == "" {
+			coreVersion = "dev"
+		}
+		return InstallFromRegistry(
+			InstallFromRegistryOptions{
+				RegistryURL: opts.RegistryURL,
+				AuthToken:   opts.AuthToken,
+				ID:          opts.ID,
+				Version:     opts.Version,
+			},
+			coreVersion,
+		)
+	}
+	if !manifests.IsSupportedPluginKind(opts.Kind) {
+		return nil, fmt.Errorf("install: kind must be provider, runtime, or simulator")
 	}
 
 	home, err := HomeDir()
@@ -69,7 +84,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	if manifests.PluginKind(m.Kind) != opts.Kind {
+	if manifests.NormalizePluginKind(m.Kind) != opts.Kind {
 		return nil, fmt.Errorf("install: plugin kind mismatch: got %q want %q", m.Kind, opts.Kind)
 	}
 	if m.ID != opts.ID {
@@ -111,7 +126,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 
 	pm := &manifests.PluginManifest{
 		ID:          m.ID,
-		Kind:        manifests.PluginKind(m.Kind),
+		Kind:        manifests.NormalizePluginKind(m.Kind),
 		Name:        m.Name,
 		Description: m.Description,
 		Permissions: manifests.Permissions{FS: m.Permissions.FS, Env: m.Permissions.Env, Network: m.Permissions.Network, Cloud: m.Permissions.Cloud},
@@ -120,18 +135,15 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 		Path:        dest,
 		Executable:  destExec,
 	}
+	invalidateDiscoverCache()
 	return &InstallResult{Plugin: pm}, nil
 }
 
 func pluginInstallDir(home string, kind manifests.PluginKind, id, version string) string {
-	var kindDir string
-	switch kind {
-	case manifests.KindProvider:
-		kindDir = "providers"
-	case manifests.KindRuntime:
-		kindDir = "runtimes"
-	case manifests.KindSimulator:
-		kindDir = "simulators"
+	kindDir := ""
+	dirs := pluginKindDirs(kind)
+	if len(dirs) > 0 {
+		kindDir = dirs[0]
 	}
 	return filepath.Join(home, "plugins", kindDir, id, version)
 }
@@ -178,6 +190,7 @@ func Uninstall(opts UninstallOptions) error {
 	if !removed {
 		return fmt.Errorf("uninstall: %q not found", opts.ID)
 	}
+	invalidateDiscoverCache()
 	return nil
 }
 

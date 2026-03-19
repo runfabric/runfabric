@@ -13,19 +13,18 @@ import (
 	appErrs "github.com/runfabric/runfabric/engine/internal/errors"
 	"github.com/runfabric/runfabric/engine/internal/extensions/external"
 	"github.com/runfabric/runfabric/engine/internal/extensions/manifests"
-	awsprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/aws"
-	gcpprovider "github.com/runfabric/runfabric/engine/internal/extensions/provider/gcp"
 	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
-	extproviders "github.com/runfabric/runfabric/engine/internal/extensions/providers"
+	"github.com/runfabric/runfabric/engine/internal/extensions/resolution"
 	extRuntime "github.com/runfabric/runfabric/engine/internal/extensions/runtime"
 )
 
 type AppContext struct {
-	Config   *config.Config
-	Registry *providers.Registry
-	RootDir  string
-	Stage    string
-	Backends *backends.Bundle
+	Config     *config.Config
+	Registry   *providers.Registry
+	Extensions *resolution.Boundary
+	RootDir    string
+	Stage      string
+	Backends   *backends.Bundle
 }
 
 const (
@@ -37,29 +36,6 @@ const (
 // Bootstrap loads config, resolves and validates it, then optionally applies a provider override for multi-cloud (--provider).
 // providerOverride is the key from providerOverrides in runfabric.yml (e.g. "aws", "gcp"); use "" for single-provider config.
 func Bootstrap(configPath, stage, providerOverride string) (*AppContext, error) {
-	reg := extproviders.NewRegistry()
-	aws := awsprovider.New()
-	reg.Register(aws)
-	reg.Register(extproviders.NewNamedProvider("aws-lambda", aws))
-	gcp := gcpprovider.New()
-	reg.Register(gcp)
-	RegisterAPIProviders(reg)
-	// Phase 15c: register any discovered external provider plugins.
-	if res, err := external.Discover(external.DiscoverOptions{}); err == nil {
-		for _, m := range res.Plugins {
-			if m.Kind != "provider" || m.Executable == "" {
-				continue
-			}
-			// Default precedence: builtin wins. External providers can be forced via the registry
-			// by explicitly preferring external in the CLI for extension inspection; for lifecycle,
-			// use a provider name that is not built-in.
-			if _, err := reg.Get(m.ID); err == nil {
-				continue
-			}
-			reg.Register(external.NewExternalProviderAdapter(m.ID, m.Executable))
-		}
-	}
-
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return nil, appErrs.Wrap(appErrs.CodeConfigLoad, "failed to load config", err)
@@ -80,22 +56,50 @@ func Bootstrap(configPath, stage, providerOverride string) (*AppContext, error) 
 		return nil, appErrs.Wrap(appErrs.CodeConfigValidation, "config validation failed", err)
 	}
 
+	extBoundary, err := resolution.NewCached(providerResolutionOptions(cfg))
+	if err != nil {
+		return nil, err
+	}
+	reg := extBoundary.ProviderRegistry()
+	if strings.EqualFold(strings.TrimSpace(cfg.Provider.Source), "external") &&
+		!isInstalledExternalPlugin(manifests.KindProvider, cfg.Provider.Name, cfg.Provider.Version) &&
+		!shouldAutoInstallExtensions(cfg) {
+		if strings.TrimSpace(cfg.Provider.Version) != "" {
+			return nil, fmt.Errorf(
+				"provider.source is external but plugin %q version %q is not installed; run `runfabric extension install %s --version %s` or enable extensions.autoInstallExtensions",
+				cfg.Provider.Name,
+				cfg.Provider.Version,
+				cfg.Provider.Name,
+				cfg.Provider.Version,
+			)
+		}
+		return nil, fmt.Errorf(
+			"provider.source is external but plugin %q is not installed; run `runfabric extension install %s` or enable extensions.autoInstallExtensions",
+			cfg.Provider.Name,
+			cfg.Provider.Name,
+		)
+	}
+
 	if shouldAutoInstallExtensions(cfg) {
 		// Provider plugin: required by lifecycle operations.
-		if err := maybeInstallMissingProvider(reg, cfg, configPath); err != nil {
+		if err := maybeInstallMissingProvider(extBoundary, cfg, configPath); err != nil {
 			return nil, err
 		}
 		// Other plugin kinds: best-effort install when explicitly referenced in runfabric.yml.
 		// These are not required for core lifecycle today but are useful for consistent behavior.
 		if id := config.ExtensionString(cfg, "runtimePlugin"); id != "" {
-			if err := maybeInstallMissingPlugin(configPath, manifests.KindRuntime, id); err != nil {
+			if err := maybeInstallMissingPlugin(configPath, manifests.KindRuntime, id, ""); err != nil {
 				return nil, err
 			}
 		}
 		if id := config.ExtensionString(cfg, "simulatorPlugin"); id != "" {
-			if err := maybeInstallMissingPlugin(configPath, manifests.KindSimulator, id); err != nil {
+			if err := maybeInstallMissingPlugin(configPath, manifests.KindSimulator, id, ""); err != nil {
 				return nil, err
 			}
+		}
+		// Ensure newly installed plugins are visible through the boundary.
+		if err := extBoundary.RefreshExternal(); err != nil {
+			return nil, err
 		}
 	}
 
@@ -158,11 +162,12 @@ func Bootstrap(configPath, stage, providerOverride string) (*AppContext, error) 
 	}
 
 	return &AppContext{
-		Config:   cfg,
-		Registry: reg,
-		RootDir:  rootDir,
-		Stage:    stage,
-		Backends: bundle,
+		Config:     cfg,
+		Registry:   reg,
+		Extensions: extBoundary,
+		RootDir:    rootDir,
+		Stage:      stage,
+		Backends:   bundle,
 	}, nil
 }
 
@@ -178,46 +183,66 @@ func isTruthyEnv(k string) bool {
 	return v == "1" || v == "true" || v == "yes"
 }
 
-func maybeInstallMissingProvider(reg *providers.Registry, cfg *config.Config, configPath string) error {
+func providerResolutionOptions(cfg *config.Config) resolution.Options {
+	opts := resolution.Options{IncludeExternal: true}
+	if cfg == nil {
+		return opts
+	}
+	if strings.EqualFold(strings.TrimSpace(cfg.Provider.Source), "external") {
+		opts.PreferExternal = true
+		if id := strings.TrimSpace(cfg.Provider.Name); id != "" && strings.TrimSpace(cfg.Provider.Version) != "" {
+			opts.PinnedVersions = map[string]string{id: strings.TrimSpace(cfg.Provider.Version)}
+		}
+	}
+	return opts
+}
+
+func maybeInstallMissingProvider(boundary *resolution.Boundary, cfg *config.Config, configPath string) error {
 	name := strings.TrimSpace(cfg.Provider.Name)
 	if name == "" {
 		return nil
 	}
-	if _, err := reg.Get(name); err == nil {
-		return nil
+	wantExternal := strings.EqualFold(strings.TrimSpace(cfg.Provider.Source), "external")
+
+	if !wantExternal {
+		if _, err := boundary.ResolveProvider(name); err == nil {
+			return nil
+		}
+	} else if isInstalledExternalPlugin(manifests.KindProvider, name, cfg.Provider.Version) {
+		// Ensure adapter registration reflects on-disk plugins.
+		if err := boundary.RefreshExternal(); err != nil {
+			return err
+		}
+		if _, err := boundary.ResolveProvider(name); err == nil {
+			return nil
+		}
 	}
 
 	// Attempt install (if allowed). If it fails or is declined, keep the original error behavior.
-	if err := maybeInstallMissingPlugin(configPath, manifests.KindProvider, name); err != nil {
+	if err := maybeInstallMissingPlugin(configPath, manifests.KindProvider, name, cfg.Provider.Version); err != nil {
 		return err
 	}
 
 	// Re-discover to find executable path, then register adapter.
-	res, _ := external.Discover(external.DiscoverOptions{})
-	for _, m := range res.Plugins {
-		if m.Kind == "provider" && m.ID == name && strings.TrimSpace(m.Executable) != "" {
-			reg.Register(external.NewExternalProviderAdapter(name, m.Executable))
-			break
-		}
+	if err := boundary.RefreshExternal(); err != nil {
+		return err
 	}
-	if _, err := reg.Get(name); err != nil {
+	if _, err := boundary.ResolveProvider(name); err != nil {
 		return err
 	}
 	return nil
 }
 
-func maybeInstallMissingPlugin(configPath string, kind manifests.PluginKind, id string) error {
+func maybeInstallMissingPlugin(configPath string, kind manifests.PluginKind, id, version string) error {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil
 	}
+	version = strings.TrimSpace(version)
 
 	// Already installed?
-	res, _ := external.Discover(external.DiscoverOptions{})
-	for _, m := range res.Plugins {
-		if m.Kind == kind && m.ID == id {
-			return nil
-		}
+	if isInstalledExternalPlugin(kind, id, version) {
+		return nil
 	}
 
 	nonInteractive := isTruthyEnv(envNonInteractive)
@@ -225,10 +250,11 @@ func maybeInstallMissingPlugin(configPath string, kind manifests.PluginKind, id 
 
 	registryURL := ""
 	registryToken := ""
-	if rc := external.LoadRunfabricrc(filepath.Dir(configPath)); rc.RegistryURL != "" {
+	rc := external.LoadRunfabricrc(filepath.Dir(configPath))
+	if rc.RegistryURL != "" {
 		registryURL = rc.RegistryURL
 	}
-	if rc := external.LoadRunfabricrc(filepath.Dir(configPath)); rc.RegistryToken != "" {
+	if rc.RegistryToken != "" {
 		registryToken = rc.RegistryToken
 	}
 	if v := external.RegistryURLFromEnv(); v != "" {
@@ -260,6 +286,7 @@ func maybeInstallMissingPlugin(configPath string, kind manifests.PluginKind, id 
 			RegistryURL: registryURL,
 			AuthToken:   registryToken,
 			ID:          id,
+			Version:     version,
 		},
 		extRuntime.Version,
 	)
@@ -272,7 +299,15 @@ func maybeInstallMissingPlugin(configPath string, kind manifests.PluginKind, id 
 	if ir.Plugin.Kind != kind {
 		return fmt.Errorf("auto-install: resolved %q as %q (expected %s)", id, ir.Plugin.Kind, kind)
 	}
+	if version != "" && !strings.EqualFold(ir.Plugin.Version, version) {
+		return fmt.Errorf("auto-install: resolved %q version %q (expected %q)", id, ir.Plugin.Version, version)
+	}
 	return nil
+}
+
+func isInstalledExternalPlugin(kind manifests.PluginKind, id, version string) bool {
+	ok, err := resolution.HasInstalledExternalPlugin(kind, id, version)
+	return err == nil && ok
 }
 
 func pluginKindLabel(k manifests.PluginKind) string {

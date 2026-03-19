@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -9,7 +10,8 @@ import (
 	"github.com/runfabric/runfabric/engine/internal/buildcache"
 	"github.com/runfabric/runfabric/engine/internal/config"
 	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
-	"github.com/runfabric/runfabric/engine/internal/extensions/runtime/build"
+	"github.com/runfabric/runfabric/engine/internal/extensions/resolution"
+	"github.com/runfabric/runfabric/engine/internal/extensions/runtimes"
 )
 
 func copyFile(src, dst string) error {
@@ -54,7 +56,18 @@ func Build(configPath string, opts BuildOptions) (*BuildResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
+	cfg, err = config.Resolve(cfg, "")
+	if err != nil {
+		return nil, fmt.Errorf("resolve config: %w", err)
+	}
+	if err := config.Validate(cfg); err != nil {
+		return nil, fmt.Errorf("validate config: %w", err)
+	}
 	projectRoot := filepath.Dir(configPath)
+	extBoundary, err := resolution.NewCached(providerResolutionOptions(cfg))
+	if err != nil {
+		return nil, fmt.Errorf("runtime boundary init: %w", err)
+	}
 
 	defaultBuildDir := filepath.Join(projectRoot, ".runfabric", "build")
 	if err := os.MkdirAll(defaultBuildDir, 0o755); err != nil {
@@ -105,7 +118,17 @@ func Build(configPath string, opts BuildOptions) (*BuildResult, error) {
 			errs = append(errs, fmt.Sprintf("%s: config signature: %v", name, err))
 			continue
 		}
-		artifact, err := build.PackageNodeFunction(projectRoot, name, fn, configSig)
+		runtimePlugin, err := extBoundary.ResolveRuntimePlugin(fn.Runtime)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
+			continue
+		}
+		artifact, err := runtimePlugin.Build(context.Background(), runtimes.BuildRequest{
+			Root:            projectRoot,
+			FunctionName:    name,
+			FunctionConfig:  fn,
+			ConfigSignature: configSig,
+		})
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
 			continue

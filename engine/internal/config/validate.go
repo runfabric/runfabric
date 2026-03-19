@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/runfabric/runfabric/engine/internal/aiflow"
+	"github.com/runfabric/runfabric/engine/internal/secrets"
 )
 
 func Validate(cfg *Config) error {
@@ -17,21 +18,51 @@ func Validate(cfg *Config) error {
 	if strings.TrimSpace(cfg.Provider.Runtime) == "" {
 		return fmt.Errorf("provider.runtime is required")
 	}
+	switch source := strings.ToLower(strings.TrimSpace(cfg.Provider.Source)); source {
+	case "", "builtin", "external":
+		if source != "external" && strings.TrimSpace(cfg.Provider.Version) != "" {
+			return fmt.Errorf("provider.version requires provider.source to be external")
+		}
+		if source == "external" {
+			name := strings.TrimSpace(cfg.Provider.Name)
+			if name == "aws" || name == "aws-lambda" {
+				return fmt.Errorf("provider.source external is not supported for %q while AWS remains internal", name)
+			}
+		}
+	default:
+		return fmt.Errorf("provider.source must be builtin or external (got %q)", cfg.Provider.Source)
+	}
 	if len(cfg.Functions) == 0 {
 		return fmt.Errorf("at least one function is required")
+	}
+	if err := secrets.ValidateConfigSecretMap(cfg.Secrets); err != nil {
+		return err
 	}
 
 	if cfg.Backend != nil {
 		switch cfg.Backend.Kind {
 		case "", "local":
 			// no extra fields required
-		case "s3", "aws-remote":
+		case "s3", "aws":
 			if strings.TrimSpace(cfg.Backend.S3Bucket) == "" {
 				return fmt.Errorf("backend.s3Bucket is required for backend.kind %q", cfg.Backend.Kind)
 			}
 			// LockTable is optional when using state reference format with lockfile or when backend supports it
-		case "gcs", "azblob", "postgres":
-			// accepted; backend-specific validation can be added later
+		case "gcs":
+			if err := validateGCSBackend(cfg); err != nil {
+				return err
+			}
+		case "azblob":
+			if err := validateAzblobBackend(cfg); err != nil {
+				return err
+			}
+		case "postgres":
+			if strings.TrimSpace(cfg.Backend.PostgresConnectionStringEnv) == "" {
+				cfg.Backend.PostgresConnectionStringEnv = "RUNFABRIC_STATE_POSTGRES_URL"
+			}
+			if strings.TrimSpace(cfg.Backend.PostgresTable) == "" {
+				cfg.Backend.PostgresTable = "runfabric_receipts"
+			}
 		case "sqlite":
 			if strings.TrimSpace(cfg.Backend.SqlitePath) == "" {
 				cfg.Backend.SqlitePath = ".runfabric/state.db"
@@ -41,7 +72,7 @@ func Validate(cfg *Config) error {
 				return fmt.Errorf("backend.lockTable or backend.receiptTable is required for backend.kind dynamodb")
 			}
 		default:
-			return fmt.Errorf("unsupported backend.kind %q (use local, s3, gcs, azblob, postgres, sqlite, or dynamodb)", cfg.Backend.Kind)
+			return fmt.Errorf("unsupported backend.kind %q (use local, s3, aws, gcs, azblob, postgres, sqlite, or dynamodb)", cfg.Backend.Kind)
 		}
 	}
 
@@ -119,6 +150,44 @@ func Validate(cfg *Config) error {
 
 	if err := validateAiWorkflow(cfg.AiWorkflow, aiflow.ValidNodeType); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateGCSBackend(cfg *Config) error {
+	if cfg == nil || cfg.Backend == nil {
+		return nil
+	}
+	var bucket string
+	var prefix string
+	if cfg.State != nil && cfg.State.GCS != nil {
+		bucket = strings.TrimSpace(cfg.State.GCS.Bucket)
+		prefix = strings.TrimSpace(cfg.State.GCS.Prefix)
+	}
+	if bucket == "" {
+		return fmt.Errorf("state.gcs.bucket is required for backend.kind %q", cfg.Backend.Kind)
+	}
+	if prefix == "" {
+		return fmt.Errorf("state.gcs.prefix is required for backend.kind %q", cfg.Backend.Kind)
+	}
+	return nil
+}
+
+func validateAzblobBackend(cfg *Config) error {
+	if cfg == nil || cfg.Backend == nil {
+		return nil
+	}
+	var container string
+	var prefix string
+	if cfg.State != nil && cfg.State.Azblob != nil {
+		container = strings.TrimSpace(cfg.State.Azblob.Container)
+		prefix = strings.TrimSpace(cfg.State.Azblob.Prefix)
+	}
+	if container == "" {
+		return fmt.Errorf("state.azblob.container is required for backend.kind %q", cfg.Backend.Kind)
+	}
+	if prefix == "" {
+		return fmt.Errorf("state.azblob.prefix is required for backend.kind %q", cfg.Backend.Kind)
 	}
 	return nil
 }

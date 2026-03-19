@@ -16,13 +16,10 @@ func newTracesCmd(opts *GlobalOptions) *cobra.Command {
 		Long:  "View traces aggregated by service/stage. Use --all to request aggregation for all functions (when backend supports it).",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			statusRunning(opts.JSONOutput, "Fetching traces...")
-			result, err := app.Traces(opts.ConfigPath, opts.Stage, provider, all)
+			result, err := app.Traces(opts.ConfigPath, opts.Stage, provider, all, service)
 			if err != nil {
 				statusFail(opts.JSONOutput, "Traces failed.")
 				return printFailure("traces", err)
-			}
-			if service != "" {
-				_ = service // reserved for future multi-service scope
 			}
 			statusDone(opts.JSONOutput, "Traces complete.")
 			if opts.JSONOutput {
@@ -34,6 +31,6 @@ func newTracesCmd(opts *GlobalOptions) *cobra.Command {
 
 	cmd.Flags().StringVar(&provider, "provider", "", "Provider key from providerOverrides (multi-cloud); e.g. aws, gcp")
 	cmd.Flags().BoolVar(&all, "all", false, "Aggregate traces for all functions (by service/stage)")
-	cmd.Flags().StringVar(&service, "service", "", "Service name (for future multi-service scope)")
+	cmd.Flags().StringVar(&service, "service", "", "Service name scope (must match runfabric.yml service when set)")
 	return cmd
 }

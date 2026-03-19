@@ -8,7 +8,7 @@ import (
 )
 
 // TestAPIProviderNames_Wired asserts that every provider returned by APIProviderNames
-// is wired (HasRunner) and that the list is non-empty.
+// is wired for all API capabilities and that the list is non-empty.
 func TestAPIProviderNames_Wired(t *testing.T) {
 	names := APIProviderNames()
 	if len(names) == 0 {
@@ -17,6 +17,15 @@ func TestAPIProviderNames_Wired(t *testing.T) {
 	for _, name := range names {
 		if !HasRunner(name) {
 			t.Errorf("provider %q in APIProviderNames() but HasRunner(%q) is false", name, name)
+		}
+		if !HasRemover(name) {
+			t.Errorf("provider %q in APIProviderNames() but HasRemover(%q) is false", name, name)
+		}
+		if !HasInvoker(name) {
+			t.Errorf("provider %q in APIProviderNames() but HasInvoker(%q) is false", name, name)
+		}
+		if !HasLogger(name) {
+			t.Errorf("provider %q in APIProviderNames() but HasLogger(%q) is false", name, name)
 		}
 	}
 }

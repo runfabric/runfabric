@@ -7,7 +7,7 @@ import (
 	"github.com/runfabric/runfabric/engine/internal/config"
 	appErrs "github.com/runfabric/runfabric/engine/internal/errors"
 	"github.com/runfabric/runfabric/engine/internal/extensions/providers"
-	"github.com/runfabric/runfabric/engine/internal/extensions/runtime/build"
+	"github.com/runfabric/runfabric/engine/internal/extensions/runtimes"
 	"github.com/runfabric/runfabric/engine/internal/planner"
 	"github.com/runfabric/runfabric/engine/internal/state"
 )
@@ -22,13 +22,22 @@ func (p *Provider) Plan(cfg *providers.Config, stage, root string) (*providers.P
 	}
 
 	artifactMap := map[string]providers.Artifact{}
+	runtimeRegistry := runtimes.NewBuiltinRegistry()
 	for fnName, fn := range cfg.Functions {
 		configSig, err := buildConfigSignature(fn)
 		if err != nil {
 			return nil, appErrs.Wrap(appErrs.CodeDeployFailed, "build config signature failed: "+fnName, err)
 		}
-
-		artifact, err := build.PackageNodeFunction(root, fnName, fn, configSig)
+		rt, err := runtimeRegistry.Get(fn.Runtime)
+		if err != nil {
+			return nil, appErrs.Wrap(appErrs.CodeDeployFailed, "resolve runtime plugin failed: "+fnName, err)
+		}
+		artifact, err := rt.Build(ctx, runtimes.BuildRequest{
+			Root:            root,
+			FunctionName:    fnName,
+			FunctionConfig:  fn,
+			ConfigSignature: configSig,
+		})
 		if err != nil {
 			return nil, appErrs.Wrap(appErrs.CodeDeployFailed, "package function during plan failed: "+fnName, err)
 		}

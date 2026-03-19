@@ -1,7 +1,9 @@
 package external
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -22,6 +24,12 @@ const (
 	envRegistryURL     = "RUNFABRIC_REGISTRY_URL"
 	envRegistryToken   = "RUNFABRIC_REGISTRY_TOKEN"
 	defaultRegistryURL = "https://registry.runfabric.cloud"
+
+	// localDevPublicKeyID is used by the local registry scaffold to demonstrate
+	// signature verification end-to-end.
+	localDevPublicKeyID = "local-dev"
+	// public key for ed25519.NewKeyFromSeed(seed=0x00..0x1f), base64-encoded.
+	localDevPublicKeyB64 = "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="
 )
 
 func DefaultRegistryURL() string { return defaultRegistryURL }
@@ -204,6 +212,27 @@ type InstallFromRegistryOptions struct {
 	Timeout     time.Duration
 }
 
+type registryInstallReceipt struct {
+	ReceiptVersion   int    `json:"version"`
+	InstalledAt      string `json:"installedAt"`
+	Kind             string `json:"kind"`
+	ID               string `json:"id"`
+	ExtensionVersion string `json:"extensionVersion"`
+
+	RequestID string `json:"requestId"`
+
+	Artifact struct {
+		URL       string `json:"url"`
+		SHA256    string `json:"sha256"`
+		SizeBytes int64  `json:"sizeBytes"`
+		Signature *struct {
+			Algorithm   string `json:"algorithm"`
+			Value       string `json:"value"`
+			PublicKeyID string `json:"publicKeyId"`
+		} `json:"signature,omitempty"`
+	} `json:"artifact"`
+}
+
 // InstallFromRegistry resolves an extension and installs it locally.
 // v1 supports only plugins (provider/runtime/simulator) as external on-disk plugins.
 func InstallFromRegistry(opts InstallFromRegistryOptions, coreVersion string) (*InstallResult, error) {
@@ -222,11 +251,17 @@ func InstallFromRegistry(opts InstallFromRegistryOptions, coreVersion string) (*
 	if err := json.Unmarshal(rr.Resolved, &rp); err != nil {
 		return nil, fmt.Errorf("resolve: unsupported resolved payload: %w", err)
 	}
+	requestID := ""
+	if rr.Meta != nil {
+		if v, ok := rr.Meta["requestId"].(string); ok {
+			requestID = v
+		}
+	}
 	if rp.Type != "plugin" {
 		return nil, fmt.Errorf("install: resolved type %q not supported by extension install", rp.Type)
 	}
-	kind := manifests.PluginKind(strings.TrimSpace(rp.PluginKind))
-	if kind != manifests.KindProvider && kind != manifests.KindRuntime && kind != manifests.KindSimulator {
+	kind := manifests.NormalizePluginKind(rp.PluginKind)
+	if !manifests.IsSupportedPluginKind(kind) {
 		return nil, fmt.Errorf("install: unknown pluginKind %q", rp.PluginKind)
 	}
 	if rp.Artifact.Checksum.Algorithm != "sha256" || strings.TrimSpace(rp.Artifact.Checksum.Value) == "" {
@@ -250,8 +285,53 @@ func InstallFromRegistry(opts InstallFromRegistryOptions, coreVersion string) (*
 	if err != nil {
 		return nil, err
 	}
-	if err := verifySHA256File(binPath, rp.Artifact.Checksum.Value); err != nil {
+	binBytes, err := os.ReadFile(binPath)
+	if err != nil {
 		return nil, err
+	}
+	// Verify checksum (sha256).
+	wantHex := strings.TrimSpace(rp.Artifact.Checksum.Value)
+	wantHex = strings.TrimPrefix(strings.ToLower(wantHex), "sha256:")
+	sum := sha256.Sum256(binBytes)
+	gotHex := hex.EncodeToString(sum[:])
+	if !strings.EqualFold(gotHex, wantHex) {
+		return nil, fmt.Errorf(
+			"registry install checksum mismatch (requestId=%s). Hint: re-run install; if it persists, the registry response or artifact may be corrupted",
+			requestID,
+		)
+	}
+	// Verify signature if present. If missing, enforce signature only for verified publishers.
+	if rp.Artifact.Signature != nil {
+		if strings.TrimSpace(rp.Artifact.Signature.Algorithm) != "ed25519" {
+			return nil, fmt.Errorf("registry install unsupported signature algorithm %q (requestId=%s)", rp.Artifact.Signature.Algorithm, requestID)
+		}
+		sigBytes, err := decodeSignatureValue(rp.Artifact.Signature.Value)
+		if err != nil {
+			return nil, fmt.Errorf("registry install signature decode failed (requestId=%s): %w", requestID, err)
+		}
+		pubKey, err := trustedPublicKey(rp.Artifact.Signature.PublicKeyID)
+		if err != nil {
+			return nil, fmt.Errorf("registry install unknown signature publicKeyId %q (requestId=%s)", rp.Artifact.Signature.PublicKeyID, requestID)
+		}
+		if !ed25519.Verify(pubKey, binBytes, sigBytes) {
+			return nil, fmt.Errorf(
+				"registry install signature verification failed (requestId=%s). Hint: the artifact bytes do not match the signature from the registry",
+				requestID,
+			)
+		}
+	} else {
+		verifiedPublisher := false
+		if rp.Publisher != nil {
+			if v, ok := rp.Publisher["verified"].(bool); ok {
+				verifiedPublisher = v
+			}
+		}
+		if verifiedPublisher {
+			return nil, fmt.Errorf(
+				"registry install missing artifact signature for verified publisher (requestId=%s). Hint: ensure the registry provides an ed25519 artifact signature",
+				requestID,
+			)
+		}
 	}
 
 	dest := pluginInstallDir(home, kind, rp.ID, rp.Version)
@@ -265,6 +345,33 @@ func InstallFromRegistry(opts InstallFromRegistryOptions, coreVersion string) (*
 	}
 	destBin := filepath.Join(dest, binName)
 	if err := copyFile(binPath, destBin, 0o755); err != nil {
+		return nil, err
+	}
+
+	// Persist local install receipt for traceability/auditing.
+	receipt := &registryInstallReceipt{
+		ReceiptVersion:   1,
+		InstalledAt:      time.Now().UTC().Format(time.RFC3339),
+		Kind:             string(kind),
+		ID:               rp.ID,
+		ExtensionVersion: rp.Version,
+		RequestID:        requestID,
+	}
+	receipt.Artifact.URL = rp.Artifact.URL
+	receipt.Artifact.SHA256 = rp.Artifact.Checksum.Value
+	receipt.Artifact.SizeBytes = rp.Artifact.SizeBytes
+	if rp.Artifact.Signature != nil {
+		receipt.Artifact.Signature = &struct {
+			Algorithm   string `json:"algorithm"`
+			Value       string `json:"value"`
+			PublicKeyID string `json:"publicKeyId"`
+		}{
+			Algorithm:   rp.Artifact.Signature.Algorithm,
+			Value:       rp.Artifact.Signature.Value,
+			PublicKeyID: rp.Artifact.Signature.PublicKeyID,
+		}
+	}
+	if err := saveInstallReceipt(home, receipt); err != nil {
 		return nil, err
 	}
 
@@ -303,7 +410,62 @@ func InstallFromRegistry(opts InstallFromRegistryOptions, coreVersion string) (*
 		Path:        dest,
 		Executable:  destBin,
 	}
+	invalidateDiscoverCache()
 	return &InstallResult{Plugin: pm}, nil
+}
+
+func decodeSignatureValue(v string) ([]byte, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil, fmt.Errorf("empty signature value")
+	}
+	// Common: base64.
+	if b, err := base64.StdEncoding.DecodeString(v); err == nil {
+		return b, nil
+	}
+	if b, err := base64.RawStdEncoding.DecodeString(v); err == nil {
+		return b, nil
+	}
+	// Fallback: hex.
+	if hb := strings.TrimPrefix(strings.ToLower(v), "0x"); len(hb) > 0 {
+		if b, err := hex.DecodeString(hb); err == nil {
+			return b, nil
+		}
+	}
+	return nil, fmt.Errorf("signature value is not valid base64 or hex")
+}
+
+func trustedPublicKey(publicKeyID string) (ed25519.PublicKey, error) {
+	switch strings.TrimSpace(publicKeyID) {
+	case localDevPublicKeyID:
+		pub, err := base64.StdEncoding.DecodeString(localDevPublicKeyB64)
+		if err != nil {
+			return nil, err
+		}
+		// ed25519 public key size is 32 bytes.
+		if l := len(pub); l != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("unexpected public key size %d", l)
+		}
+		return ed25519.PublicKey(pub), nil
+	default:
+		return nil, fmt.Errorf("unknown publicKeyId")
+	}
+}
+
+func saveInstallReceipt(home string, receipt *registryInstallReceipt) error {
+	if receipt == nil {
+		return fmt.Errorf("nil receipt")
+	}
+	receiptDir := filepath.Join(home, "registry-installs", receipt.Kind, receipt.ID, receipt.ExtensionVersion)
+	if err := os.MkdirAll(receiptDir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(receiptDir, "receipt.json")
+	b, err := json.MarshalIndent(receipt, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o644)
 }
 
 func downloadToFile(dir, srcURL, filename string, timeout time.Duration) (string, error) {

@@ -26,7 +26,7 @@ func NewBundle(ctx context.Context, opts Options) (*Bundle, error) {
 			Receipts: localbackend.NewReceiptBackend(opts.Root),
 		}, nil
 
-	case "aws-remote":
+	case "aws":
 		s3Client, err := s3backend.New(ctx, opts.AWSRegion, opts.S3Bucket, opts.S3Prefix)
 		if err != nil {
 			return nil, fmt.Errorf("init s3 backend: %w", err)

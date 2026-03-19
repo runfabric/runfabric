@@ -3,6 +3,13 @@ package external
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +19,82 @@ import (
 	"github.com/runfabric/runfabric/engine/internal/extensions/manifests"
 	"gopkg.in/yaml.v3"
 )
+
+func TestInstall_WithoutSource_ResolvesFromRegistry(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(envHome, home)
+
+	binBytes := []byte("registry-bin")
+	sum := sha256.Sum256(binBytes)
+	sumHex := hex.EncodeToString(sum[:])
+	seed := make([]byte, 32)
+	for i := range seed {
+		seed[i] = byte(i)
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	sigB64 := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, binBytes))
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/bin", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(binBytes)
+	})
+	mux.HandleFunc("/v1/extensions/resolve", func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{
+			"request": map[string]any{
+				"id":   "provider-aws",
+				"core": r.URL.Query().Get("core"),
+				"os":   r.URL.Query().Get("os"),
+				"arch": r.URL.Query().Get("arch"),
+			},
+			"resolved": map[string]any{
+				"id":         "provider-aws",
+				"name":       "AWS Provider",
+				"type":       "plugin",
+				"pluginKind": "providers",
+				"version":    "1.0.0",
+				"publisher": map[string]any{
+					"verified": true,
+				},
+				"artifact": map[string]any{
+					"type":      "binary",
+					"format":    "executable",
+					"url":       serverURL(r) + "/bin",
+					"sizeBytes": len(binBytes),
+					"checksum": map[string]any{
+						"algorithm": "sha256",
+						"value":     sumHex,
+					},
+					"signature": map[string]any{
+						"algorithm":   "ed25519",
+						"value":       sigB64,
+						"publicKeyId": "local-dev",
+					},
+				},
+			},
+			"meta": map[string]any{"requestId": "resolve-install"},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	res, err := Install(InstallOptions{
+		ID:          "provider-aws",
+		Version:     "1.0.0",
+		RegistryURL: srv.URL,
+		CoreVersion: "0.9.0",
+	})
+	if err != nil {
+		t.Fatalf("install via registry resolution failed: %v", err)
+	}
+	if res == nil || res.Plugin == nil {
+		t.Fatalf("expected installed plugin")
+	}
+	if res.Plugin.Kind != manifests.KindProvider {
+		t.Fatalf("expected provider kind, got %q", res.Plugin.Kind)
+	}
+}
 
 func TestInstallAndUninstall_FromLocalTarGz(t *testing.T) {
 	if runtime.GOOS == "windows" {

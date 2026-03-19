@@ -17,7 +17,10 @@ func Invoke(configPath, stage, function, providerOverride string, payload []byte
 	if err != nil {
 		return nil, err
 	}
-	provider := ctx.Config.Provider.Name
+	provider, err := resolveProvider(ctx)
+	if err != nil {
+		return nil, err
+	}
 	start := time.Now().UTC()
 
 	var workflowHash, entrypoint, nodeID, nodeType string
@@ -50,7 +53,7 @@ func Invoke(configPath, stage, function, providerOverride string, payload []byte
 			RunID:        runID,
 			Service:      ctx.Config.Service,
 			Stage:        ctx.Stage,
-			Provider:     provider,
+			Provider:     provider.name,
 			WorkflowHash: workflowHash,
 			Entrypoint:   entrypoint,
 			Status:       status,
@@ -73,8 +76,8 @@ func Invoke(configPath, stage, function, providerOverride string, payload []byte
 		return runID
 	}
 
-	if deployapi.HasInvoker(provider) {
-		res, err := deployapi.Invoke(context.Background(), provider, ctx.Config, ctx.Stage, function, payload, ctx.RootDir)
+	if provider.mode == dispatchAPI {
+		res, err := deployapi.Invoke(context.Background(), provider.name, ctx.Config, ctx.Stage, function, payload, ctx.RootDir)
 		if err != nil {
 			_ = saveRun(state.RunStatusFailed, state.NodeStatusFailed, err.Error())
 			return nil, err

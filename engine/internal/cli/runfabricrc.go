@@ -13,9 +13,11 @@ import (
 // Supported keys (v1):
 // - registry.url=https://registry.runfabric.cloud
 // - registry.token=... (bearer token for registry API)
+// - auth.url=https://auth.runfabric.cloud
 type runfabricrc struct {
 	RegistryURL   string
 	RegistryToken string
+	AuthURL       string
 }
 
 func loadRunfabricrc() runfabricrc {
@@ -73,6 +75,8 @@ func readRunfabricrcFile(path string) (runfabricrc, bool) {
 			rc.RegistryURL = v
 		case "registry.token":
 			rc.RegistryToken = v
+		case "auth.url":
+			rc.AuthURL = v
 		}
 	}
 	return rc, true

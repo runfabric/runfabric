@@ -40,7 +40,7 @@ type Config struct {
 	Logs *LogsConfig `yaml:"logs,omitempty"`
 	// Build: optional build-step ordering (Phase 3.1). Order defines execution order of hooks or build steps when multiple are present.
 	Build *BuildConfig `yaml:"build,omitempty"`
-	// Alerts: optional alerting config (Phase 3.2). Webhook/Slack URLs and triggers; used by integrations or future runtime.
+	// Alerts: optional alerting config (webhook/slack URLs and triggers), used by integrations.
 	Alerts *AlertsConfig `yaml:"alerts,omitempty"`
 	// AiWorkflow: optional AI workflow graph (Phase 14). When enable is true, nodes/edges define a DAG; entrypoint is the starting node.
 	AiWorkflow *AiWorkflowConfig `yaml:"aiWorkflow,omitempty"`
@@ -249,6 +249,8 @@ type ProviderConfig struct {
 	Name    string         `yaml:"name"`
 	Runtime string         `yaml:"runtime"`
 	Region  string         `yaml:"region,omitempty"`
+	Source  string         `yaml:"source,omitempty"`  // builtin (default) | external
+	Version string         `yaml:"version,omitempty"` // external plugin version pin
 	Backend *BackendConfig `yaml:"backend,omitempty"` // optional per-provider state backend (e.g. s3 for aws, gcs for gcp)
 }
 

@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"sort"
 	"sync"
 )
 
@@ -65,10 +66,11 @@ func (r *Registry) GetPlugin(name string) (ProviderPlugin, bool) {
 // List returns metadata for all registered plugins. Implements ProviderRegistry.
 func (r *Registry) List() []ProviderMeta {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 	out := make([]ProviderMeta, 0, len(r.plugins))
 	for _, p := range r.plugins {
 		out = append(out, p.Meta())
 	}
+	r.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }

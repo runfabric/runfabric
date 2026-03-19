@@ -16,6 +16,30 @@ const (
 	KindSimulator PluginKind = "simulator"
 )
 
+// NormalizePluginKind normalizes singular/plural aliases to canonical plugin kinds.
+func NormalizePluginKind(raw string) PluginKind {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "provider", "providers":
+		return KindProvider
+	case "runtime", "runtimes":
+		return KindRuntime
+	case "simulator", "simulators":
+		return KindSimulator
+	default:
+		return PluginKind(strings.TrimSpace(raw))
+	}
+}
+
+// IsSupportedPluginKind reports whether kind is one of provider/runtime/simulator.
+func IsSupportedPluginKind(kind PluginKind) bool {
+	switch kind {
+	case KindProvider, KindRuntime, KindSimulator:
+		return true
+	default:
+		return false
+	}
+}
+
 // Permissions describes what a plugin or addon is allowed to access (for validation and UX).
 type Permissions struct {
 	FS      bool `json:"fs,omitempty"`
@@ -39,7 +63,7 @@ type PluginManifest struct {
 	Executable string `json:"executable,omitempty"` // resolved executable path (optional)
 }
 
-// PluginRegistry holds metadata for built-in and (future) external plugins.
+// PluginRegistry holds metadata for built-in and external plugins.
 type PluginRegistry struct {
 	mu      sync.RWMutex
 	plugins map[string]*PluginManifest
@@ -47,21 +71,14 @@ type PluginRegistry struct {
 	// lowercased fields for Search() without per-call allocations
 	idLower   map[string]string
 	nameLower map[string]string
-
-	// cached sorted lists for List() (invalidate on Register())
-	cacheDirty  bool
-	cacheAll    []*PluginManifest
-	cacheByKind map[PluginKind][]*PluginManifest
 }
 
 // NewPluginRegistry returns a registry pre-filled with built-in provider and runtime manifests.
 func NewPluginRegistry() *PluginRegistry {
 	r := &PluginRegistry{
-		plugins:     make(map[string]*PluginManifest),
-		idLower:     make(map[string]string),
-		nameLower:   make(map[string]string),
-		cacheDirty:  true,
-		cacheByKind: make(map[PluginKind][]*PluginManifest),
+		plugins:   make(map[string]*PluginManifest),
+		idLower:   make(map[string]string),
+		nameLower: make(map[string]string),
 	}
 	for _, m := range builtinPluginManifests() {
 		r.plugins[m.ID] = m
@@ -91,6 +108,8 @@ func builtinPluginManifests() []*PluginManifest {
 		{ID: "runtime-node", Kind: KindRuntime, Name: "Node.js", Description: "Node.js runtime (alias)"},
 		{ID: "python", Kind: KindRuntime, Name: "Python", Description: "Python runtime (build and invoke)"},
 		{ID: "runtime-python", Kind: KindRuntime, Name: "Python", Description: "Python runtime (alias)"},
+		// Simulators
+		{ID: "local", Kind: KindSimulator, Name: "Local Simulator", Description: "Built-in local simulator for call-local/dev"},
 	}
 }
 
@@ -104,7 +123,6 @@ func (r *PluginRegistry) Register(m *PluginManifest) {
 	r.plugins[m.ID] = m
 	r.idLower[m.ID] = strings.ToLower(m.ID)
 	r.nameLower[m.ID] = strings.ToLower(m.Name)
-	r.cacheDirty = true
 }
 
 // Get returns the plugin manifest for id, or nil.
@@ -116,13 +134,22 @@ func (r *PluginRegistry) Get(id string) *PluginManifest {
 
 // List returns all plugins, optionally filtered by kind, sorted by kind (provider, runtime, simulator) then by ID.
 func (r *PluginRegistry) List(kind PluginKind) []*PluginManifest {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.rebuildCachesLocked()
-	if kind == "" {
-		return append([]*PluginManifest(nil), r.cacheAll...)
+	r.mu.RLock()
+	list := make([]*PluginManifest, 0, len(r.plugins))
+	for _, m := range r.plugins {
+		if kind == "" || m.Kind == kind {
+			list = append(list, m)
+		}
 	}
-	return append([]*PluginManifest(nil), r.cacheByKind[kind]...)
+	r.mu.RUnlock()
+	sort.Slice(list, func(i, j int) bool {
+		ki, kj := list[i].Kind, list[j].Kind
+		if ki != kj {
+			return kindOrder(ki) < kindOrder(kj)
+		}
+		return list[i].ID < list[j].ID
+	})
+	return list
 }
 
 func kindOrder(k PluginKind) int {
@@ -144,7 +171,6 @@ func (r *PluginRegistry) Search(query string) []*PluginManifest {
 		return r.List("")
 	}
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 	q := strings.ToLower(query)
 	var out []*PluginManifest
 	for _, m := range r.plugins {
@@ -154,31 +180,13 @@ func (r *PluginRegistry) Search(query string) []*PluginManifest {
 			out = append(out, m)
 		}
 	}
-	return out
-}
-
-func (r *PluginRegistry) rebuildCachesLocked() {
-	if !r.cacheDirty {
-		return
-	}
-	all := make([]*PluginManifest, 0, len(r.plugins))
-	byKind := make(map[PluginKind][]*PluginManifest, 3)
-	for _, m := range r.plugins {
-		all = append(all, m)
-		byKind[m.Kind] = append(byKind[m.Kind], m)
-	}
-	sort.Slice(all, func(i, j int) bool {
-		ki, kj := all[i].Kind, all[j].Kind
+	r.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool {
+		ki, kj := out[i].Kind, out[j].Kind
 		if ki != kj {
 			return kindOrder(ki) < kindOrder(kj)
 		}
-		return all[i].ID < all[j].ID
+		return out[i].ID < out[j].ID
 	})
-	for k, slice := range byKind {
-		sort.Slice(slice, func(i, j int) bool { return slice[i].ID < slice[j].ID })
-		byKind[k] = slice
-	}
-	r.cacheAll = all
-	r.cacheByKind = byKind
-	r.cacheDirty = false
+	return out
 }
