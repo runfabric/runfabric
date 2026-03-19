@@ -1,15 +1,9 @@
-# Web: Extensions UI (future)
+# Web: Extensions UI (legacy shim)
 
-This folder is reserved for a future **Extensions / Marketplace** web UI.
+This folder is deprecated.
 
-Intended scope:
+Active frontend ownership moved to:
 
-- browse/search extensions (addons + plugins),
-- show publisher trust, permissions, compatibility,
-- show advisories and version history,
-- link to docs and source.
+- `registry/web/` (single registry-centric UI served by the registry process)
 
-Backend API contract is defined in:
-
-- [docs/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](../../docs/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md)
-
+Any new marketplace/docs/auth UI work should be implemented in `registry/web`.

@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://registry.runfabric.cloud/schema/advisory.v1.json",
+  "title": "RunFabric Advisory (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "extensionId": { "type": "string", "minLength": 1 },
+    "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "affectedRange": { "type": "string" },
+    "patchedVersions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "url": { "type": "string" },
+    "publishedAt": { "type": "string", "format": "date-time" },
+    "metadata": { "type": "object" }
+  },
+  "required": ["id", "extensionId", "severity", "summary", "publishedAt"]
+}

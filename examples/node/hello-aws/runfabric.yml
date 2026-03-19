@@ -6,13 +6,13 @@ provider:
   region: ${env:AWS_REGION,ap-southeast-1}
 
 # backend:
-#   kind: aws-remote
+#   kind: aws
 #   s3Bucket: ${env:RUNFABRIC_S3_BUCKET}
 #   s3Prefix: runfabric/dev
 #   lockTable: ${env:RUNFABRIC_DYNAMODB_TABLE}
 
 backend:
-  kind: aws-remote
+  kind: aws
   s3Bucket: runfabric
   s3Prefix: apps/dev
   lockTable: rf-locks

@@ -1,12 +1,58 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://runfabric.dev/schemas/workflow.schema.json",
-  "title": "Workflow",
-  "description": "RunFabric workflow definition. May be used under a top-level workflows key in runfabric.yml.",
+  "title": "RunFabric Workflow Definition",
+  "description": "Definition for one entry under runfabric.yml workflows.",
   "type": "object",
   "properties": {
-    "name": { "type": "string" },
-    "steps": { "type": "array", "items": { "type": "object" } }
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Workflow name."
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered workflow steps.",
+      "items": {
+        "$ref": "#/$defs/WorkflowStep"
+      }
+    }
   },
-  "additionalProperties": true
+  "required": ["name"],
+  "additionalProperties": false,
+  "$defs": {
+    "WorkflowStep": {
+      "type": "object",
+      "properties": {
+        "function": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Function name to execute for this step."
+        },
+        "next": {
+          "type": "string",
+          "description": "Optional next step identifier or branch label."
+        },
+        "retry": {
+          "$ref": "#/$defs/WorkflowRetry"
+        }
+      },
+      "required": ["function"],
+      "additionalProperties": false
+    },
+    "WorkflowRetry": {
+      "type": "object",
+      "properties": {
+        "attempts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "backoffSeconds": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  }
 }

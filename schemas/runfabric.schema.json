@@ -115,22 +115,35 @@
         "region": {
           "type": "string",
           "description": "Optional region; default from env (e.g. AWS_REGION)."
+        },
+        "source": {
+          "type": "string",
+          "enum": ["builtin", "external"],
+          "description": "Provider resolution source. builtin keeps engine providers; external prefers installed external provider plugins."
+        },
+        "version": {
+          "type": "string",
+          "description": "External provider plugin version pin (used when source=external)."
         }
       },
       "additionalProperties": false
     },
     "BackendConfig": {
       "type": "object",
-      "description": "State backend for locks and journal. For kind s3/aws-remote, s3Bucket and lockTable are required.",
+      "description": "State backend for locks and journal. For kind s3/aws, s3Bucket is required.",
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["local", "s3", "aws-remote", "gcs", "azblob", "postgres"],
+          "enum": ["local", "s3", "aws", "gcs", "azblob", "postgres", "sqlite", "dynamodb"],
           "default": "local"
         },
         "s3Bucket": { "type": "string" },
         "s3Prefix": { "type": "string" },
-        "lockTable": { "type": "string", "description": "DynamoDB table name for locking when kind is s3/aws-remote." }
+        "lockTable": { "type": "string", "description": "DynamoDB table name for locking when kind is s3/aws." },
+        "postgresConnectionStringEnv": { "type": "string", "description": "Environment variable name containing Postgres DSN when kind is postgres." },
+        "postgresTable": { "type": "string", "description": "Postgres table name for receipts when kind is postgres (default runfabric_receipts)." },
+        "sqlitePath": { "type": "string", "description": "SQLite path for receipts when kind is sqlite (default .runfabric/state.db)." },
+        "receiptTable": { "type": "string", "description": "DynamoDB table for receipts when kind is dynamodb; falls back to lockTable when omitted." }
       },
       "additionalProperties": false
     },

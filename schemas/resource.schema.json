@@ -1,12 +1,70 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://runfabric.dev/schemas/resource.schema.json",
-  "title": "Resource",
-  "description": "RunFabric resource definition (e.g. queues, buckets, topics). May be used under a top-level resources key in runfabric.yml.",
+  "title": "RunFabric Resource Definition",
+  "description": "Definition for one entry under runfabric.yml resources.<name>.",
   "type": "object",
   "properties": {
-    "type": { "type": "string", "description": "Resource type (e.g. queue, bucket, topic)." },
-    "properties": { "type": "object", "description": "Type-specific properties." }
+    "type": {
+      "type": "string",
+      "description": "Resource type hint (for docs/provisioning).",
+      "enum": ["database", "cache", "queue", "topic", "bucket", "rds", "elasticache"]
+    },
+    "envVar": {
+      "type": "string",
+      "description": "Environment variable injected into function env (e.g. DATABASE_URL).",
+      "pattern": "^[A-Z_][A-Z0-9_]*$"
+    },
+    "connectionStringEnv": {
+      "type": "string",
+      "description": "Environment variable name to read at deploy time."
+    },
+    "connectionString": {
+      "type": "string",
+      "description": "Literal or ${env:VAR} expression resolved at deploy."
+    },
+    "provision": {
+      "type": "boolean",
+      "description": "When true, provider provisioner may resolve connection details (fallback to connectionStringEnv/connectionString)."
+    },
+    "identifier": {
+      "type": "string",
+      "description": "Provider-specific resource identifier used by provisioning (e.g. RDS instance ID)."
+    },
+    "region": {
+      "type": "string",
+      "description": "Optional provider region override for provisioning."
+    },
+    "engine": {
+      "type": "string",
+      "description": "Optional database engine hint used by provisioning.",
+      "enum": ["postgres", "mysql"]
+    },
+    "userEnv": {
+      "type": "string",
+      "description": "Env var name for DB user when provisioning."
+    },
+    "passwordEnv": {
+      "type": "string",
+      "description": "Env var name for DB password when provisioning."
+    },
+    "dbNameEnv": {
+      "type": "string",
+      "description": "Env var name for DB name when provisioning."
+    },
+    "properties": {
+      "type": "object",
+      "description": "Provider-specific extension properties."
+    }
   },
+  "required": ["envVar"],
+  "anyOf": [
+    { "required": ["connectionStringEnv"] },
+    { "required": ["connectionString"] },
+    {
+      "required": ["provision"],
+      "properties": { "provision": { "const": true } }
+    }
+  ],
   "additionalProperties": true
 }
