@@ -56,3 +56,22 @@ func BackendDoctor(configPath, stage string) (any, error) {
 
 	return report, nil
 }
+
+func DevStreamDoctor(configPath, stage, tunnelURL string) (any, error) {
+	result, err := BackendDoctor(configPath, stage)
+	if err != nil {
+		return nil, err
+	}
+	report, ok := result.(*diagnostics.HealthReport)
+	if !ok {
+		return result, nil
+	}
+	ctx, err := Bootstrap(configPath, stage, "")
+	if err != nil {
+		return nil, err
+	}
+	if err := appendDevStreamChecks(report, ctx.Config.Provider.Name, tunnelURL); err != nil {
+		return report, err
+	}
+	return report, nil
+}

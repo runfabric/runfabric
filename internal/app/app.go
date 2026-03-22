@@ -14,7 +14,9 @@ type AppContext = coreapp.AppContext
 type BuildOptions = coreapp.BuildOptions
 type BuildResult = coreapp.BuildResult
 type DashboardData = coreapp.DashboardData
+type DevStreamReport = coreapp.DevStreamReport
 type WorkflowRunResult = coreapp.WorkflowRunResult
+type FabricRoutingConfig = coreapp.FabricRoutingConfig
 
 // AppService is the contract boundary between CLI and workflow app operations.
 type AppService interface {
@@ -42,31 +44,52 @@ func (defaultAppService) Remove(configPath, stage, providerOverride string) (any
 }
 
 func BackendDoctor(configPath, stage string) (any, error) {
-	return coreapp.BackendDoctor(configPath, stage)
+	return withAlertOnError(configPath, stage, "doctor", func() (any, error) {
+		return coreapp.BackendDoctor(configPath, stage)
+	})
+}
+func DevStreamDoctor(configPath, stage, tunnelURL string) (any, error) {
+	return withAlertOnError(configPath, stage, "doctor", func() (any, error) {
+		return coreapp.DevStreamDoctor(configPath, stage, tunnelURL)
+	})
 }
 func Plan(configPath, stage, providerOverride string) (any, error) {
-	return coreapp.Plan(configPath, stage, providerOverride)
+	return withAlertOnError(configPath, stage, "plan", func() (any, error) {
+		return coreapp.Plan(configPath, stage, providerOverride)
+	})
 }
 func Build(configPath string, opts BuildOptions) (*BuildResult, error) {
 	return coreapp.Build(configPath, opts)
 }
 func Deploy(configPath, stage, functionName string, rollbackOnFailure, noRollbackOnFailure bool, extraEnv map[string]string, providerOverride string) (any, error) {
-	return coreapp.Deploy(configPath, stage, functionName, rollbackOnFailure, noRollbackOnFailure, extraEnv, providerOverride)
+	return withAlertOnError(configPath, stage, "deploy", func() (any, error) {
+		return coreapp.Deploy(configPath, stage, functionName, rollbackOnFailure, noRollbackOnFailure, extraEnv, providerOverride)
+	})
 }
 func Remove(configPath, stage, providerOverride string) (any, error) {
-	return coreapp.Remove(configPath, stage, providerOverride)
+	return withAlertOnError(configPath, stage, "remove", func() (any, error) {
+		return coreapp.Remove(configPath, stage, providerOverride)
+	})
 }
 func Invoke(configPath, stage, function, providerOverride string, payload []byte) (any, error) {
-	return coreapp.Invoke(configPath, stage, function, providerOverride, payload)
+	return withAlertOnError(configPath, stage, "invoke", func() (any, error) {
+		return coreapp.Invoke(configPath, stage, function, providerOverride, payload)
+	})
 }
 func Logs(configPath, stage, function, providerOverride, service string) (any, error) {
-	return coreapp.Logs(configPath, stage, function, providerOverride, service)
+	return withAlertOnError(configPath, stage, "logs", func() (any, error) {
+		return coreapp.Logs(configPath, stage, function, providerOverride, service)
+	})
 }
 func Traces(configPath, stage, providerOverride string, all bool, service string) (any, error) {
-	return coreapp.Traces(configPath, stage, providerOverride, all, service)
+	return withAlertOnError(configPath, stage, "traces", func() (any, error) {
+		return coreapp.Traces(configPath, stage, providerOverride, all, service)
+	})
 }
 func Metrics(configPath, stage, providerOverride string, all bool, service string) (any, error) {
-	return coreapp.Metrics(configPath, stage, providerOverride, all, service)
+	return withAlertOnError(configPath, stage, "metrics", func() (any, error) {
+		return coreapp.Metrics(configPath, stage, providerOverride, all, service)
+	})
 }
 func Releases(configPath string) (any, error)       { return coreapp.Releases(configPath) }
 func List(configPath, stage string) (any, error)    { return coreapp.List(configPath, stage) }
@@ -135,6 +158,9 @@ func WatchProjectDir(configPath string, pollInterval time.Duration, done <-chan 
 func PrepareDevStreamTunnel(configPath, stage, tunnelURL string) (restore func(), err error) {
 	return coreapp.PrepareDevStreamTunnel(configPath, stage, tunnelURL)
 }
+func PrepareDevStreamTunnelWithReport(configPath, stage, tunnelURL string) (restore func(), report *coreapp.DevStreamReport, err error) {
+	return coreapp.PrepareDevStreamTunnelWithReport(configPath, stage, tunnelURL)
+}
 func FabricDeploy(configPath, stage string, rollbackOnFailure, noRollbackOnFailure bool) (*statecore.FabricState, error) {
 	return coreapp.FabricDeploy(configPath, stage, rollbackOnFailure, noRollbackOnFailure)
 }
@@ -142,6 +168,12 @@ func FabricHealth(configPath, stage string) (*statecore.FabricState, error) {
 	return coreapp.FabricHealth(configPath, stage)
 }
 func FabricTargets(cfg *config.Config) []string { return coreapp.FabricTargets(cfg) }
+func GenerateFabricRoutingConfig(fabricState *statecore.FabricState, cfg *config.Config) *coreapp.FabricRoutingConfig {
+	return coreapp.GenerateFabricRoutingConfig(fabricState, cfg)
+}
+func FormatFabricRoutingGuide(routingCfg *coreapp.FabricRoutingConfig) string {
+	return coreapp.FormatFabricRoutingGuide(routingCfg)
+}
 func ComposeDeploy(composePath, stage string, rollbackOnFailure, noRollbackOnFailure bool) (any, error) {
 	return coreapp.ComposeDeploy(composePath, stage, rollbackOnFailure, noRollbackOnFailure)
 }

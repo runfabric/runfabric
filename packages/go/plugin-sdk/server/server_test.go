@@ -51,3 +51,55 @@ func TestServerHandshakeAndMethodDispatch(t *testing.T) {
 		t.Fatalf("second response id=%v want 2", second["id"])
 	}
 }
+
+func TestServerDefaultProtocolVersionAndErrorSurface(t *testing.T) {
+	s := New(Options{
+		Methods: map[string]MethodFunc{
+			"provider.fail": func(ctx context.Context, params json.RawMessage) (any, error) {
+				return nil, context.DeadlineExceeded
+			},
+		},
+	})
+
+	in := bytes.NewBufferString(
+		`{"id":"1","method":"handshake"}` + "\n" +
+			`{"id":"2","method":"provider.unknown"}` + "\n" +
+			`{"id":"3"}` + "\n" +
+			`{"id":"4","method":"provider.fail"}` + "\n" +
+			`not-json` + "\n",
+	)
+	var out bytes.Buffer
+	if err := s.Serve(context.Background(), in, &out); err != nil {
+		t.Fatalf("serve: %v", err)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(out.Bytes()), []byte("\n"))
+	if len(lines) != 5 {
+		t.Fatalf("expected 5 responses, got %d", len(lines))
+	}
+
+	assertResponse := func(idx int) map[string]any {
+		t.Helper()
+		var decoded map[string]any
+		if err := json.Unmarshal(lines[idx], &decoded); err != nil {
+			t.Fatalf("decode response %d: %v", idx, err)
+		}
+		return decoded
+	}
+
+	if result, ok := assertResponse(0)["result"].(map[string]any); !ok || result["protocolVersion"] != "2025-01-01" {
+		t.Fatalf("unexpected default handshake result: %#v", assertResponse(0))
+	}
+	if errBody, ok := assertResponse(1)["error"].(map[string]any); !ok || errBody["code"] != "method_not_found" {
+		t.Fatalf("unexpected unknown-method response: %#v", assertResponse(1))
+	}
+	if errBody, ok := assertResponse(2)["error"].(map[string]any); !ok || errBody["code"] != "invalid_request" {
+		t.Fatalf("unexpected missing-method response: %#v", assertResponse(2))
+	}
+	if errBody, ok := assertResponse(3)["error"].(map[string]any); !ok || errBody["code"] != "handler_error" {
+		t.Fatalf("unexpected handler-error response: %#v", assertResponse(3))
+	}
+	if errBody, ok := assertResponse(4)["error"].(map[string]any); !ok || errBody["code"] != "invalid_json" {
+		t.Fatalf("unexpected invalid-json response: %#v", assertResponse(4))
+	}
+}

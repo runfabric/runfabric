@@ -20,13 +20,12 @@ func Invoke(configPath, stage, function, providerOverride string, payload []byte
 	}
 
 	if orchestration, ok := provider.provider.(providers.OrchestrationCapable); ok {
-		if strings.HasPrefix(function, "sfn:") || strings.HasPrefix(function, "stepfunction:") {
-			name := strings.TrimPrefix(strings.TrimPrefix(function, "sfn:"), "stepfunction:")
+		if workflowName, ok := parseOrchestrationTarget(function); ok {
 			return orchestration.InvokeOrchestration(context.Background(), providers.OrchestrationInvokeRequest{
 				Config:  ctx.Config,
 				Stage:   ctx.Stage,
 				Root:    ctx.RootDir,
-				Name:    name,
+				Name:    workflowName,
 				Payload: payload,
 			})
 		}
@@ -44,4 +43,19 @@ func Invoke(configPath, stage, function, providerOverride string, payload []byte
 		return nil, err
 	}
 	return res, nil
+}
+
+func parseOrchestrationTarget(function string) (string, bool) {
+	prefixes := []string{"sfn:", "stepfunction:", "cwf:", "cloudworkflow:", "durable:"}
+	trimmed := strings.TrimSpace(function)
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			name := strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+			if name == "" {
+				return "", false
+			}
+			return name, true
+		}
+	}
+	return "", false
 }

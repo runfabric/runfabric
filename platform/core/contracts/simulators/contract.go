@@ -21,6 +21,12 @@ type Request struct {
 	Query    map[string]string `json:"query,omitempty"`
 	Headers  map[string]string `json:"headers,omitempty"`
 	Body     []byte            `json:"body,omitempty"`
+
+	// Execution context populated by the local dev server so the simulator
+	// can actually invoke the handler process.
+	WorkDir    string `json:"workDir,omitempty"`    // absolute path to project root
+	HandlerRef string `json:"handlerRef,omitempty"` // e.g. "dist/handler.handler"
+	Runtime    string `json:"runtime,omitempty"`    // e.g. "nodejs20.x"
 }
 
 type Response struct {

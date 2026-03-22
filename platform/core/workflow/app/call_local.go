@@ -99,6 +99,11 @@ func resolveSimulatorForLocal(ctx *AppContext) (simulators.Simulator, error) {
 }
 
 func newLocalInvokeHandler(ctx *AppContext, sim simulators.Simulator, fnName string) http.HandlerFunc {
+	fnCfg := ctx.Config.Functions[fnName]
+	runtime := fnCfg.Runtime
+	if runtime == "" {
+		runtime = ctx.Config.Runtime
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		body := make([]byte, 0)
 		if r.Body != nil {
@@ -113,14 +118,17 @@ func newLocalInvokeHandler(ctx *AppContext, sim simulators.Simulator, fnName str
 			headers[k] = r.Header.Get(k)
 		}
 		res, err := sim.Simulate(r.Context(), simulators.Request{
-			Service:  ctx.Config.Service,
-			Stage:    ctx.Stage,
-			Function: fnName,
-			Method:   r.Method,
-			Path:     r.URL.Path,
-			Query:    query,
-			Headers:  headers,
-			Body:     body,
+			Service:    ctx.Config.Service,
+			Stage:      ctx.Stage,
+			Function:   fnName,
+			Method:     r.Method,
+			Path:       r.URL.Path,
+			Query:      query,
+			Headers:    headers,
+			Body:       body,
+			WorkDir:    ctx.RootDir,
+			HandlerRef: fnCfg.Handler,
+			Runtime:    runtime,
 		})
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
