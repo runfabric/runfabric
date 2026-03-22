@@ -99,10 +99,12 @@ Provider IDs (copy/paste):
 
 It also creates:
 
-- `package.json` with `@runfabric/sdk` and the selected provider adapter dependency
+- `package.json` with zero runtime dependencies and, for TypeScript scaffolds, devDependencies plus a `build` script
 - `call:local` script that runs `runfabric invoke local -c runfabric.yml --serve --watch`
 - `.env.example` with provider and selected state backend variables
 - project-scoped random state prefix for object backends (`s3`, `gcs`, `azblob`)
+
+> **Dependencies note**: The scaffold uses plain handler exports with zero runtime dependencies, so handlers are invocable immediately without waiting for SDK or provider packages to be published. Runtime SDK (`@runfabric/sdk`) and provider adapters can be added optionally when available and needed for advanced features.
 
 Copy and load `.env.example` before deploy:
 
@@ -113,9 +115,6 @@ set -a
 source .env
 set +a
 ```
-
-Provider adapters are loaded dynamically. Install only providers used by the project
-(init installs the selected provider adapter unless `--skip-install` is used).
 
 Non-interactive example:
 
@@ -133,8 +132,8 @@ If you used `--skip-install`, install project dependencies manually:
 
 ```bash
 cd my-api
-pnpm add @runfabric/sdk @runfabric/provider-aws-lambda
-pnpm add -D typescript @types/node
+pnpm install
+pnpm run build
 ```
 
 ### Adding a new function (generate)

@@ -60,6 +60,8 @@ Common errors and fixes per provider and workflow.
 
 - **Missing env:** Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 - **Real deploy:** Set `RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1` for real API deploy. See [PROVIDER_SETUP.md](PROVIDER_SETUP.md).
+- **`invoke logs` has no live tail output:** Install `wrangler` CLI so RunFabric can use `wrangler tail`. Without it, RunFabric falls back to Cloudflare API tail.
+- **Force API tail only:** Set `RUNFABRIC_CLOUDFLARE_DISABLE_WRANGLER_TAIL=1`.
 
 ---
 

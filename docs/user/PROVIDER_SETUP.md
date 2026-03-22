@@ -54,6 +54,7 @@ Optional real mode:
 - `GCP_ACCESS_TOKEN` — e.g. from `gcloud auth print-access-token` or a service account
 - `GCP_PROJECT` or `GCP_PROJECT_ID`
 - Source: either set `GCP_SOURCE_BUCKET` and `GCP_SOURCE_OBJECT` (pre-uploaded zip), or set `GCP_UPLOAD_BUCKET` to zip project root and upload before deploy. `runfabric invoke logs` uses Cloud Logging (same token).
+- Cloud Workflows orchestration also uses `GCP_ACCESS_TOKEN` + `GCP_PROJECT`/`GCP_PROJECT_ID` with `extensions.gcp-functions.cloudWorkflows` declarations in `runfabric.yml`.
 
 **CLI-based (optional):**
 
@@ -68,6 +69,8 @@ Optional real mode:
 - `AZURE_SUBSCRIPTION_ID`
 - `AZURE_RESOURCE_GROUP` (optional; defaults to `service-stage`)
 - Deploy creates resource group and function app via Management REST API; remove/invoke use API; logs return portal link. For CLI log fetch, set `AZURE_LOG_ANALYTICS_WORKSPACE_ID` (and `AZURE_ACCESS_TOKEN`) to query Log Analytics.
+- Durable orchestration invoke/inspect also use the same token/subscription and resolve host keys from the Function App management API (`extensions.azure-functions.durableFunctions` in `runfabric.yml`).
+- Durable orchestration sync/remove now also perform explicit management-plane app settings create/delete operations (`/config/appsettings`), so `AZURE_ACCESS_TOKEN` and `AZURE_SUBSCRIPTION_ID` are required for durable lifecycle parity.
 
 Optional CLI-based path:
 
@@ -87,7 +90,9 @@ Optional CLI-based path:
 
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
-- Deploy uploads Worker script via API; remove/invoke/logs use Cloudflare API (tail for logs).
+- Deploy uploads Worker script via API; remove/invoke use Cloudflare API.
+- `runfabric invoke logs` uses `wrangler tail` when `wrangler` CLI is available, with Cloudflare API tail fallback.
+- Set `RUNFABRIC_CLOUDFLARE_DISABLE_WRANGLER_TAIL=1` to force API tail only.
 
 ## Vercel
 

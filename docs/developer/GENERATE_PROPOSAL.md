@@ -80,6 +80,8 @@ Prompts:
 Validation and recovery:
 
 - Re-prompts duplicate override keys.
+- Re-prompts provider names that do not support the existing project trigger set per the Trigger Capability Matrix.
+- Non-interactive mode fails fast when the selected provider override cannot support triggers already present in the current project.
 
 ## Non-interactive Contract
 
@@ -95,4 +97,5 @@ Current coverage includes:
 
 - interactive/non-interactive flag conflict checks
 - interactive prompt flow tests for function/resource/addon
+- provider-override trigger matrix validation in both interactive and non-interactive flows
 - existing compatibility tests for dry-run and non-interactive behavior

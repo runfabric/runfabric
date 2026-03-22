@@ -63,14 +63,14 @@ Generate interactive notes:
 ## Local development and debugging
 
 - `runfabric invoke local -c <config> [--serve] [--watch] [--host <host>] [--port <number>] [--provider <name>] [--method <GET|POST|...>] [--path </route>] [--query <k=v&k2=v2>] [--header <k:v>] [--body <text>] [--event <file>] [--entry <path>]` — With `--serve --watch`, polls project files (runfabric.yml, _.js, _.ts) and reloads the local server on change. Same behavior as `runfabric invoke dev --watch`.
-- `runfabric invoke dev -c <config> [--watch] [--stage <name>] [--provider <name>] [--stream-from <stage>] [--tunnel-url <url>] [--preset ...] [--host <host>] [--port <number>] ...` — `--watch`: poll project files (runfabric.yml, _.js, _.ts, etc.) and auto-reload the dev server on change. `--stream-from` / `--tunnel-url`: run local server and point API Gateway at tunnel; restores on exit (Ctrl+C). See [DEV_LIVE_STREAM.md](DEV_LIVE_STREAM.md).
+- `runfabric invoke dev -c <config> [--watch] [--stage <name>] [--provider <name>] [--stream-from <stage>] [--tunnel-url <url>] [--doctor-first] [--preset ...] [--host <host>] [--port <number>] ...` — `--watch`: poll project files (runfabric.yml, _.js, _.ts, etc.) and auto-reload the dev server on change. `--stream-from` / `--tunnel-url`: run local server and run provider live-stream hooks; restores provider state on exit (Ctrl+C) when applicable. `--doctor-first`: run doctor preflight before starting local dev. See [DEV_LIVE_STREAM.md](DEV_LIVE_STREAM.md).
 - `runfabric debug -c <config> [--stage <name>] [--host <addr>] [--port <number>] [--json]` — Start local server and print PID for attaching a debugger (default host 127.0.0.1, port 3000).
 - `runfabric test -c <config> [--json]` — Run project test suite (npm test, go test, or pytest in project directory).
 
 ## Invocation, logs, and observability
 
-- `runfabric invoke run -c <config> [--stage <name>] [--provider <key>] --function <name> [--payload <text-or-json>] [--json]` — Use `--provider` when `runfabric.yml` has `providerOverrides` (multi-cloud).
-- `runfabric invoke logs -c <config> [--stage <name>] [--provider <key>] (--function <name> | --all) [--service <name>] [--json]` — Unified source: provider logs (AWS: CloudWatch; GCP: Cloud Logging, last 1h) plus optional local files from `logs.path` in config (default `.runfabric/logs`: `<stage>.log`, `<function>_<stage>.log`). `--all` aggregates by service/stage; `--provider` for multi-cloud. When `--service` is provided, it must match `service` in `runfabric.yml`.
+- `runfabric invoke run -c <config> [--stage <name>] [--provider <key>] --function <name> [--payload <text-or-json>] [--json]` — Use `--provider` when `runfabric.yml` has `providerOverrides` (multi-cloud). Orchestration targets are invoked with prefixes: `sfn:<name>` or `stepfunction:<name>` (AWS), `cwf:<name>` or `cloudworkflow:<name>` (GCP), and `durable:<name>` (Azure).
+- `runfabric invoke logs -c <config> [--stage <name>] [--provider <key>] (--function <name> | --all) [--service <name>] [--json]` — Unified source: provider logs (AWS: CloudWatch; GCP: Cloud Logging, last 1h; Cloudflare: `wrangler tail` sample with Cloudflare API tail fallback) plus optional local files from `logs.path` in config (default `.runfabric/logs`: `<stage>.log`, `<function>_<stage>.log`). `--all` aggregates by service/stage; `--provider` for multi-cloud. When `--service` is provided, it must match `service` in `runfabric.yml`.
 - `runfabric invoke traces [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] ... [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS: X-Ray trace summaries (last 1h). GCP: Cloud Trace summaries (when available). Azure: Application Insights traces (when available). When `--service` is provided, it must match `service` in `runfabric.yml`.
 - `runfabric invoke metrics [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] [--since <iso>] [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS Lambda: CloudWatch (Invocations, Errors, Duration, last 1h). GCP: Cloud Monitoring metrics (when available). Azure: Application Insights metrics (when available). When `--service` is provided, it must match `service` in `runfabric.yml`.
 
@@ -134,6 +134,7 @@ Auth URL resolution order: `--auth-url` -> `RUNFABRIC_AUTH_URL` -> `.runfabricrc
 - `runfabric fabric deploy [--rollback-on-failure|--no-rollback-on-failure] [--json]` — Active-active deploy to all `fabric.targets` (provider keys from runfabric.yml). Saves endpoints to `.runfabric/fabric-<stage>.json`. Requires `fabric` and `providerOverrides` in config.
 - `runfabric fabric status [--json]` — HTTP GET each fabric endpoint and report healthy/fail.
 - `runfabric fabric endpoints [--json]` — List fabric endpoint URLs (e.g. for Route53 failover or latency routing).
+- `runfabric fabric routing [--json]` — Generate DNS/load-balancer routing hints from `fabric.routing` and deployed fabric endpoints.
 
 ## Compose
 

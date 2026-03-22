@@ -138,6 +138,12 @@ Use `runfabric invoke dev --stream-from <stage>` to run the local server; with `
 - **Testing dev locally:** Start the dev server, then in another terminal run `runfabric invoke run` or send HTTP requests to the tunnel. For non-AWS providers, the local server runs without auto-wire; use provider emulators or point triggers at your tunnel URL manually.
 - **CI:** Dev mode is typically used interactively; in CI, use `invoke local` for one-off handler tests and `deploy` + `invoke run` for integration.
 
+## Provider observability checks (Phase 6)
+
+- GCP: verify `runfabric invoke logs`, `runfabric invoke traces`, and `runfabric invoke metrics` with `GCP_ACCESS_TOKEN` plus `GCP_PROJECT`/`GCP_PROJECT_ID`.
+- Azure: verify the same commands with `AZURE_ACCESS_TOKEN` and `AZURE_LOG_ANALYTICS_WORKSPACE_ID`.
+- Cloudflare: verify `runfabric invoke logs` with `wrangler` installed (tail sample path), then set `RUNFABRIC_CLOUDFLARE_DISABLE_WRANGLER_TAIL=1` to verify API-tail fallback behavior.
+
 ---
 
 ## Layers

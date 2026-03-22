@@ -666,6 +666,53 @@ Operational flow:
 
 Approval inputs typically include the `approval.inputKey` payload from prior steps, reviewer identity, and optional justification captured by the integration.
 
+## Provider-native orchestration extensions
+
+Provider orchestration adapters are configured under `extensions`.
+
+### GCP Cloud Workflows
+
+Use `extensions.gcp-functions.cloudWorkflows` for workflow sync, invoke, and inspect:
+
+```yaml
+extensions:
+  gcp-functions:
+    cloudWorkflows:
+      - name: order-flow
+        definitionPath: workflows/order-flow.yaml
+        bindings:
+          createOrder: createOrder
+```
+
+Supported fields per item:
+
+- `name` (required)
+- one of `definition` (inline object) or `definitionPath` (path from project root)
+- optional `bindings` map. Tokens `${bindings.key}` / `{{bindings.key}}` in workflow definitions are replaced with function resource identifiers from deploy context.
+
+### Azure Durable Functions
+
+Use `extensions.azure-functions.durableFunctions` for durable orchestration routing:
+
+```yaml
+extensions:
+  azure-functions:
+    durableFunctions:
+      - name: order-flow
+        orchestrator: OrderFlowOrchestrator
+        taskHub: order-hub
+        storageConnectionSetting: AzureWebJobsStorage
+```
+
+Supported fields per item:
+
+- `name` (required)
+- `orchestrator` (optional; defaults to `name`)
+- `taskHub` (optional)
+- `storageConnectionSetting` (optional)
+
+Durable declarations are now applied through explicit Azure management-plane app settings updates during orchestration sync/remove. RunFabric writes and removes managed keys under `RUNFABRIC_DURABLE_<NAME>_*` so durable lifecycle state is explicit and reversible.
+
 ## Schema files
 
 | File                                                                 | Purpose                                                              |
