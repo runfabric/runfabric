@@ -2,18 +2,21 @@ package invocation
 
 import (
 	"fmt"
-	"github.com/runfabric/runfabric/internal/cli/common"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
+	"github.com/runfabric/runfabric/internal/cli/common"
+
 	"github.com/runfabric/runfabric/internal/app"
+	"github.com/runfabric/runfabric/platform/observability/diagnostics"
 	"github.com/spf13/cobra"
 )
 
 func newDevCmd(opts *GlobalOptions) *cobra.Command {
 	var host, port, provider, preset, method, path, query, body, header, entry, out, streamFrom, tunnelURL string
-	var watch, once bool
+	var watch, once, doctorFirst bool
 	var intervalSeconds int
 
 	cmd := &cobra.Command{
@@ -25,18 +28,53 @@ func newDevCmd(opts *GlobalOptions) *cobra.Command {
 			if streamFrom != "" {
 				effectiveStage = streamFrom
 			}
+			if doctorFirst {
+				if !opts.JSONOutput {
+					fmt.Fprintf(cmd.OutOrStdout(), "Running doctor preflight for stage=%q...\n", effectiveStage)
+				}
+				var doctorResult any
+				var err error
+				if streamFrom != "" && tunnelURL != "" {
+					doctorResult, err = app.DevStreamDoctor(opts.ConfigPath, effectiveStage, tunnelURL)
+				} else {
+					doctorResult, err = app.BackendDoctor(opts.ConfigPath, effectiveStage)
+				}
+				if err != nil {
+					common.StatusFail(opts.JSONOutput, "Doctor preflight failed.")
+					return common.PrintFailure("doctor", err)
+				}
+				if !opts.JSONOutput {
+					if report, ok := doctorResult.(*diagnostics.HealthReport); ok {
+						for _, check := range report.Checks {
+							if strings.HasPrefix(check.Name, "dev-stream-") {
+								fmt.Fprintf(cmd.OutOrStdout(), "Doctor %s: %s\n", check.Name, check.Message)
+							}
+						}
+					}
+				}
+				if !opts.JSONOutput {
+					fmt.Fprintf(cmd.OutOrStdout(), "Doctor preflight passed.\n")
+				}
+			}
 			common.StatusRunning(opts.JSONOutput, "Starting dev server...")
 
 			var restore func()
+			var devReport *app.DevStreamReport
 			if streamFrom != "" && tunnelURL != "" {
 				var err error
-				restore, err = app.PrepareDevStreamTunnel(opts.ConfigPath, effectiveStage, tunnelURL)
+				restore, devReport, err = app.PrepareDevStreamTunnelWithReport(opts.ConfigPath, effectiveStage, tunnelURL)
 				if err != nil {
 					common.StatusFail(opts.JSONOutput, "Dev stream redirect failed.")
 					return common.PrintFailure("dev", err)
 				}
 				if !opts.JSONOutput {
-					fmt.Fprintf(cmd.OutOrStdout(), "Live stream: stage=%q, tunnel=%s — API Gateway pointed at tunnel; will restore on exit.\n", effectiveStage, tunnelURL)
+					fmt.Fprintf(cmd.OutOrStdout(), "Live stream: stage=%q, tunnel=%s — provider hook prepared; state will be restored on exit when applicable.\n", effectiveStage, tunnelURL)
+					if devReport != nil {
+						fmt.Fprintf(cmd.OutOrStdout(), "Dev stream mode: %s (capability: %s). %s\n", devReport.EffectiveMode, devReport.CapabilityMode, devReport.Message)
+						if len(devReport.MissingPrereqs) > 0 {
+							fmt.Fprintf(cmd.OutOrStdout(), "Missing mutation prerequisites: %s\n", strings.Join(devReport.MissingPrereqs, ", "))
+						}
+					}
 				}
 			} else if streamFrom != "" && !opts.JSONOutput {
 				fmt.Fprintf(cmd.OutOrStdout(), "Live stream mode: stage=%q, listening on %s:%s\n", effectiveStage, host, port)
@@ -55,7 +93,7 @@ func newDevCmd(opts *GlobalOptions) *cobra.Command {
 				}()
 				<-sigCh
 				if !opts.JSONOutput {
-					fmt.Fprintf(cmd.OutOrStdout(), "Restoring provider invocation target...\n")
+					fmt.Fprintf(cmd.OutOrStdout(), "Restoring live-stream provider state...\n")
 				}
 				restore()
 				if !opts.JSONOutput {
@@ -119,8 +157,9 @@ func newDevCmd(opts *GlobalOptions) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&streamFrom, "stream-from", "", "Stage to stream invocations from; runs local server so you can point the provider (e.g. Lambda event source) at this process via a tunnel")
+	cmd.Flags().StringVar(&streamFrom, "stream-from", "", "Stage to stream invocations from; runs local server so you can point your provider invocation target at this process via a tunnel")
 	cmd.Flags().StringVar(&tunnelURL, "tunnel-url", "", "Public URL of your tunnel (e.g. from ngrok); show in instructions as the invocation target")
+	cmd.Flags().BoolVar(&doctorFirst, "doctor-first", false, "Run doctor preflight before starting dev server")
 	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "Host for local server")
 	cmd.Flags().StringVar(&port, "port", "3000", "Port for local server")
 	cmd.Flags().BoolVar(&watch, "watch", false, "Watch files and rebuild")

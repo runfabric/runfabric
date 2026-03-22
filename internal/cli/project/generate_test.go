@@ -122,6 +122,74 @@ func TestGenerateProviderOverride_InteractiveFlagConflict(t *testing.T) {
 	}
 }
 
+func TestGenerateProviderOverride_ProviderDoesNotSupportExistingTriggers(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "runfabric.yml")
+	writeGenerateConfig(t, cfgPath, "service: test\n"+
+		"provider:\n"+
+		"  name: aws-lambda\n"+
+		"  runtime: nodejs20.x\n"+
+		"functions:\n"+
+		"  - name: worker\n"+
+		"    entry: src/worker.handler\n"+
+		"    triggers:\n"+
+		"      - type: queue\n"+
+		"        queue: jobs\n")
+
+	opts := &GlobalOptions{ConfigPath: cfgPath}
+	cmd := newGenerateProviderOverrideCmd(opts)
+	cmd.SetArgs([]string{"fly", "--provider", "fly-machines", "--runtime", "nodejs20.x", "--region", "iad", "--no-backup"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected provider override to fail for unsupported existing triggers")
+	}
+	if !strings.Contains(err.Error(), "does not support existing project triggers") {
+		t.Fatalf("expected trigger capability error, got %v", err)
+	}
+}
+
+func TestGenerateProviderOverride_InteractivePromptRePromptsUnsupportedProvider(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "runfabric.yml")
+	writeGenerateConfig(t, cfgPath, "service: test\n"+
+		"provider:\n"+
+		"  name: aws-lambda\n"+
+		"  runtime: nodejs20.x\n"+
+		"functions:\n"+
+		"  - name: worker\n"+
+		"    entry: src/worker.handler\n"+
+		"    triggers:\n"+
+		"      - type: queue\n"+
+		"        queue: jobs\n")
+
+	opts := &GlobalOptions{ConfigPath: cfgPath}
+	cmd := newGenerateProviderOverrideCmd(opts)
+	cmd.SetArgs([]string{"--interactive", "--no-backup"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	withStdinInput(t, strings.Join([]string{
+		"fly",          // key
+		"fly-machines", // unsupported provider for queue trigger
+		"aws-lambda",   // supported retry
+		"nodejs20.x",   // runtime
+		"us-east-1",    // region
+		"y",            // confirm
+	}, "\n")+"\n", func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("interactive generate provider-override should succeed: %v", err)
+		}
+	})
+
+	cfgData, _ := os.ReadFile(cfgPath)
+	content := string(cfgData)
+	if !strings.Contains(content, "providerOverrides:") || !strings.Contains(content, "fly:") || !strings.Contains(content, "name: aws-lambda") {
+		t.Fatalf("expected compatible provider override in config, got: %s", content)
+	}
+}
+
 func TestGenerateFunction_UnsupportedTrigger(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "runfabric.yml")

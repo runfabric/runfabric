@@ -2,8 +2,10 @@ package project
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -48,6 +50,7 @@ var (
 	}
 	stateBackends = []string{"local", "s3", "gcs", "azblob", "postgres"}
 	langs         = []string{"js", "ts", "python", "go"}
+	pkgManagers   = []string{"npm", "pnpm", "yarn", "bun"}
 )
 
 func newInitCmd(opts *GlobalOptions) *cobra.Command {
@@ -73,7 +76,7 @@ func newInitCmd(opts *GlobalOptions) *cobra.Command {
 	cmd.Flags().BoolVar(&initOpts.SkipInstall, "skip-install", false, "Skip installing dependencies after scaffold")
 	cmd.Flags().BoolVar(&initOpts.CallLocal, "call-local", false, "Add a script to run call-local after scaffold")
 	cmd.Flags().BoolVar(&initOpts.NoInteractive, "no-interactive", false, "Disable interactive prompts; use flags only")
-	cmd.Flags().BoolVar(&initOpts.WithBuildScript, "with-build", false, "Add package.json and (for TypeScript) tsconfig.json with build script (tsc)")
+	cmd.Flags().BoolVar(&initOpts.WithBuildScript, "with-build", true, "Add package.json and (for TypeScript) tsconfig.json with build script (tsc)")
 	cmd.Flags().StringVar(&initOpts.WithCI, "with-ci", "", "Add CI workflow: github-actions (doctor → plan → deploy on push)")
 
 	return cmd
@@ -83,6 +86,9 @@ func runInit(o *initOpts) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
+	}
+	if isNodeLang(o.Lang) && !isValidPackageManager(o.PM) {
+		return fmt.Errorf("unsupported --pm %q; use npm, pnpm, yarn, or bun", o.PM)
 	}
 	var dir string
 	if o.Dir != "" {
@@ -94,6 +100,7 @@ func runInit(o *initOpts) error {
 
 	// Resolve provider, trigger, lang, state via interactive or flags
 	if !o.NoInteractive {
+		printInitIntro()
 		if o.Provider == "" {
 			o.Provider = promptProvider()
 		}
@@ -102,6 +109,17 @@ func runInit(o *initOpts) error {
 		}
 		if o.Lang == "" {
 			o.Lang = promptLang()
+		}
+		if isNodeLang(o.Lang) {
+			if o.PM == "" || !isValidPackageManager(o.PM) {
+				o.PM = pkgManagers[promptSelect("Select package manager", pkgManagers, 0)]
+			}
+			if !o.CallLocal {
+				o.CallLocal = promptYesNoInit("Add call:local script?", true)
+			}
+			if !o.SkipInstall {
+				o.SkipInstall = !promptYesNoInit("Install dependencies now?", true)
+			}
 		}
 		// When lang is ts, prompt for build script (tsconfig + tsc)
 		if o.Lang == "ts" && !o.NoInteractive {
@@ -152,6 +170,15 @@ func runInit(o *initOpts) error {
 	}
 	if o.Provider == "" {
 		o.Provider = "aws-lambda"
+	}
+	if isNodeLang(o.Lang) {
+		o.PM = strings.ToLower(strings.TrimSpace(o.PM))
+		if o.PM == "" {
+			o.PM = "npm"
+		}
+		if !isValidPackageManager(o.PM) {
+			return fmt.Errorf("unsupported --pm %q; use npm, pnpm, yarn, or bun", o.PM)
+		}
 	}
 
 	// Validate trigger for provider
@@ -254,6 +281,22 @@ func runInit(o *initOpts) error {
 		common.InitWrote(".github/workflows/deploy.yml")
 	}
 
+	installErr := error(nil)
+	if isNodeLang(o.Lang) && !o.SkipInstall {
+		fmt.Fprintf(os.Stderr, "\nInstalling dependencies with %s...\n", o.PM)
+		if err := installNodeDependencies(dir, o.PM); err != nil {
+			installErr = err
+			fmt.Fprintf(os.Stderr, "Warning: dependency install failed: %v\n", err)
+		}
+	}
+	if o.Lang == "ts" && o.WithBuildScript && installErr == nil && !o.SkipInstall {
+		fmt.Fprintf(os.Stderr, "\nBuilding TypeScript scaffold...\n")
+		if err := runNodeScript(dir, o.PM, "build"); err != nil {
+			installErr = err
+			fmt.Fprintf(os.Stderr, "Warning: initial build failed: %v\n", err)
+		}
+	}
+
 	// Show paths relative to cwd for "Project ready in" and "Next:"
 	projectDirLabel := filepath.Base(dir)
 	if cwd, err := os.Getwd(); err == nil {
@@ -266,12 +309,30 @@ func runInit(o *initOpts) error {
 		}
 	}
 	common.InitReady(projectDirLabel, o.Provider, o.Template, o.Lang, o.StateBackend)
-	if projectDirLabel == "." {
-		common.InitNext("runfabric doctor --config runfabric.yml --stage dev")
-	} else {
-		common.InitNext("cd " + projectDirLabel + " && runfabric doctor --config runfabric.yml --stage dev")
+	cdPrefix := ""
+	if projectDirLabel != "." {
+		cdPrefix = "cd " + projectDirLabel + " && "
+	}
+	if isNodeLang(o.Lang) && (o.SkipInstall || installErr != nil) {
+		common.InitNext(cdPrefix + packageInstallCommand(o.PM))
+	}
+	if o.Lang == "ts" && o.WithBuildScript {
+		common.InitNext(cdPrefix + packageRunCommand(o.PM, "build"))
+	}
+	common.InitNext(cdPrefix + "runfabric doctor --config runfabric.yml --stage dev")
+	if isNodeLang(o.Lang) && o.CallLocal {
+		common.InitNext(cdPrefix + packageRunCommand(o.PM, "call:local"))
 	}
 	return nil
+}
+
+func printInitIntro() {
+	if !term.IsTerminal(int(os.Stderr.Fd())) {
+		return
+	}
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "RunFabric project setup")
+	fmt.Fprintln(os.Stderr, "Choose provider, trigger, language, and state backend to scaffold your service.")
 }
 
 func promptProvider() string {
@@ -322,6 +383,15 @@ func promptState() string {
 		return "local"
 	}
 	return stateBackends[idx]
+}
+
+func promptYesNoInit(msg string, defaultYes bool) bool {
+	defaultIdx := 0
+	if !defaultYes {
+		defaultIdx = 1
+	}
+	idx := promptSelect(msg, []string{"Yes", "No"}, defaultIdx)
+	return idx == 0
 }
 
 func promptSelect(msg string, options []string, defaultIdx int) int {
@@ -735,33 +805,121 @@ func generateEnvExample(provider, stateBackend string) string {
 
 // generatePackageJSON returns package.json content for Node/JS/TS projects.
 func generatePackageJSON(o *initOpts) string {
-	lang := o.Lang
-	if lang == "js" {
-		lang = "node"
-	}
 	name := o.Service
 	if name == "" {
 		name = "my-service"
 	}
-	// Escape for JSON: only need to escape " and \
-	nameEsc := strings.ReplaceAll(name, "\\", "\\\\")
-	nameEsc = strings.ReplaceAll(nameEsc, "\"", "\\\"")
-	var b strings.Builder
-	b.WriteString("{\n  \"name\": \"" + nameEsc + "\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"scripts\": {\n")
+
+	scripts := map[string]string{}
 	if o.Lang == "ts" {
-		b.WriteString("    \"start\": \"node dist/handler.js\",\n    \"build\": \"tsc\"\n  }")
+		scripts["start"] = "node dist/handler.js"
 		if o.WithBuildScript {
-			b.WriteString(",\n  \"devDependencies\": {\n    \"typescript\": \"^5.0.0\",\n    \"@types/node\": \"^20.0.0\"\n  }")
+			scripts["build"] = "tsc"
 		}
 	} else {
-		b.WriteString("    \"start\": \"node src/handler.js\"")
-		if o.WithBuildScript {
-			b.WriteString(",\n    \"build\": \"echo 'No build step'\"")
-		}
-		b.WriteString("\n  }")
+		scripts["start"] = "node src/handler.js"
 	}
-	b.WriteString("\n}\n")
-	return b.String()
+	if o.CallLocal {
+		scripts["call:local"] = "runfabric invoke local -c runfabric.yml --serve --watch"
+	}
+
+	// Runtime dependencies are optional and loaded dynamically by RunFabric.
+	// @runfabric/sdk and provider adapters can be added when published and needed.
+	deps := map[string]string{}
+
+	pkg := map[string]any{
+		"name":         name,
+		"version":      "0.1.0",
+		"private":      true,
+		"scripts":      scripts,
+		"dependencies": deps,
+	}
+	if o.Lang == "ts" && o.WithBuildScript {
+		pkg["devDependencies"] = map[string]string{
+			"typescript":  "^5.0.0",
+			"@types/node": "^20.0.0",
+		}
+	}
+
+	b, err := json.MarshalIndent(pkg, "", "  ")
+	if err != nil {
+		return "{\n  \"name\": \"my-service\",\n  \"private\": true\n}\n"
+	}
+	return string(b) + "\n"
+}
+
+func isNodeLang(lang string) bool {
+	switch lang {
+	case "js", "ts", "node":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidPackageManager(pm string) bool {
+	switch strings.ToLower(strings.TrimSpace(pm)) {
+	case "npm", "pnpm", "yarn", "bun":
+		return true
+	default:
+		return false
+	}
+}
+
+func packageInstallCommand(pm string) string {
+	switch pm {
+	case "pnpm":
+		return "pnpm install"
+	case "yarn":
+		return "yarn install"
+	case "bun":
+		return "bun install"
+	default:
+		return "npm install"
+	}
+}
+
+func packageRunCommand(pm, script string) string {
+	switch pm {
+	case "yarn":
+		return "yarn " + script
+	case "bun":
+		return "bun run " + script
+	default:
+		return pm + " run " + script
+	}
+}
+
+func installNodeDependencies(dir, pm string) error {
+	cmdStr := packageInstallCommand(pm)
+	parts := strings.Fields(cmdStr)
+	if len(parts) == 0 {
+		return nil
+	}
+	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s failed: %w", cmdStr, err)
+	}
+	return nil
+}
+
+func runNodeScript(dir, pm, script string) error {
+	cmdStr := packageRunCommand(pm, script)
+	parts := strings.Fields(cmdStr)
+	if len(parts) == 0 {
+		return nil
+	}
+	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s failed: %w", cmdStr, err)
+	}
+	return nil
 }
 
 // generateTsconfig returns tsconfig.json for TypeScript projects.

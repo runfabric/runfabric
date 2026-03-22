@@ -2,7 +2,9 @@ package project
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -111,5 +113,245 @@ func TestProviderComment(t *testing.T) {
 				t.Errorf("providerComment(%q) = %q, want substring %q", tt.provider, got, tt.wantSub)
 			}
 		})
+	}
+}
+
+func TestGeneratePackageJSON_DepsAndScripts(t *testing.T) {
+	o := &initOpts{
+		Lang:            "ts",
+		Service:         "ux-test",
+		Provider:        "aws-lambda",
+		CallLocal:       true,
+		WithBuildScript: true,
+	}
+
+	raw := generatePackageJSON(o)
+	var pkg map[string]any
+	if err := json.Unmarshal([]byte(raw), &pkg); err != nil {
+		t.Fatalf("package json must be valid: %v", err)
+	}
+
+	deps, _ := pkg["dependencies"].(map[string]any)
+	// Runtime dependencies are optional; scaffold has empty deps for immediate npm install
+	if len(deps) != 0 {
+		t.Fatalf("expected empty runtime dependencies in scaffold, got %v", deps)
+	}
+
+	scripts, _ := pkg["scripts"].(map[string]any)
+	if got := scripts["call:local"]; got != "runfabric invoke local -c runfabric.yml --serve --watch" {
+		t.Fatalf("expected call:local script, got %v", got)
+	}
+	if got := scripts["build"]; got != "tsc" {
+		t.Fatalf("expected build script, got %v", got)
+	}
+
+	devDeps, _ := pkg["devDependencies"].(map[string]any)
+	if devDeps["typescript"] != "^5.0.0" {
+		t.Fatalf("expected typescript devDependency, got %v", devDeps)
+	}
+}
+
+func TestGeneratePackageJSON_TSBuildOptional(t *testing.T) {
+	withoutBuild := &initOpts{Lang: "ts", Service: "ts-no-build", Provider: "aws-lambda"}
+	withBuild := &initOpts{Lang: "ts", Service: "ts-build", Provider: "aws-lambda", WithBuildScript: true}
+
+	var pkgWithout map[string]any
+	if err := json.Unmarshal([]byte(generatePackageJSON(withoutBuild)), &pkgWithout); err != nil {
+		t.Fatalf("unmarshal without build: %v", err)
+	}
+	if _, ok := pkgWithout["devDependencies"]; ok {
+		t.Fatalf("did not expect devDependencies when --with-build is false")
+	}
+	if scripts, ok := pkgWithout["scripts"].(map[string]any); ok {
+		if _, hasBuild := scripts["build"]; hasBuild {
+			t.Fatalf("did not expect build script when --with-build is false")
+		}
+	}
+
+	var pkgWith map[string]any
+	if err := json.Unmarshal([]byte(generatePackageJSON(withBuild)), &pkgWith); err != nil {
+		t.Fatalf("unmarshal with build: %v", err)
+	}
+	if _, ok := pkgWith["devDependencies"]; !ok {
+		t.Fatalf("expected devDependencies when --with-build is true")
+	}
+	if scripts, ok := pkgWith["scripts"].(map[string]any); ok {
+		if _, hasBuild := scripts["build"]; !hasBuild {
+			t.Fatalf("expected build script when --with-build is true")
+		}
+	}
+}
+
+func TestInit_TypeScriptScaffoldIncludesBuildToolingByDefault(t *testing.T) {
+	dir := t.TempDir()
+	opts := &GlobalOptions{}
+	cmd := newInitCmd(opts)
+	cmd.SetArgs([]string{"--dir", dir, "--lang", "ts", "--no-interactive", "--skip-install"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("init ts scaffold: %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if err != nil {
+		t.Fatalf("read package.json: %v", err)
+	}
+	var pkg map[string]any
+	if err := json.Unmarshal(raw, &pkg); err != nil {
+		t.Fatalf("unmarshal package.json: %v", err)
+	}
+	scripts, _ := pkg["scripts"].(map[string]any)
+	if got := scripts["build"]; got != "tsc" {
+		t.Fatalf("expected build script by default, got %v", got)
+	}
+	if _, ok := pkg["devDependencies"].(map[string]any); !ok {
+		t.Fatalf("expected devDependencies by default for ts scaffold")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "tsconfig.json")); err != nil {
+		t.Fatalf("tsconfig.json not created: %v", err)
+	}
+}
+
+func TestInit_TypeScriptScaffoldBuildsDistHandlerAfterInstall(t *testing.T) {
+	dir := t.TempDir()
+	binDir := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "pm.log")
+	npmPath := filepath.Join(binDir, "npm")
+	npmScript := "#!/bin/sh\n" +
+		"set -eu\n" +
+		"printf '%s\\n' \"$*\" >> \"$RUNFABRIC_TEST_PM_LOG\"\n" +
+		"cmd=${1:-}\n" +
+		"case \"$cmd\" in\n" +
+		"  install)\n" +
+		"    mkdir -p node_modules\n" +
+		"    ;;\n" +
+		"  run)\n" +
+		"    if [ \"${2:-}\" != \"build\" ]; then\n" +
+		"      echo \"unexpected npm run target: ${2:-}\" >&2\n" +
+		"      exit 1\n" +
+		"    fi\n" +
+		"    mkdir -p dist\n" +
+		"    cat > dist/handler.js <<'EOF'\n" +
+		"exports.handler = async () => ({ statusCode: 200, body: JSON.stringify({ ok: true }) });\n" +
+		"EOF\n" +
+		"    ;;\n" +
+		"  *)\n" +
+		"    echo \"unexpected npm command: $*\" >&2\n" +
+		"    exit 1\n" +
+		"    ;;\n" +
+		"esac\n"
+	if err := os.WriteFile(npmPath, []byte(npmScript), 0o755); err != nil {
+		t.Fatalf("write fake npm: %v", err)
+	}
+
+	t.Setenv("RUNFABRIC_TEST_PM_LOG", logPath)
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	opts := &GlobalOptions{}
+	cmd := newInitCmd(opts)
+	cmd.SetArgs([]string{"--dir", dir, "--lang", "ts", "--no-interactive"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("init ts scaffold with install/build: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "dist", "handler.js")); err != nil {
+		t.Fatalf("dist/handler.js not created after install/build: %v", err)
+	}
+
+	logBytes, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read package manager log: %v", err)
+	}
+	log := strings.TrimSpace(string(logBytes))
+	if !strings.Contains(log, "install") {
+		t.Fatalf("expected install command in log, got %q", log)
+	}
+	if !strings.Contains(log, "run build") {
+		t.Fatalf("expected build command in log, got %q", log)
+	}
+	if strings.Index(log, "install") > strings.Index(log, "run build") {
+		t.Fatalf("expected install before build, got log %q", log)
+	}
+}
+
+func TestInitBinary_TypeScriptScaffoldBuildsDistHandlerAfterInstall(t *testing.T) {
+	dir := t.TempDir()
+	binDir := t.TempDir()
+	pmLogPath := filepath.Join(t.TempDir(), "pm.log")
+	npmPath := filepath.Join(binDir, "npm")
+	npmScript := "#!/bin/sh\n" +
+		"set -eu\n" +
+		"printf '%s\\n' \"$*\" >> \"$RUNFABRIC_TEST_PM_LOG\"\n" +
+		"cmd=${1:-}\n" +
+		"case \"$cmd\" in\n" +
+		"  install)\n" +
+		"    mkdir -p node_modules\n" +
+		"    ;;\n" +
+		"  run)\n" +
+		"    if [ \"${2:-}\" != \"build\" ]; then\n" +
+		"      echo \"unexpected npm run target: ${2:-}\" >&2\n" +
+		"      exit 1\n" +
+		"    fi\n" +
+		"    mkdir -p dist\n" +
+		"    cat > dist/handler.js <<'EOF'\n" +
+		"exports.handler = async () => ({ statusCode: 200, body: JSON.stringify({ ok: true }) });\n" +
+		"EOF\n" +
+		"    ;;\n" +
+		"  *)\n" +
+		"    echo \"unexpected npm command: $*\" >&2\n" +
+		"    exit 1\n" +
+		"    ;;\n" +
+		"esac\n"
+	if err := os.WriteFile(npmPath, []byte(npmScript), 0o755); err != nil {
+		t.Fatalf("write fake npm: %v", err)
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	repoRoot := filepath.Clean(filepath.Join(wd, "..", "..", ".."))
+	binaryPath := filepath.Join(t.TempDir(), "runfabric")
+
+	buildCmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/runfabric")
+	buildCmd.Dir = repoRoot
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("build runfabric binary: %v\n%s", err, string(out))
+	}
+
+	cmd := exec.Command(binaryPath,
+		"init",
+		"--dir", dir,
+		"--lang", "ts",
+		"--no-interactive",
+	)
+	cmd.Env = append(os.Environ(),
+		"RUNFABRIC_TEST_PM_LOG="+pmLogPath,
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("runfabric init via binary: %v\n%s", err, string(out))
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "dist", "handler.js")); err != nil {
+		t.Fatalf("dist/handler.js not created after binary init: %v", err)
+	}
+
+	logBytes, err := os.ReadFile(pmLogPath)
+	if err != nil {
+		t.Fatalf("read package manager log: %v", err)
+	}
+	log := strings.TrimSpace(string(logBytes))
+	if !strings.Contains(log, "install") {
+		t.Fatalf("expected install command in log, got %q", log)
+	}
+	if !strings.Contains(log, "run build") {
+		t.Fatalf("expected build command in log, got %q", log)
+	}
+	if strings.Index(log, "install") > strings.Index(log, "run build") {
+		t.Fatalf("expected install before build, got log %q", log)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/runfabric/runfabric/platform/core/model/config"
@@ -95,6 +96,30 @@ func promptOneOf(label, current string, allowed []string, fallback string) strin
 		}
 		fmt.Fprintf(os.Stderr, "Invalid value %q. Allowed: %s\n", v, strings.Join(allowed, ", "))
 	}
+}
+
+func supportedProviders() []string {
+	providers := make([]string, 0, len(planner.ProviderCapabilities))
+	for provider := range planner.ProviderCapabilities {
+		providers = append(providers, provider)
+	}
+	sort.Strings(providers)
+	return providers
+}
+
+func summarizeUnsupportedTriggers(cfg *config.Config, provider string) []string {
+	triggers := planner.ExtractTriggers(cfg)
+	var unsupported []string
+	for _, ft := range triggers {
+		for _, spec := range ft.Specs {
+			if planner.SupportsTrigger(provider, spec.Kind) {
+				continue
+			}
+			unsupported = append(unsupported, fmt.Sprintf("%s:%s", ft.Function, spec.Kind))
+		}
+	}
+	sort.Strings(unsupported)
+	return unsupported
 }
 
 func confirmGeneratePreview(interactive bool, lines ...string) error {
@@ -665,15 +690,11 @@ func runGenerateProviderOverride(gopts *GlobalOptions, o *generateProviderOverri
 	if err != nil {
 		return err
 	}
-	if interactive {
-		key = promptGenerateName("Provider override", key, "aws")
-		o.Provider = strings.TrimSpace(promptLine("Provider name", strings.TrimSpace(o.Provider)))
-		o.Runtime = strings.TrimSpace(promptLine("Runtime", strings.TrimSpace(o.Runtime)))
-		o.Region = strings.TrimSpace(promptLine("Region", strings.TrimSpace(o.Region)))
-	}
 
 	if key == "" {
-		return fmt.Errorf("provider override key is required (e.g. runfabric generate provider-override aws --provider aws-lambda, or use --interactive)")
+		if !interactive {
+			return fmt.Errorf("provider override key is required (e.g. runfabric generate provider-override aws --provider aws-lambda, or use --interactive)")
+		}
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -682,6 +703,32 @@ func runGenerateProviderOverride(gopts *GlobalOptions, o *generateProviderOverri
 	configPath, err := configpatch.ResolveConfigPath(gopts.ConfigPath, cwd, 5)
 	if err != nil {
 		return err
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	if interactive {
+		key = promptGenerateName("Provider override", key, "aws")
+		providers := supportedProviders()
+		fallbackProvider := strings.TrimSpace(o.Provider)
+		if fallbackProvider == "" {
+			fallbackProvider = cfg.Provider.Name
+		}
+		o.Provider = promptOneOf("Provider name", strings.TrimSpace(o.Provider), providers, fallbackProvider)
+		for {
+			unsupported := summarizeUnsupportedTriggers(cfg, strings.TrimSpace(o.Provider))
+			if len(unsupported) == 0 {
+				break
+			}
+			fmt.Fprintf(os.Stderr, "Provider %q does not support existing triggers in this project: %s\n", o.Provider, strings.Join(unsupported, ", "))
+			o.Provider = promptOneOf("Provider name", "", providers, cfg.Provider.Name)
+		}
+		o.Runtime = strings.TrimSpace(promptLine("Runtime", strings.TrimSpace(o.Runtime)))
+		o.Region = strings.TrimSpace(promptLine("Region", strings.TrimSpace(o.Region)))
+	}
+	if unsupported := summarizeUnsupportedTriggers(cfg, strings.TrimSpace(o.Provider)); len(unsupported) > 0 {
+		return fmt.Errorf("provider %q does not support existing project triggers: %s (see Trigger Capability Matrix)", o.Provider, strings.Join(unsupported, ", "))
 	}
 	entry := scaffold.BuildProviderOverrideEntry(
 		strings.TrimSpace(o.Provider),

@@ -3,6 +3,7 @@ package fabric
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/runfabric/runfabric/internal/cli/common"
 
 	"github.com/runfabric/runfabric/internal/app"
@@ -16,7 +17,7 @@ func newFabricCmd(opts *GlobalOptions) *cobra.Command {
 		Short: "Runtime fabric: active-active deploy, health check, endpoints",
 		Long:  "When runfabric.yml has fabric.targets (provider keys from providerOverrides), deploy to multiple targets and run health checks. Use fabric deploy for active-active; fabric status to check endpoint health; fabric endpoints to list URLs (e.g. for failover/latency routing).",
 	}
-	cmd.AddCommand(newFabricDeployCmd(opts), newFabricStatusCmd(opts), newFabricEndpointsCmd(opts))
+	cmd.AddCommand(newFabricDeployCmd(opts), newFabricStatusCmd(opts), newFabricEndpointsCmd(opts), newFabricRoutingCmd(opts))
 	return cmd
 }
 
@@ -121,6 +122,41 @@ func newFabricEndpointsCmd(opts *GlobalOptions) *cobra.Command {
 			for _, e := range fabricState.Endpoints {
 				fmt.Fprintln(cmd.OutOrStdout(), e.URL)
 			}
+			return nil
+		},
+	}
+}
+
+func newFabricRoutingCmd(opts *GlobalOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "routing",
+		Short: "Generate DNS/LB configuration hints based on fabric routing strategy",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, err := app.Bootstrap(opts.ConfigPath, opts.Stage, "")
+			if err != nil {
+				return common.PrintFailure("fabric routing", err)
+			}
+			if ctx.Config.Fabric == nil || ctx.Config.Fabric.Routing == "" {
+				if !opts.JSONOutput {
+					fmt.Fprintf(cmd.OutOrStdout(), "No fabric routing strategy configured. Set 'routing: failover|latency|round-robin' in fabric config.\n")
+				}
+				return nil
+			}
+			fabricState, err := state.LoadFabricState(ctx.RootDir, opts.Stage)
+			if err != nil || fabricState == nil {
+				if !opts.JSONOutput {
+					fmt.Fprintf(cmd.OutOrStdout(), "No fabric state; run 'runfabric fabric deploy' first.\n")
+				}
+				return nil
+			}
+			routingCfg := app.GenerateFabricRoutingConfig(fabricState, ctx.Config)
+			if opts.JSONOutput {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(routingCfg)
+			}
+			guide := app.FormatFabricRoutingGuide(routingCfg)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", guide)
 			return nil
 		},
 	}

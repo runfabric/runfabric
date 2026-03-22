@@ -333,4 +333,7 @@ func TestDev_HelpShowsStreamFromAndTunnelUrl(t *testing.T) {
 	if !bytes.Contains(b, []byte("tunnel-url")) {
 		t.Error("invoke dev --help output should mention --tunnel-url")
 	}
+	if !bytes.Contains(b, []byte("doctor-first")) {
+		t.Error("invoke dev --help output should mention --doctor-first")
+	}
 }
