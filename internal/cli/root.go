@@ -26,7 +26,7 @@ func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "runfabric",
 		Short:   "RunFabric CLI",
-		Long:    "RunFabric is a multi-provider serverless deployment framework.",
+		Long:    "RunFabric is a multi-provider serverless framework with a unified config and CLI workflow for services, functions, resources, and workflows.",
 		Version: runtime.Version,
 	}
 	// Avoid duplicate "Error:" output. We print errors in cmd/runfabric/main.go.

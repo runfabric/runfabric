@@ -6,7 +6,7 @@ Instructions for coding agents working in the RunFabric monorepo.
 
 ## Project truths
 
-- RunFabric is a multi-provider serverless framework package: one config (`runfabric.yml`), one CLI workflow, deploy on managed serverless services that auto-scale and keep idle-cost overhead low.
+- RunFabric is a multi-provider serverless framework with a unified config and CLI workflow for services, functions, resources, and workflows.
 - Uses `runfabric.yml`, not `serverless.yml`.
 - Not a cluster scheduler / standalone compute fabric runtime.
 - Current production-ready path is Node-first (`runtime: nodejs`).

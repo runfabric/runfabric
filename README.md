@@ -1,6 +1,6 @@
 # RunFabric
 
-**RunFabric is a multi-provider serverless framework package. It gives you one config and one CLI workflow across cloud providers, so you can deploy on managed serverless services that auto-scale and keep idle-cost overhead low.**
+**RunFabric is a multi-provider serverless framework with a unified config and CLI workflow for services, functions, resources, and workflows.**
 
 - **One config** — Single `runfabric.yml` per service; same structure whether you target AWS, GCP, Azure, Cloudflare, Vercel, Netlify, or others.
 - **One CLI workflow** — Same commands everywhere: `runfabric doctor`, `plan`, `build`, `deploy`, `invoke`, `logs`, `remove`.
