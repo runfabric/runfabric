@@ -17,7 +17,7 @@ import (
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
 )
 
-const cfAPI = "https://api.cloudflare.com/client/v4"
+var cfAPI = "https://api.cloudflare.com/client/v4"
 
 // Runner deploys a Worker via Cloudflare API (PUT script).
 type Runner struct{}
