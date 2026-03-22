@@ -39,18 +39,18 @@ triggers:
   - `env` (`Record<string,string>`, optional)
   - `params` (`Record<string,string>`, optional)
   - `resources` (`object`, optional) — Managed resource binding: declare DB/cache and inject `DATABASE_URL`, `REDIS_URL`, etc. into function env at deploy. See [Managed resource binding](#managed-resource-binding).
-  - `layers` (`Record<string, layer>`, optional) — First-class layer declarations. Key = logical name; value has `arn` (required), optional `name`/`version`. See [First-class layers](#first-class-layers) below.
+  - `layers` (`Record<string, layer>`, optional) — First-class layer declarations. Key = logical name; value has `ref` (preferred provider-specific identifier) or deprecated `arn`, plus optional `name`/`version`. See [First-class layers](#first-class-layers) below.
 
 - **Extensions**
-  - `addons` (`Record<string, addon>`, optional) — Add-on declarations (marketplace-style). See [Add-ons](#add-ons) and `runfabric addons list`.
-  - `addonCatalogUrl` (`string`, optional) — URL to fetch addon catalog entries (JSON array); merged with built-in when running `runfabric addons list`.
+  - `addons` (`Record<string, addon>`, optional) — Add-on declarations (marketplace-style). See [Add-ons](#add-ons) and `runfabric extensions addons list`.
+  - `addonCatalogUrl` (`string`, optional) — URL to fetch addon catalog entries (JSON array); merged with built-in when running `runfabric extensions addons list`.
   - `extensions` (`object`, optional) — Extension settings and provider-specific extension config.
   - `hooks` (`string[]`, optional)
 
 - **Deploy, state, and environments**
   - `deploy` (`object`, optional)
   - `state` (`object`, optional)
-  - `logs` (`object`, optional) — Local log file source for `runfabric logs`. When set, logs are read from provider (e.g. CloudWatch) and merged with lines from local files. See [Logs](#logs).
+  - `logs` (`object`, optional) — Local log file source for `runfabric invoke logs`. When set, logs are read from provider (e.g. CloudWatch) and merged with lines from local files. See [Logs](#logs).
   - `stages` (`Record<string, override>`, optional)
   - `providerOverrides` (`Record<string, provider>`, optional) — Multi-cloud: named provider configs. Use with `runfabric deploy --provider <key>`, `runfabric plan --provider <key>`, `runfabric remove --provider <key>`. Key is a logical name (e.g. `aws`, `gcp`); value is the same shape as `provider` (name, runtime, region, optional `source`/`version` for external plugin selection).
   - `fabric` (`object`, optional) — Runtime fabric for active-active deploy, health checks, and failover/latency routing. Requires `providerOverrides`. See [Runtime fabric](#runtime-fabric).
@@ -61,6 +61,8 @@ triggers:
 
 - **Workflow and alerts**
   - `workflows` (`workflow[]`, optional)
+  - `integrations` (`Record<string, object>`, optional) — Integration configuration blocks (including MCP-oriented settings and approval adapters).
+  - `policies` (`Record<string, object>`, optional) — Policy configuration blocks applied by workflow/deploy/runtime policy engines.
   - `alerts` (`object`, optional) — Optional alerting config (webhook, Slack, triggers). See [Alerts](#alerts).
   - `build` (`object`, optional) — Build-step ordering. See [Build order](#build-order).
   - `secrets` (`Record<string,string>`, optional) — Secret map used by `${secret:KEY}` resolution. Values can be literals, `${env:VAR}` expressions, or `secret://OTHER_KEY` indirection.
@@ -81,16 +83,16 @@ providerOverrides:
     name: aws-lambda
     runtime: nodejs
     region: us-east-1
-    backend:                    # optional: per-provider state backend (when using --provider aws)
+    backend: # optional: per-provider state backend (when using --provider aws)
       kind: s3
       s3Bucket: my-aws-bucket
   gcp:
     name: gcp-functions
     runtime: nodejs
     region: us-central1
-    source: external             # optional: prefer external plugin over built-in
-    version: 1.2.3               # optional: pin external plugin version
-    backend:                    # optional: e.g. gcs for GCP
+    source: external # optional: prefer external plugin over built-in
+    version: 1.2.3 # optional: pin external plugin version
+    backend: # optional: e.g. gcs for GCP
       kind: gcs
 
 # ... functions, triggers, etc.
@@ -123,7 +125,7 @@ Rules:
 
 - `source` supports `builtin` (default) or `external`.
 - `version` is valid only when `source: external`.
-- `aws` / `aws-lambda` remain internal while the plugin contract stabilizes; `source: external` is rejected for AWS.
+- `aws-lambda` remains internal while the plugin contract stabilizes; `source: external` is rejected for AWS Lambda.
 
 Behavior:
 
@@ -136,8 +138,8 @@ You can also ensure other plugin kinds are installed (best-effort) when auto-ins
 ```yaml
 extensions:
   autoInstallExtensions: true
-  runtimePlugin: nodejs        # kind=runtime
-  simulatorPlugin: local       # kind=simulator
+  runtimePlugin: nodejs # kind=runtime
+  simulatorPlugin: local # kind=simulator
 ```
 
 ## Real deploy and unsafe defaults
@@ -150,27 +152,27 @@ Real deploy is opt-in: set **`RUNFABRIC_REAL_DEPLOY=1`** or provider-specific **
 
 ## First-class layers
 
-Define layers once and reference them by name from functions (providers that support layers, e.g. AWS Lambda, resolve the ARN):
+Define layers once and reference them by name from functions. Use `ref` for the provider-specific layer identifier; `arn` remains supported as a deprecated AWS-oriented alias:
 
 ```yaml
 layers:
   node-deps:
-    arn: "arn:aws:lambda:us-east-1:123456789012:layer:node-deps:1"
+    ref: "arn:aws:lambda:us-east-1:123456789012:layer:node-deps:1"
     name: node-deps
     version: "1"
   custom:
-    arn: "${env:LAMBDA_LAYER_ARN}"
-    version: "${env:LAYER_VERSION}"   # optional: set from CI (e.g. package-lock hash)
+    ref: "${env:LAMBDA_LAYER_ARN}"
+    version: "${env:LAYER_VERSION}" # optional: set from CI (e.g. package-lock hash)
 
 functions:
-  api:
-    handler: src/handler.default
+  - name: api
+    entry: src/handler.default
     layers: ["node-deps", "custom"]
 ```
 
-Entries in `functions.<name>.layers` can be logical names (keys in top-level `layers`) or literal layer ARNs.
+Each function entry's `layers` list can use logical names (keys in top-level `layers`) or literal provider-specific layer refs. For AWS, ARNs continue to work.
 
-**Versioning on dependency change:** Use `version` with an env var (e.g. `version: "${env:LAYER_VERSION}"`) and set that in CI from a hash of `package-lock.json` or `requirements.txt` so layer ARNs/versions track dependency changes. Resolve runs after env is set, so the same config works across environments.
+**Versioning on dependency change:** Use `version` with an env var (e.g. `version: "${env:LAYER_VERSION}"`) and set that in CI from a hash of `package-lock.json` or `requirements.txt` so layer refs or versions track dependency changes. Resolve runs after env is set, so the same config works across environments.
 
 **Other providers:** Layers are applied by AWS Lambda today. Other providers (GCP, Azure, etc.) preserve the `layers` config but do not apply it; use provider-specific mechanisms (e.g. build env, separate artifacts) where needed.
 
@@ -219,9 +221,9 @@ secrets:
   db_url: secret://DATABASE_URL
 
 functions:
-  api:
-    handler: src/handler.default
-    environment:
+  - name: api
+    entry: src/handler.default
+    env:
       DATABASE_URL: "${secret:db_url}"
 ```
 
@@ -233,14 +235,14 @@ Single-function deploy: use `runfabric deploy --function <name>`, `runfabric dep
 
 ```yaml
 deploy:
-  rollbackOnFailure: true   # optional
-  strategy: all-at-once     # optional: all-at-once (default), canary, blue-green
-  canaryPercent: 10         # 0-100 when strategy: canary (provider-specific traffic shift)
-  canaryIntervalMinutes: 5  # minutes before full shift when strategy: canary (optional)
-  healthCheck:             # optional post-deploy HTTP GET
+  rollbackOnFailure: true # optional
+  strategy: all-at-once # optional: all-at-once (default), canary, blue-green
+  canaryPercent: 10 # 0-100 when strategy: canary (provider-specific traffic shift)
+  canaryIntervalMinutes: 5 # minutes before full shift when strategy: canary (optional)
+  healthCheck: # optional post-deploy HTTP GET
     enabled: true
-    url: ""                # empty = use deployed URL from receipt (ServiceURL, url, ApiUrl)
-  scaling:                 # optional provider-level defaults (overridden per function)
+    url: "" # empty = use deployed URL from receipt (ServiceURL, url, ApiUrl)
+  scaling: # optional provider-level defaults (overridden per function)
     reservedConcurrency: 10
     provisionedConcurrency: 0
 ```
@@ -254,11 +256,9 @@ Per-function scaling (and layers) in `functions`:
 
 ```yaml
 functions:
-  api:
-    handler: src/handler.default
-    reservedConcurrency: 5      # AWS: reserved concurrency
-    provisionedConcurrency: 1   # AWS: provisioned concurrency (use with version/alias)
-    layers: ["node-deps"]       # refs to top-level layers.* or literal ARNs
+  - name: api
+    entry: src/handler.default
+    layers: ["node-deps"] # refs to top-level layers.* or literal provider-specific layer refs
 ```
 
 Stage override:
@@ -274,7 +274,7 @@ Behavior precedence for rollback-on-failure:
 
 1. CLI flag (`deploy --rollback-on-failure` or `--no-rollback-on-failure`)
 2. `runfabric.yml` deploy policy (`deploy.rollbackOnFailure`)
-3. Legacy env toggle (`RUNFABRIC_ROLLBACK_ON_FAILURE`)
+3. Env toggle (`RUNFABRIC_ROLLBACK_ON_FAILURE`)
 
 ## Trigger Types
 
@@ -394,7 +394,7 @@ extensions:
 
 ```yaml
 state:
-  backend: local # local|postgres|sqlite|s3|aws|dynamodb|gcs|azblob
+  backend: local # local|postgres|sqlite|s3|dynamodb|gcs|azblob
   keyPrefix: runfabric/state
   lock:
     enabled: true
@@ -415,11 +415,9 @@ Backend-specific options:
 
 Detailed backend behavior: [STATE_BACKENDS.md](STATE_BACKENDS.md).
 
-`aws` is the canonical backend kind for the legacy AWS remote bundle (S3 receipts + DynamoDB locks/journal).
-
 ## Logs
 
-Optional local log file source (unified with provider logs). When `logs.path` is set (or default `.runfabric/logs`), `runfabric logs` appends lines from:
+Optional local log file source (unified with provider logs). When `logs.path` is set (or default `.runfabric/logs`), `runfabric invoke logs` appends lines from:
 
 - `<path>/<stage>.log` — stage-level log file
 - `<path>/<function>_<stage>.log` — per-function log file (when requesting a single function)
@@ -428,7 +426,7 @@ Example:
 
 ```yaml
 logs:
-  path: .runfabric/logs   # default; directory relative to project root
+  path: .runfabric/logs # default; directory relative to project root
 ```
 
 Provider logs (e.g. CloudWatch for AWS) are fetched first; local file lines are appended to the same result.
@@ -463,37 +461,6 @@ alerts:
 - **`slack`** — Slack webhook URL.
 - **`onError`** / **`onTimeout`** — Enable triggers; used by integrations when emitting alerts.
 
-## AI workflow (aiWorkflow)
-
-Optional AI workflow graph (Phase 14). When **`enable`** is true, **`nodes`** and **`edges`** define a DAG; **`entrypoint`** is the starting node ID.
-
-- **`enable`** — When true, the graph is validated and (in later phases) used by plan/deploy.
-- **`entrypoint`** — Node ID that is the workflow entry; must reference a node in **`nodes`**.
-- **`models`** — Optional map of model id → config (provider, model id, etc.).
-- **`datasets`** — Optional map of dataset id → config (path, format, etc.).
-- **`nodes`** — List of nodes. Each node has **`id`**, **`type`** (one of `trigger`, `ai`, `data`, `logic`, `system`, `human`), and optional **`params`** (type-specific config).
-- **`edges`** — List of edges. Each edge has **`from`** and **`to`** (node IDs) and optional **`expression`** (condition).
-
-Validation (when `enable` is true): node IDs must be unique; `entrypoint` must be a node ID; every edge `from`/`to` must reference a node ID; node `type` must be one of the supported types above.
-
-Example:
-
-```yaml
-aiWorkflow:
-  enable: true
-  entrypoint: start
-  nodes:
-    - id: start
-      type: trigger
-    - id: step1
-      type: ai
-      params:
-        model: default
-  edges:
-    - from: start
-      to: step1
-```
-
 ## App and org
 
 Optional grouping for dashboards or multi-service UIs:
@@ -510,7 +477,7 @@ service: my-api
 
 ## Add-ons (RunFabric Addons, Phase 15)
 
-Add-ons are optional integrations (e.g. Sentry, Datadog) declared under `addons`. The **provider** and **runtime** fields elsewhere in config resolve to RunFabric Plugin IDs (e.g. `aws-lambda`, `nodejs`); use `runfabric extension list` to see built-in plugins. Each entry can specify:
+Add-ons are optional integrations (e.g. Sentry, Datadog) declared under `addons`. The **provider** and **runtime** fields elsewhere in config resolve to RunFabric Plugin IDs (e.g. `aws-lambda`, `nodejs`); use `runfabric extensions extension list` to see built-in plugins. Each entry can specify:
 
 - **`name`** (optional): Logical name; defaults to the map key.
 - **`version`** (optional): Version or tag for the add-on.
@@ -531,15 +498,15 @@ addons:
     options:
       tracesSampleRate: 1.0
     secrets:
-      SENTRY_DSN: sentry_dsn   # uses secrets.sentry_dsn → ${env:SENTRY_DSN}
+      SENTRY_DSN: sentry_dsn # uses secrets.sentry_dsn → ${env:SENTRY_DSN}
   datadog:
     secrets:
       DD_API_KEY: "${env:DD_API_KEY}"
 ```
 
-Use `runfabric addons list` to see the built-in catalog; if `addonCatalogUrl` is set, the CLI fetches and merges entries from that URL. Validation ensures addon secret keys (env var names) are non-empty.
+Use `runfabric extensions addons list` to see the built-in catalog; if `addonCatalogUrl` is set, the CLI fetches and merges entries from that URL. Validation ensures addon secret keys (env var names) are non-empty.
 
-**Per-function addons:** In `functions.<name>` you can set **`addons`** to a list of addon keys (e.g. `["sentry"]`). Only those addons' secrets are injected into that function. If `addons` is omitted or empty, all top-level addons apply.
+**Per-function addons:** In each function entry under `functions`, set **`addons`** to a list of addon keys (e.g. `["sentry"]`). Only those addons' secrets are injected into that function. If `addons` is omitted or empty, all top-level addons apply.
 
 ## Runtime fabric
 
@@ -581,10 +548,11 @@ Each entry under `resources` must have:
   - **`connectionString`**: Literal value or `${env:VAR}` (and optional default) resolved at deploy.
 
 **Optional provisioning (RDS, ElastiCache):** **`provision`** (boolean): when true, the engine calls the provider’s provision callback to obtain a connection string (e.g. RDS, ElastiCache). The config layer supports this via `ResourceProvisionFn`; if the provider does not implement it or returns an error, binding falls back to `connectionStringEnv` or `connectionString`. The **AWS provider** implements lookup for existing RDS and ElastiCache resources. Supported spec fields when `provision: true`:
+
 - **RDS:** `type: "database"` or `"rds"`, **`identifier`** (DB instance ID), optional **`region`** (defaults to `AWS_REGION`), optional **`engine`** (`"postgres"` | `"mysql"`), and for building the URL: **`userEnv`**, **`passwordEnv`**, **`dbNameEnv`** (env var names for user, password, and database name). If `userEnv`/`passwordEnv` are not set or the env vars are empty, provisioning returns not-implemented and binding falls back to `connectionStringEnv`/`connectionString`.
 - **ElastiCache:** `type: "cache"` or `"elasticache"`, **`identifier`** (replication group ID or cache cluster ID), optional **`region`**. Returns a `redis://host:port` connection string.
 
-**Per-function resource refs:** In `functions.<name>` you can set **`resources`** to a list of resource keys (e.g. `["db"]`). Only those resources’ env vars are injected into that function. If `resources` is omitted or empty, all top-level resources are injected (current default).
+**Per-function resource refs:** In each function entry under `functions`, set **`resources`** to a list of resource keys (e.g. `["db"]`). Only those resources’ env vars are injected into that function. If `resources` is omitted or empty, all top-level resources are injected (current default).
 
 Example:
 
@@ -593,74 +561,119 @@ resources:
   db:
     type: database
     envVar: DATABASE_URL
-    connectionStringEnv: DATABASE_URL   # value from process env at deploy
+    connectionStringEnv: DATABASE_URL # value from process env at deploy
   cache:
     type: cache
     envVar: REDIS_URL
-    connectionString: "${env:REDIS_URL}"  # or literal redis://localhost:6379
+    connectionString: "${env:REDIS_URL}" # or literal redis://localhost:6379
 ```
 
 At deploy, each function’s environment is merged with these bindings (then with compose `SERVICE_*_URL` and other `extraEnv`). If a function sets `resources: [key1, ...]`, only those resources' env vars are injected; otherwise all resources apply. When `provision: true` is set, the engine calls the provider's Provisioner; if it returns not-implemented or error, the existing connectionStringEnv/connectionString path is used.
 
 ## Validation
 
-See `engine/internal/config/validate.go`: provider name and runtime required (after normalize); at least one function; backend kind and S3 fields when applicable; event/authorizer rules.
+See `internal/config/validate.go`: provider name and runtime required (after normalize); at least one function; backend kind and S3 fields when applicable; event/authorizer rules.
+
+## Integrations and policies
+
+Use `integrations` and `policies` for workflow/runtime extension settings without changing core config fields.
+
+Example (MCP + policy blocks):
+
+```yaml
+integrations:
+  mcp:
+    enabled: true
+    server: runfabric-mcp
+    transport: stdio
+  approvals:
+    provider: slack
+    channel: ${env:APPROVALS_CHANNEL,#ops-approvals}
+
+policies:
+  workflow:
+    maxRunSeconds: 1800
+    denyModelFamilies: ["experimental"]
+  deploy:
+    requireRollbackOnFailure: true
+```
+
+Validation expectations:
+
+- The schema validates `integrations` and `policies` as object maps.
+- Each integration/policy key accepts nested object values (`additionalProperties: true`) so teams can extend behavior incrementally.
+- Runtime-specific validation (for known integrations/policies) happens in command/runtime logic, not by rigid top-level schema enums.
+
+## Workflow step kinds
+
+Workflow steps support a typed `kind` for AI/human-in-the-loop flows:
+
+- `code`
+- `ai-retrieval`
+- `ai-generate`
+- `ai-structured`
+- `ai-eval`
+- `human-approval`
+
+Minimal typed example:
+
+```yaml
+workflows:
+  - name: release-flow
+    steps:
+      - id: gather-context
+        kind: ai-retrieval
+        prompt: "Summarize deploy risks for this commit"
+        model: gpt-4.1
+      - id: generate-plan
+        kind: ai-structured
+        prompt: "Create a release plan"
+        schema:
+          type: object
+          properties:
+            actions:
+              type: array
+              items: { type: string }
+      - id: approve
+        kind: human-approval
+        approval:
+          inputKey: actions
+          timeoutSeconds: 900
+          onTimeout: fail
+      - id: deploy
+        kind: code
+        function: deploy
+```
+
+Compatibility notes:
+
+- Legacy workflow fields (`function`, `next`, `retry`) remain valid.
+- Typed `kind` is forward-compatible and can be mixed with legacy fields as needed.
+
+## Human approval lifecycle
+
+For `kind: human-approval`, workflow execution follows:
+
+- `paused`: run awaits reviewer decision and persists state.
+- `decision`: approval provider/user submits approve or reject with optional context.
+- `resume`: run continues from the next configured step (or fails based on decision/policy).
+
+Operational flow:
+
+- Start run: `runfabric workflow run ...`
+- Poll state: `runfabric workflow status --run-id <id> ...`
+- Continue/replay after decision path updates: `runfabric workflow replay ...` (or cancel with `workflow cancel`)
+
+Approval inputs typically include the `approval.inputKey` payload from prior steps, reviewer identity, and optional justification captured by the integration.
 
 ## Schema files
 
-| File | Purpose |
-|------|---------|
-| [schemas/runfabric.schema.json](../../schemas/runfabric.schema.json) | Full schema (legacy + reference). |
-| [schemas/resource.schema.json](../../schemas/resource.schema.json) | Resource definition schema (binding + optional provisioning fields). |
-| [schemas/workflow.schema.json](../../schemas/workflow.schema.json) | Workflow definition schema (`name`, `steps`, optional retry policy). |
-| [schemas/secrets.schema.json](../../schemas/secrets.schema.json) | Secrets map shape. |
-
-## AI workflows (`aiWorkflow`)
-
-RunFabric can treat an AI workflow as a **DAG of nodes and edges** inside `runfabric.yml`. This is a **config/observability feature**, not a separate deploy path: it stays wired into the normal lifecycle (`doctor → plan → build → deploy → invoke/logs/traces/metrics → remove`) and AI utilities (`runfabric ai ...`) for validation/graph export.
-
-Top-level shape:
-
-```yaml
-aiWorkflow:
-  enable: true                # when false or omitted, aiWorkflow is ignored
-  entrypoint: start           # required when enable: true; must match a node id
-  models:                     # optional, model registry (provider/model id, params)
-    default-gpt:
-      provider: openai
-      model: gpt-4.1-mini
-  datasets:                   # optional, dataset registry
-    faq:
-      path: ./data/faq.json
-      format: json
-  nodes:                      # required when enable: true
-    - id: start
-      type: trigger           # trigger | ai | data | logic | system | human
-      params:
-        kind: http
-    - id: call-hello
-      type: system
-      params:
-        function: hello       # reference to a function in functions.<name>
-  edges:                      # required when enable: true
-    - from: start
-      to: call-hello
-      expression: ""          # optional condition or routing expression
-```
-
-Rules:
-
-- `enable: true` is required to activate AI workflow compilation and validation.
-- `entrypoint` is required and must point to a node id in `nodes`.
-- `nodes` must have unique `id` values; `type` must be one of: `trigger`, `ai`, `data`, `logic`, `system`, `human`.
-- `edges[*].from` and `edges[*].to` must reference existing node ids.
-- Cycles are rejected at validation/compile time.
-
-Related commands:
-
-- `runfabric ai validate -c <config> [--json]` — validates `runfabric.yml` and, when `aiWorkflow.enable: true`, validates AI workflow nodes/edges/types/entrypoint.
-- `runfabric ai graph -c <config> [--json]` — compiles the workflow DAG and returns a deterministic representation (entrypoint, hash, topological order, execution levels, edges).
-- AI workflow replay (re-run from a node) is currently out of scope in the Go CLI; use `runfabric invoke` plus function-level inputs for iterative testing.
+| File                                                                 | Purpose                                                              |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [schemas/runfabric.schema.json](../../schemas/runfabric.schema.json) | Full schema for the current config contract.                         |
+| [schemas/resource.schema.json](../../schemas/resource.schema.json)   | Resource definition schema (binding + optional provisioning fields). |
+| [schemas/workflow.schema.json](../../schemas/workflow.schema.json)   | Workflow definition schema (`name`, `steps`, optional retry policy). |
+| [schemas/secrets.schema.json](../../schemas/secrets.schema.json)     | Secrets map shape.                                                   |
 
 ## Related Docs
 

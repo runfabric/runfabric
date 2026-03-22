@@ -6,7 +6,7 @@ Provider-by-provider checklist for credentials and deploy wiring. The Go engine 
 
 - **Common flow**: doctor → plan → build → deploy
 - **Pick a provider**: jump to provider section below
-- **Observability overrides**: traces/metrics command overrides
+- **Observability overrides**: invoke traces/invoke metrics command overrides
 - **Examples**: example config paths at the bottom
 
 ## Provider onboarding (quick steps)
@@ -53,7 +53,7 @@ Optional real mode:
 
 - `GCP_ACCESS_TOKEN` — e.g. from `gcloud auth print-access-token` or a service account
 - `GCP_PROJECT` or `GCP_PROJECT_ID`
-- Source: either set `GCP_SOURCE_BUCKET` and `GCP_SOURCE_OBJECT` (pre-uploaded zip), or set `GCP_UPLOAD_BUCKET` to zip project root and upload before deploy. `runfabric logs` uses Cloud Logging (same token).
+- Source: either set `GCP_SOURCE_BUCKET` and `GCP_SOURCE_OBJECT` (pre-uploaded zip), or set `GCP_UPLOAD_BUCKET` to zip project root and upload before deploy. `runfabric invoke logs` uses Cloud Logging (same token).
 
 **CLI-based (optional):**
 
@@ -69,7 +69,7 @@ Optional real mode:
 - `AZURE_RESOURCE_GROUP` (optional; defaults to `service-stage`)
 - Deploy creates resource group and function app via Management REST API; remove/invoke use API; logs return portal link. For CLI log fetch, set `AZURE_LOG_ANALYTICS_WORKSPACE_ID` (and `AZURE_ACCESS_TOKEN`) to query Log Analytics.
 
-Optional CLI-based (legacy):
+Optional CLI-based path:
 
 - `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`
 - `RUNFABRIC_AZURE_REAL_DEPLOY=1` — built-in deploy/remove uses `func` + `az`; overrides: `RUNFABRIC_AZURE_DEPLOY_CMD`, `RUNFABRIC_AZURE_DESTROY_CMD`

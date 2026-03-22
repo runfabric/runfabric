@@ -21,7 +21,7 @@ There is also an existing **Node hook mechanism** (top-level `hooks` in `runfabr
 
 ## Engine extension boundary (Go)
 
-Provider/runtime resolution in the Go engine should happen through `engine/internal/extensions/resolution`:
+Provider/runtime resolution in the Go engine should happen through the app bootstrap + extension registry path (`internal/app/bootstrap.go`, `platform/extensions/registry/loader`):
 
 - Build a provider registry with built-ins + API-backed provider adapters.
 - Merge discoverable external plugins from `RUNFABRIC_HOME/plugins` while preserving built-in precedence.
@@ -29,22 +29,22 @@ Provider/runtime resolution in the Go engine should happen through `engine/inter
 
 ## Provider plugin interface (Go, recommended)
 
-The recommended interface for internal provider plugins is **ProviderPlugin** (context + request/result). It lives in `engine/internal/extensions/providers` and is re-exported from `engine/internal/providers`.
+The recommended interface for internal provider plugins is **ProviderPlugin** (context + request/result). It is defined in `platform/core/contracts/extension/provider` and re-exported from `platform/extensions/registry/loader/providers`.
 
 **Interface:**
 
 - **Meta()** → `ProviderMeta` (Name, Version, PluginVersion, Capabilities, SupportsRuntime, SupportsTriggers, SupportsResources)
 - **ValidateConfig(ctx, req)** → error
-- **Doctor(ctx, req)** → *DoctorResult
-- **Plan(ctx, req)** → *PlanResult
-- **Deploy(ctx, req)** → *DeployResult
-- **Remove(ctx, req)** → *RemoveResult
-- **Invoke(ctx, req)** → *InvokeResult
-- **Logs(ctx, req)** → *LogsResult
+- **Doctor(ctx, req)** → \*DoctorResult
+- **Plan(ctx, req)** → \*PlanResult
+- **Deploy(ctx, req)** → \*DeployResult
+- **Remove(ctx, req)** → \*RemoveResult
+- **Invoke(ctx, req)** → \*InvokeResult
+- **Logs(ctx, req)** → \*LogsResult
 
 Request types: `ValidateConfigRequest`, `DoctorRequest`, `PlanRequest`, `DeployRequest`, `RemoveRequest`, `InvokeRequest`, `LogsRequest` (each carries Config, Stage, Root, etc. as needed).
 
-**Registry:** `ProviderRegistry` has `Register(ProviderPlugin)`, `Get(name) (ProviderPlugin, bool)`, `List() []ProviderMeta`. The concrete `*Registry` in the same package also supports legacy `Register(Provider)` and `Get(name) (Provider, error)` for backward compatibility (legacy providers are wrapped; new plugins can use `RegisterPlugin`).
+**Registry:** `ProviderRegistry` has `Register(ProviderPlugin)`, `Get(name) (ProviderPlugin, bool)`, `List() []ProviderMeta`.
 
 **Usage:** Implement `ProviderPlugin` and register at boot:
 
@@ -72,7 +72,7 @@ registry.RegisterPlugin(cloudflare.New())
 registry.RegisterPlugin(vercel.New())
 ```
 
-Existing providers (AWS, GCP) that implement the legacy **Provider** interface are wrapped automatically when registered with `Register(provider)`; no change required until they are migrated to **ProviderPlugin**.
+Built-in providers use the `ProviderPlugin` interface directly.
 
 **Development:** For extension (provider plugin) development guidelines (layout, Meta, Doctor, Plan/Deploy/Remove, registration, testing), see [EXTENSION_DEVELOPMENT_GUIDE.md](EXTENSION_DEVELOPMENT_GUIDE.md) (Part 2: Extension development).
 
@@ -92,7 +92,7 @@ export default {
   beforeDeploy(context) {},
   afterDeploy(context) {
     console.log("Deploy finished.");
-  }
+  },
 };
 ```
 
@@ -126,7 +126,7 @@ const hook: LifecycleHook = {
   beforeBuild(context) {},
   afterBuild(context) {},
   beforeDeploy(context) {},
-  afterDeploy(context) {}
+  afterDeploy(context) {},
 };
 
 export default hook;
@@ -154,8 +154,11 @@ export default {
     appendFileSync("./hook.log", "beforeBuild\n");
   },
   afterDeploy(context) {
-    appendFileSync("./hook.log", `afterDeploy providers=${context.deployments?.length ?? 0}\n`);
-  }
+    appendFileSync(
+      "./hook.log",
+      `afterDeploy providers=${context.deployments?.length ?? 0}\n`,
+    );
+  },
 };
 ```
 

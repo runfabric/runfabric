@@ -1,6 +1,8 @@
 # Architecture
 
-In this repo the Go engine lives under **`engine/`**; paths below refer to `engine/internal/`, `engine/providers/`, etc.
+In this repo the Go engine lives at the repository root. CLI command wiring lives under `internal/cli/` (split by command domain), and app orchestration contracts live under `internal/app/`.
+
+Shared contracts should live under `platform/core/contracts/` to avoid stale cross-package contract copies.
 
 ---
 
@@ -24,18 +26,18 @@ How **deployrunner**, **controlplane**, **deployapi**, **deployexec**, and **dep
 
 ### 1. Entry: CLI commands
 
-| CLI command        | File                     | Calls                                              |
-| ------------------ | ------------------------ | -------------------------------------------------- |
-| `runfabric deploy` | `internal/cli/deploy.go` | `app.Deploy(configPath, stage)`                    |
-| `runfabric remove` | `internal/cli/remove.go` | `app.Remove(configPath, stage)`                    |
-| `runfabric invoke` | `internal/cli/invoke.go` | `app.Invoke(configPath, stage, function, payload)` |
-| `runfabric logs`   | `internal/cli/logs.go`   | `app.Logs(configPath, stage, function)`            |
+| CLI command             | File                                | Calls                                         |
+| ----------------------- | ----------------------------------- | --------------------------------------------- |
+| `runfabric deploy`      | `internal/cli/lifecycle/deploy.go`  | `internal/app.Deploy(configPath, stage, ...)` |
+| `runfabric remove`      | `internal/cli/lifecycle/remove.go`  | `internal/app.Remove(configPath, stage, ...)` |
+| `runfabric invoke run`  | `internal/cli/invocation/invoke.go` | `internal/app.Invoke(configPath, stage, ...)` |
+| `runfabric invoke logs` | `internal/cli/invocation/logs.go`   | `internal/app.Logs(configPath, stage, ...)`   |
 
 ### 2. App layer: routing by provider
 
-**Location:** `internal/app/` — `deploy.go`, `remove.go`, `invoke.go`, `logs.go`
+**Location:** `internal/app/app.go`
 
-Each app function calls **`app.Bootstrap(configPath, stage)`**, which builds the extension boundary (`internal/extensions/resolution`) and resolves providers/runtimes through that boundary first.
+CLI packages call the internal app boundary, which currently delegates to `platform/core/workflow/app` while exposing a stable `AppService` contract for future injection/mocking and stricter layering.
 
 Routing is selected by boundary resolution mode (not ad-hoc provider checks in each command):
 
@@ -73,11 +75,11 @@ For **non-AWS** providers: deploy/remove/invoke/logs via provider REST/SDK.
 
 - Uses a single capability registry (`internal/deploy/api/registry.go`) with one provider entry per non-AWS provider.
 - `run.go`, `remove.go`, `invoke.go`, and `logs.go` all dispatch through that unified registry (not separate per-operation maps).
-- Legacy `Runner`/`Remover`/`Invoker`/`Logger` adapters are preserved as migration shims behind the unified provider interface.
+- Provider dispatch uses unified plugin-facing request/response interfaces.
 
 ### 7.1 CLI deploy runner status (`internal/deploy/cli/`)
 
-- `internal/deploy/cli` is now a deprecated/experimental compatibility path.
+- `internal/deploy/cli` is not part of the active deploy lifecycle path.
 - Supported lifecycle routing in the engine is API/plugin based (`internal/deploy/api`) plus AWS controlplane.
 - Docs and roadmap treat CLI deploy runners as out of active feature development unless explicitly reactivated.
 
@@ -89,7 +91,7 @@ For **non-AWS** providers: deploy/remove/invoke/logs via provider REST/SDK.
 
 ## Provider code layout
 
-Provider implementations live under **`internal/extensions/provider/<name>/`** (with API dispatch in `internal/deploy/api/`). The older `providers/<name>/` layout is being migrated into the extensions model.
+Provider implementations live under **`platform/extensions/internal/providers/<name>/`** (with API dispatch in `internal/deploy/api/`).
 
 1. **Segregated actions** – deploy, remove, invoke, logs (in `deploy.go`, `remove.go`, `invoke.go`, `logs.go` or `api_*.go`). Orchestration in `internal/deploy/api/` or control plane for AWS.
 2. **Resources and triggers** – each provider has **`resources/`** and **`triggers/`** per capability matrix (`internal/planner/capability_matrix.go`).
@@ -97,7 +99,7 @@ Provider implementations live under **`internal/extensions/provider/<name>/`** (
 ### Structure
 
 ```
-internal/extensions/provider/
+platform/extensions/internal/providers/
 ├── aws/          # adapter, deploy_plan.go, deploy_resume.go, triggers/, resources/
 ├── cloudflare/   # api_*.go, triggers/
 ├── vercel/       # deploy, remove, invoke, logs, triggers/
@@ -118,15 +120,15 @@ internal/extensions/provider/
 
 ### Migrated providers (API-based)
 
-| Provider               | Deploy | Remove | Invoke | Logs | Location                  |
-| ---------------------- | ------ | ------ | ------ | ---- | ------------------------- |
-| digitalocean-functions | ✅     | ✅     | ✅     | ✅   | `internal/extensions/provider/digitalocean/` |
-| cloudflare-workers     | ✅     | ✅     | ✅     | ✅   | `internal/extensions/provider/cloudflare/`   |
-| vercel                 | ✅     | ✅     | ✅     | ✅   | `internal/extensions/provider/vercel/`       |
-| netlify                | ✅     | ✅     | ✅     | ✅   | `internal/extensions/provider/netlify/`      |
-| fly-machines           | ✅     | ✅     | ✅     | ✅   | `internal/extensions/provider/fly/`          |
-| gcp-functions          | ✅     | ✅     | ✅     | ✅   | `internal/extensions/provider/gcp/`          |
-| azure-functions        | ✅     | ✅     | ✅     | ✅   | `internal/extensions/provider/azure/`        |
-| kubernetes             | ✅     | ✅     | ✅     | ✅   | `internal/extensions/provider/kubernetes/`   |
-| ibm-openwhisk          | ✅     | ✅     | ✅     | ✅   | `internal/extensions/provider/ibm/`          |
-| alibaba-fc             | ✅     | ✅     | ✅     | ✅   | `internal/extensions/provider/alibaba/`      |
+| Provider               | Deploy | Remove | Invoke | Logs | Location                                               |
+| ---------------------- | ------ | ------ | ------ | ---- | ------------------------------------------------------ |
+| digitalocean-functions | ✅     | ✅     | ✅     | ✅   | `platform/extensions/internal/providers/digitalocean/` |
+| cloudflare-workers     | ✅     | ✅     | ✅     | ✅   | `platform/extensions/internal/providers/cloudflare/`   |
+| vercel                 | ✅     | ✅     | ✅     | ✅   | `platform/extensions/internal/providers/vercel/`       |
+| netlify                | ✅     | ✅     | ✅     | ✅   | `platform/extensions/internal/providers/netlify/`      |
+| fly-machines           | ✅     | ✅     | ✅     | ✅   | `platform/extensions/internal/providers/fly/`          |
+| gcp-functions          | ✅     | ✅     | ✅     | ✅   | `platform/extensions/internal/providers/gcp/`          |
+| azure-functions        | ✅     | ✅     | ✅     | ✅   | `platform/extensions/internal/providers/azure/`        |
+| kubernetes             | ✅     | ✅     | ✅     | ✅   | `platform/extensions/internal/providers/kubernetes/`   |
+| ibm-openwhisk          | ✅     | ✅     | ✅     | ✅   | `platform/extensions/internal/providers/ibm/`          |
+| alibaba-fc             | ✅     | ✅     | ✅     | ✅   | `platform/extensions/internal/providers/alibaba/`      |

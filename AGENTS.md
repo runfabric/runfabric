@@ -95,8 +95,8 @@ Minimum allowed lighter checks:
 
 ## Code ownership
 
-- **Core / engine:** `engine/cmd`, `engine/internal` (config, planner, state, deploy/api, controlplane, lifecycle) — framework maintainers.
-- **Providers:** `engine/providers/<name>` — per-provider owners; keep adapter logic in providers, not in `internal/`.
+- **Core / engine:** `platform/engine/cmd`, `platform/engine/internal` (config, planner, state, deploy/api, controlplane, lifecycle) — framework maintainers.
+- **Providers:** `platform/engine/providers/<name>` — per-provider owners; keep adapter logic in providers, not in `internal/`.
 - **Docs:** `docs/` — keep in sync with CLI and config; see COMMAND_REFERENCE, RUNFABRIC_YML_REFERENCE, ROADMAP.
 - **Docs (user):** `docs/user/` — CLI usage + config + providers + troubleshooting.
 - **Docs (developer):** `docs/developer/` — internals + extensions/registry + repo development.

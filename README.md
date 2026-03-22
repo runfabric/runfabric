@@ -8,7 +8,7 @@
 
 **Current scope:**
 
-- **Core engine and CLI** — Go code in `engine/`; build with `make build` → `bin/runfabric`. **Packages** (Node CLI/SDK, Python, Go, Java, .NET) live under `packages/`. See [docs/developer/FILE_STRUCTURE.md](docs/developer/FILE_STRUCTURE.md) and [docs/developer/LAYOUT.md](docs/developer/LAYOUT.md).
+- **Core engine and CLI** — Go code in `cmd/`, `internal/`, and `platform/`; build with `make build` → `bin/runfabric` and `bin/runfabricd`. **Packages** (Node CLI/SDK, Python, Go, Java, .NET) live under `packages/`. See [docs/developer/FILE_STRUCTURE.md](docs/developer/FILE_STRUCTURE.md) and [docs/developer/LAYOUT.md](docs/developer/LAYOUT.md).
 - **Deployment framework** — Not a cluster scheduler or standalone runtime; uses each provider’s managed serverless (Lambda, Cloud Run, Workers, etc.).
 - **Config** — `runfabric.yml` (not a drop-in replacement for `serverless.yml`; use `runfabric migrate` to convert).
 - **Production path** — Node-first beta; other runtimes (Python, Go) are supported per provider.
@@ -55,7 +55,7 @@ runfabric --help
 
 Or without global install: `npx @runfabric/cli@latest --help`.
 
-The npm package bundles or fetches the RunFabric binary for your OS; the core is the Go engine in `engine/`. The repo uses a **Makefile** for build, test, and release (no root `package.json`). See `CONTRIBUTING.md` and `make help`.
+The npm package bundles or fetches the RunFabric binary for your OS; the core is the Go engine in this repo (`cmd/`, `internal/`, `platform/`). The repo uses a **Makefile** for build, test, and release (no root `package.json`). See `CONTRIBUTING.md` and `make help`.
 
 **Apple Silicon (arm64):** Use the native binary from `make build`. If the binary is **killed**, it may be quarantined (e.g. after copying from CI); run `make bin-clear-quarantine` or `xattr -cr bin/` then try again.
 

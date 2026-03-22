@@ -5,7 +5,7 @@ Addons are **function-level or app-level augmentations** (e.g. Sentry, Datadog, 
 - **Use addons for**: instrumentation, env injection, handler wrapping, generated helper files, build-time patches.
 - **Do not use addons for**: provider execution, runtime packaging engines, deploy/remove/invoke/logs ownership, simulator backends.
 
-**CLI support:** The Go binary supports addons today: config loading, validation, `runfabric addons list`, and addon secret injection at deploy. (Node-side addon lifecycle hooks are covered by the addon contract and the extension development guide.)
+**CLI support:** The Go binary supports addons today: config loading, validation, `runfabric extensions addons list`, and addon secret injection at deploy. (Node-side addon lifecycle hooks are covered by the addon contract and the extension development guide.)
 
 ---
 
@@ -26,7 +26,7 @@ addons:
     options:
       tracesSampleRate: 1.0
     secrets:
-      SENTRY_DSN: "${env:SENTRY_DSN}"   # or a key into secrets:
+      SENTRY_DSN: "${env:SENTRY_DSN}" # or a key into secrets:
   my-addon:
     secrets:
       MY_API_KEY: "${env:MY_ADDON_KEY}"
@@ -41,16 +41,16 @@ secrets:
 addons:
   sentry:
     secrets:
-      SENTRY_DSN: sentry_dsn   # resolves to secrets.sentry_dsn
+      SENTRY_DSN: sentry_dsn # resolves to secrets.sentry_dsn
 ```
 
-3. **Per-function:** Attach only specific add-ons to a function via `functions.<name>.addons`:
+3. **Per-function:** Attach only specific add-ons to a function via that function entry's `addons` field:
 
 ```yaml
 functions:
-  api:
+  - name: api
     addons: ["sentry"]
-  worker:
+  - name: worker
     addons: ["datadog"]
 ```
 
@@ -60,7 +60,7 @@ If `addons` is omitted on a function, all top-level addons apply.
 
 ## Commands
 
-- `runfabric addons list` — Shows the built-in catalog (e.g. sentry, datadog, logdrain). Set `addonCatalogUrl` in config to merge entries from a JSON URL (array of `{ "name", "version?", "description?" }`).
+- `runfabric extensions addons list` — Shows the built-in catalog (e.g. sentry, datadog, logdrain). Set `addonCatalogUrl` in config to merge entries from a JSON URL (array of `{ "name", "version?", "description?" }`).
 
 ---
 

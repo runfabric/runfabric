@@ -61,11 +61,11 @@ runfabric docs check -c runfabric.yml
 Local execution:
 
 - HTTP examples:
-  - `runfabric call-local -c runfabric.yml --serve --watch`
+  - `runfabric invoke local -c runfabric.yml --serve --watch`
 - Event-driven examples:
-  - `runfabric call-local -c runfabric.yml --event ./event.json`
-  - `runfabric dev -c runfabric.yml --preset queue --once`
-  - `runfabric dev -c runfabric.yml --preset storage --once`
+  - `runfabric invoke local -c runfabric.yml --event ./event.json`
+  - `runfabric invoke dev -c runfabric.yml --preset queue --once`
+  - `runfabric invoke dev -c runfabric.yml --preset storage --once`
 
 ## 5. Framework Wrapper Consistency (Express/Fastify/Nest)
 
