@@ -1,0 +1,310 @@
+{
+  "publishers": {
+    "community": {
+      "id": "community",
+      "name": "Community",
+      "verified": false,
+      "trust": "community"
+    },
+    "runfabric": {
+      "id": "runfabric",
+      "name": "RunFabric",
+      "verified": true,
+      "trust": "official"
+    }
+  },
+  "extensions": {
+    "provider-aws": {
+      "id": "provider-aws",
+      "aliases": [
+        "aws-provider"
+      ],
+      "name": "AWS Provider",
+      "type": "plugin",
+      "pluginKind": "provider",
+      "description": "Deploy and operate functions on AWS",
+      "publisherId": "runfabric",
+      "versions": {
+        "1.0.0": {
+          "version": "1.0.0",
+          "releaseStatus": "published",
+          "coreConstraint": "\u003e=0.9.0",
+          "capabilities": [
+            "validateConfig",
+            "doctor",
+            "plan",
+            "deploy",
+            "remove",
+            "invoke",
+            "logs"
+          ],
+          "compatibility": {
+            "core": "\u003e=0.9.0"
+          },
+          "manifest": {
+            "url": "https://cdn.runfabric.cloud/extensions/plugins/providers/aws/1.0.0/manifest.json"
+          },
+          "artifacts": [
+            {
+              "type": "binary",
+              "format": "executable",
+              "url": "/bin?id=provider-aws\u0026version=1.0.0\u0026os=${os}\u0026arch=${arch}",
+              "sizeBytes": 31,
+              "checksumAlgorithm": "sha256",
+              "checksumValue": "7ddd2f449075af949373f3967ad38575ce07eaf70049a2431cd39d2721aff514",
+              "signature": {
+                "algorithm": "ed25519",
+                "value": "/QVxa2wg/ggsClz/hMpj4MbdfuRZFBjPO4102h2RqXpABSAsx7suF/adB6nz0zFvNzAvXiUetG1p7wuza51oAw==",
+                "publicKeyId": "local-dev"
+              },
+              "os": "darwin",
+              "arch": "arm64",
+              "deterministicBinary": true
+            },
+            {
+              "type": "binary",
+              "format": "executable",
+              "url": "/bin?id=provider-aws\u0026version=1.0.0\u0026os=${os}\u0026arch=${arch}",
+              "sizeBytes": 31,
+              "checksumAlgorithm": "sha256",
+              "checksumValue": "c99d110762807c017733b4294bb77bb28752b7e9352ee874f44333a99d0f1219",
+              "signature": {
+                "algorithm": "ed25519",
+                "value": "Oav5eZGQaznmMfwpBB4UFzfA6Gi5zKZ3+CrQQHWuBx32YsNed2P+2JwkE4aZVB4xn9oJfE27++BQ5Ge7kXOeCw==",
+                "publicKeyId": "local-dev"
+              },
+              "os": "darwin",
+              "arch": "amd64",
+              "deterministicBinary": true
+            },
+            {
+              "type": "binary",
+              "format": "executable",
+              "url": "/bin?id=provider-aws\u0026version=1.0.0\u0026os=${os}\u0026arch=${arch}",
+              "sizeBytes": 30,
+              "checksumAlgorithm": "sha256",
+              "checksumValue": "325ab87254975b44b06f9cb8182a4e05100edaa0ada9943b645d62a2f8271bc1",
+              "signature": {
+                "algorithm": "ed25519",
+                "value": "GlNh6WoxrsKjHiVN7FbJTUiyYeU3zDWgJ4cVqEiEFOXh/+1UQiUNpbs7vWJayZcCO53vtYAwzq1++0pDZrpCDQ==",
+                "publicKeyId": "local-dev"
+              },
+              "os": "linux",
+              "arch": "amd64",
+              "deterministicBinary": true
+            },
+            {
+              "type": "binary",
+              "format": "executable",
+              "url": "/bin?id=provider-aws\u0026version=1.0.0\u0026os=${os}\u0026arch=${arch}",
+              "sizeBytes": 30,
+              "checksumAlgorithm": "sha256",
+              "checksumValue": "3090348f2d055f0740549e22388334e67a998245fcaf3fecbde0fa43a358a64c",
+              "signature": {
+                "algorithm": "ed25519",
+                "value": "iH0KS338ZvevBrPBq8g2Uq2GrTXEc1ZERjeqTml57CrT5kyBxWsBzm3qF3nVTaYnvHMSpCaDB/98/6yOn1F3Dw==",
+                "publicKeyId": "local-dev"
+              },
+              "os": "linux",
+              "arch": "arm64",
+              "deterministicBinary": true
+            }
+          ],
+          "publishedAt": "2026-03-19T13:50:08Z"
+        }
+      }
+    },
+    "sentry": {
+      "id": "sentry",
+      "aliases": [
+        "addon-sentry"
+      ],
+      "name": "Sentry",
+      "type": "addon",
+      "description": "Error tracking and performance monitoring for serverless functions",
+      "publisherId": "runfabric",
+      "versions": {
+        "1.2.0": {
+          "version": "1.2.0",
+          "releaseStatus": "published",
+          "coreConstraint": "\u003e=0.8.0",
+          "permissions": [
+            "env:write",
+            "fs:build-write",
+            "handler:wrap",
+            "network:outbound"
+          ],
+          "compatibility": {
+            "core": "\u003e=0.8.0",
+            "providers": [
+              "aws",
+              "cloudflare",
+              "vercel"
+            ],
+            "runtimes": [
+              "node"
+            ]
+          },
+          "manifest": {
+            "schemaUrl": "https://cdn.runfabric.cloud/extensions/addons/sentry/1.2.0/config.schema.json",
+            "url": "https://cdn.runfabric.cloud/extensions/addons/sentry/1.2.0/manifest.json"
+          },
+          "integrity": {
+            "provenanceUrl": "https://cdn.runfabric.cloud/extensions/addons/sentry/1.2.0/provenance.intoto.jsonl",
+            "sbomUrl": "https://cdn.runfabric.cloud/extensions/addons/sentry/1.2.0/sbom.spdx.json"
+          },
+          "install": {
+            "path": "addons/sentry/1.2.0",
+            "postInstall": []
+          },
+          "artifacts": [
+            {
+              "type": "addon",
+              "format": "tgz",
+              "url": "https://cdn.runfabric.cloud/extensions/addons/sentry/1.2.0/addon.tgz",
+              "sizeBytes": 84231,
+              "checksumAlgorithm": "sha256",
+              "checksumValue": "c72451358d2517293332ffdc9258d0eea9e7a012503810ea52b1c45e3e92171b"
+            }
+          ],
+          "publishedAt": "2026-03-19T13:50:08Z"
+        }
+      }
+    }
+  },
+  "advisories": {
+    "sentry": [
+      {
+        "id": "adv_sentry_2026_0001",
+        "extensionId": "sentry",
+        "severity": "low",
+        "summary": "Upgrade recommended for latest source map handling",
+        "affectedRange": "\u003c1.2.0",
+        "patchedVersions": [
+          "1.2.0"
+        ],
+        "url": "https://runfabric.cloud/security/advisories/adv_sentry_2026_0001",
+        "publishedAt": "2026-03-19T13:50:08Z"
+      }
+    ]
+  },
+  "publishSessions": {},
+  "auditLog": [
+    {
+      "time": "2026-03-19T13:50:15Z",
+      "action": "ui_config",
+      "actor_id": "anonymous",
+      "tenant_id": "public",
+      "status": "ok",
+      "requestId": "req_local_linux_1773928215408478632_5"
+    },
+    {
+      "time": "2026-03-19T13:50:22Z",
+      "action": "search",
+      "actor_id": "anonymous",
+      "tenant_id": "public",
+      "status": "ok",
+      "requestId": "req_local_linux_1773928222907827344_7",
+      "details": {
+        "q": "",
+        "total": 2
+      }
+    },
+    {
+      "time": "2026-03-19T13:50:43Z",
+      "action": "search",
+      "actor_id": "anonymous",
+      "tenant_id": "public",
+      "status": "ok",
+      "requestId": "req_local_linux_1773928243435283881_8",
+      "details": {
+        "q": "",
+        "total": 2
+      }
+    },
+    {
+      "time": "2026-03-19T14:16:53Z",
+      "action": "ui_config",
+      "actor_id": "anonymous",
+      "tenant_id": "public",
+      "status": "ok",
+      "requestId": "req_local_linux_1773929813820106469_11"
+    },
+    {
+      "time": "2026-03-19T14:17:16Z",
+      "action": "search",
+      "actor_id": "anonymous",
+      "tenant_id": "public",
+      "status": "ok",
+      "requestId": "req_local_linux_1773929836224489049_13",
+      "details": {
+        "q": "",
+        "total": 2
+      }
+    },
+    {
+      "time": "2026-03-19T14:17:16Z",
+      "action": "search",
+      "actor_id": "anonymous",
+      "tenant_id": "public",
+      "status": "ok",
+      "requestId": "req_local_linux_1773929836798950424_14",
+      "details": {
+        "q": "",
+        "total": 2
+      }
+    },
+    {
+      "time": "2026-03-19T21:51:48Z",
+      "action": "ui_config",
+      "actor_id": "anonymous",
+      "tenant_id": "public",
+      "status": "ok",
+      "requestId": "req_local_linux_1773957108330976257_21"
+    },
+    {
+      "time": "2026-03-19T21:51:48Z",
+      "action": "not_found",
+      "actor_id": "anonymous",
+      "tenant_id": "public",
+      "status": "error",
+      "requestId": "req_local_linux_1773957108336247340_22"
+    },
+    {
+      "time": "2026-03-19T21:51:48Z",
+      "action": "search",
+      "actor_id": "anonymous",
+      "tenant_id": "public",
+      "status": "ok",
+      "requestId": "req_local_linux_1773957108345787382_24",
+      "details": {
+        "q": "",
+        "total": 2
+      }
+    },
+    {
+      "time": "2026-03-19T21:52:49Z",
+      "action": "search",
+      "actor_id": "anonymous",
+      "tenant_id": "public",
+      "status": "ok",
+      "requestId": "req_local_linux_1773957169640643049_25",
+      "details": {
+        "q": "",
+        "total": 2
+      }
+    },
+    {
+      "time": "2026-03-19T21:52:52Z",
+      "action": "search",
+      "actor_id": "anonymous",
+      "tenant_id": "public",
+      "status": "ok",
+      "requestId": "req_local_linux_1773957172307750425_26",
+      "details": {
+        "q": "",
+        "total": 2
+      }
+    }
+  ]
+}
