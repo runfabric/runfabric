@@ -42,31 +42,31 @@ Input to `apply`: `functionName`, `functionConfig`, `addonConfig`, `projectRoot`
 3. **Secrets and env**  
    Document which env vars your addon expects (e.g. `SENTRY_DSN`). Users declare them in `addons.<id>.secrets` and optionally in top-level `secrets`. Never log or expose secret values.
 
-4. **`apply()` output**  
-   - **env**: Merge with engine-injected addon secrets; avoid overwriting existing vars unless intended.  
-   - **files**: Prefer writing under `generatedDir`; use stable paths so builds are reproducible.  
-   - **patches**: Prefer minimal, idempotent find/replace; validate paths exist before patching.  
+4. **`apply()` output**
+   - **env**: Merge with engine-injected addon secrets; avoid overwriting existing vars unless intended.
+   - **files**: Prefer writing under `generatedDir`; use stable paths so builds are reproducible.
+   - **patches**: Prefer minimal, idempotent find/replace; validate paths exist before patching.
    - **warnings**: Use for non-fatal issues (e.g. optional feature disabled); keep messages short.
 
 5. **Permissions**  
    In manifests we use **Permissions** (fs, env, network, cloud). Only request what the addon needs (e.g. env + network for Sentry).
 
-6. **Testing**  
-   - Unit-test `supports()` for different runtime/provider combinations.  
+6. **Testing**
+   - Unit-test `supports()` for different runtime/provider combinations.
    - Integration-test `apply()` with a fixture `runfabric.yml` and assert on `AddonResult` (env keys, file paths, no unexpected patches).
 
 7. **Catalog**  
-   To appear in `runfabric addons list`, add an entry to the built-in catalog (`engine/internal/config/addons.go` `AddonCatalog()`) or serve a catalog JSON and set `addonCatalogUrl` in config.
+   To appear in `runfabric extensions addons list`, add an entry to the built-in catalog (`engine/internal/config/addons.go` `AddonCatalog()`) or serve a catalog JSON and set `addonCatalogUrl` in config.
 
 ### 1.4 Adding your addon to the catalog (Go engine)
 
-- **Built-in:** Add a `AddonCatalogEntry` in `engine/internal/config/addons.go` (`AddonCatalog()`).  
+- **Built-in:** Add a `AddonCatalogEntry` in `engine/internal/config/addons.go` (`AddonCatalog()`).
 - **Optional manifest:** Add a corresponding entry in `engine/internal/extensions/manifests/addon_manifest.go` (`builtinAddonManifests()`) with ID, Name, Description, Permissions.
 
 ### 1.5 References (addons)
 
-- [ADDON_CONTRACT.md](ADDON_CONTRACT.md) — Full TypeScript interface and semantics.  
-- [ADDONS.md](../user/ADDONS.md) — Declarative usage in `runfabric.yml`.  
+- [ADDON_CONTRACT.md](ADDON_CONTRACT.md) — Full TypeScript interface and semantics.
+- [ADDONS.md](../user/ADDONS.md) — Declarative usage in `runfabric.yml`.
 - [RUNFABRIC_YML_REFERENCE.md](../user/RUNFABRIC_YML_REFERENCE.md) — `addons` and `addonCatalogUrl`.
 
 ---
@@ -89,34 +89,34 @@ The recommended interface is **ProviderPlugin** (see [PLUGINS.md](PLUGINS.md)):
 
 - **Meta()** → `ProviderMeta` (Name, Version, PluginVersion, Capabilities, SupportsRuntime, SupportsTriggers, SupportsResources).
 - **ValidateConfig(ctx, req)** → error.
-- **Doctor(ctx, req)** → *DoctorResult.
-- **Plan(ctx, req)** → *PlanResult.
-- **Deploy(ctx, req)** → *DeployResult.
-- **Remove(ctx, req)** → *RemoveResult.
-- **Invoke(ctx, req)** → *InvokeResult.
-- **Logs(ctx, req)** → *LogsResult.
+- **Doctor(ctx, req)** → \*DoctorResult.
+- **Plan(ctx, req)** → \*PlanResult.
+- **Deploy(ctx, req)** → \*DeployResult.
+- **Remove(ctx, req)** → \*RemoveResult.
+- **Invoke(ctx, req)** → \*InvokeResult.
+- **Logs(ctx, req)** → \*LogsResult.
 
-Request types (`DoctorRequest`, `PlanRequest`, etc.) carry `Config`, `Stage`, `Root`, `Function`, `Payload` as needed. Defined in `engine/internal/extensions/providers` (re-exported from `engine/internal/providers`).
+Request types (`DoctorRequest`, `PlanRequest`, etc.) carry `Config`, `Stage`, `Root`, `Function`, `Payload` as needed. Defined in `platform/core/contracts/extension/provider` (re-exported from `platform/extensions/registry/loader/providers`).
 
 ### 2.3 Development guidelines (extensions)
 
 1. **Package layout**  
-   Implement under `engine/internal/extensions/provider/<name>/` (e.g. `engine/internal/extensions/provider/cloudflare/`). Include a **plugin.go** (or **provider.go**) that exports `New() providers.ProviderPlugin`.
+   Implement under `platform/extensions/internal/providers/<name>/` (e.g. `platform/extensions/internal/providers/cloudflare/`). Include a **plugin.go** (or **provider.go**) that exports `New() providers.ProviderPlugin`.
 
-2. **Meta()**  
-   - **Name**: Must match the provider name used in config (e.g. `aws-lambda`, `gcp-functions`, `cloudflare`).  
-   - **Capabilities**: List what you implement: `deploy`, `remove`, `invoke`, `logs`, `doctor`, `plan`.  
+2. **Meta()**
+   - **Name**: Must match the provider name used in config (e.g. `aws-lambda`, `gcp-functions`, `cloudflare`).
+   - **Capabilities**: List what you implement: `deploy`, `remove`, `invoke`, `logs`, `doctor`, `plan`.
    - **SupportsRuntime** / **SupportsTriggers**: Declare what you support so tooling and docs stay accurate.
 
 3. **ValidateConfig**  
    Use it to validate provider-specific config (region, project, account) before plan/deploy. Return a clear error if required fields are missing.
 
 4. **Doctor**  
-   Check credentials and API access (e.g. list buckets, test auth). Return human-readable checks; the CLI prints them for `runfabric plugin doctor <name>`.
+   Check credentials and API access (e.g. list buckets, test auth). Return human-readable checks; the CLI prints them for `runfabric extensions plugin doctor <name>`.
 
-5. **Plan / Deploy / Remove**  
-   - Plan: Return a stable, deterministic plan (e.g. list of resources to create/update/delete).  
-   - Deploy: Idempotent where possible; persist outputs (URLs, ARNs) for invoke/logs.  
+5. **Plan / Deploy / Remove**
+   - Plan: Return a stable, deterministic plan (e.g. list of resources to create/update/delete).
+   - Deploy: Idempotent where possible; persist outputs (URLs, ARNs) for invoke/logs.
    - Remove: Tear down only what your deploy created; handle missing resources gracefully.
 
 6. **Invoke / Logs**  
@@ -125,18 +125,17 @@ Request types (`DoctorRequest`, `PlanRequest`, etc.) carry `Config`, `Stage`, `R
 7. **Errors**  
    Use the engine’s error types where applicable (e.g. `ErrProviderNotFound`). Wrap underlying API errors with context (stage, function name) so users can fix config or credentials.
 
-8. **Testing**  
-   - Unit tests for Plan (output shape, no unexpected resources).  
-   - Mock or integration tests for Deploy/Remove (e.g. with a test project or local stub).  
+8. **Testing**
+   - Unit tests for Plan (output shape, no unexpected resources).
+   - Mock or integration tests for Deploy/Remove (e.g. with a test project or local stub).
    - Doctor tests that assert on check messages for valid/invalid credentials.
 
 ### 2.4 Registering your plugin
 
 - **Built-in:** In `engine/internal/app/bootstrap.go`, after creating the registry, register your plugin:
-  - **Legacy:** `reg.Register(mypkg.New())` if your type implements the legacy **Provider** interface.
-  - **New:** `reg.RegisterPlugin(mypkg.New())` if your type implements **ProviderPlugin**.
+  - `reg.RegisterPlugin(mypkg.New())` where your type implements **ProviderPlugin**.
 
-- **Manifest (list/info/capabilities):** Add an entry in `engine/internal/extensions/manifests/provider_manifest.go` in `builtinPluginManifests()` so `runfabric plugin list` and `runfabric extension list` show your plugin.
+- **Manifest (list/info/capabilities):** Add an entry in `engine/internal/extensions/manifests/provider_manifest.go` in `builtinPluginManifests()` so `runfabric extensions plugin list` and `runfabric extensions extension list` show your plugin.
 
 ### 2.5 Go SDK for extension development (external plugins)
 
@@ -152,27 +151,27 @@ Minimal flow:
 
 1. Build a plugin binary that registers handlers in `server.Options.Methods`.
 2. Support `handshake` and provider methods you implement (e.g. `provider.doctor`).
-3. Package with `plugin.yaml` and install via `runfabric extension install ...`.
+3. Package with `plugin.yaml` and install via `runfabric extensions extension install ...`.
 
-See [EXTERNAL_EXTENSIONS_PLAN.md](EXTERNAL_EXTENSIONS_PLAN.md) for on-disk layout/protocol details and [packages/go/plugin-sdk/README.md](../../packages/go/plugin-sdk/README.md) for a runnable example.
+See [EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md) for hosted registry and install contract details, and [packages/go/plugin-sdk/README.md](../../packages/go/plugin-sdk/README.md) for a runnable example.
 
 ### 2.6 References (extensions)
 
-- [PLUGINS.md](PLUGINS.md) — Provider plugin interface, ProviderRegistry, lifecycle hooks.  
-- [ARCHITECTURE.md](ARCHITECTURE.md) — Deploy flow and provider layout.  
-- [COMMAND_REFERENCE.md](../user/COMMAND_REFERENCE.md) — `plugin list|info|doctor|capabilities`, `extension list|info|search`.  
-- [EXTERNAL_EXTENSIONS_PLAN.md](EXTERNAL_EXTENSIONS_PLAN.md) — External plugins on disk, stdio protocol, install flow.
+- [PLUGINS.md](PLUGINS.md) — Provider plugin interface, ProviderRegistry, lifecycle hooks.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — Deploy flow and provider layout.
+- [COMMAND_REFERENCE.md](../user/COMMAND_REFERENCE.md) — `extensions plugin list|info|doctor|capabilities`, `extensions extension list|info|search`.
+- [EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md) — Registry resolve contract and install flow.
 
 ---
 
 ## Quick reference
 
-| You want to…                    | Use                    | Contract / entrypoint                          |
-|---------------------------------|------------------------|-----------------------------------------------|
-| Inject env, patch files, wrap handler | **Addon** (Node/TS)   | Addon interface; `supports`, `apply`, AddonResult |
-| Add a new cloud provider        | **Provider plugin** (Go) | ProviderPlugin; Meta, Doctor, Plan, Deploy, Remove, Invoke, Logs |
-| Add a new runtime (build/run)   | **Runtime plugin** (Go)  | Runtime plugin contract (`engine/internal/extensions/runtimes`) resolved through the extension boundary |
-| Run hooks before/after build/deploy | **Lifecycle hooks** (Node) | `hooks` in config; see [PLUGINS.md](PLUGINS.md) |
+| You want to…                          | Use                        | Contract / entrypoint                                                                                   |
+| ------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Inject env, patch files, wrap handler | **Addon** (Node/TS)        | Addon interface; `supports`, `apply`, AddonResult                                                       |
+| Add a new cloud provider              | **Provider plugin** (Go)   | ProviderPlugin; Meta, Doctor, Plan, Deploy, Remove, Invoke, Logs                                        |
+| Add a new runtime (build/run)         | **Runtime plugin** (Go)    | Runtime plugin contract (`engine/internal/extensions/runtimes`) resolved through the extension boundary |
+| Run hooks before/after build/deploy   | **Lifecycle hooks** (Node) | `hooks` in config; see [PLUGINS.md](PLUGINS.md)                                                         |
 
 ---
 

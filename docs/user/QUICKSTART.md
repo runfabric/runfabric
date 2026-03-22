@@ -100,7 +100,7 @@ Provider IDs (copy/paste):
 It also creates:
 
 - `package.json` with `@runfabric/sdk` and the selected provider adapter dependency
-- `call:local` script that runs `runfabric call-local -c runfabric.yml --serve --watch`
+- `call:local` script that runs `runfabric invoke local -c runfabric.yml --serve --watch`
 - `.env.example` with provider and selected state backend variables
 - project-scoped random state prefix for object backends (`s3`, `gcs`, `azblob`)
 
@@ -147,7 +147,27 @@ runfabric generate function worker --trigger queue --queue-name my-queue
 runfabric generate function cron-job --trigger cron --schedule "rate(5 minutes)"
 ```
 
-Use `--dry-run` to preview, `--force` to overwrite an existing handler file. See [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) and [GENERATE_PROPOSAL.md](../developer/GENERATE_PROPOSAL.md).
+Interactive flow (prompts for name, language, trigger options, entry path, and confirmation):
+
+```bash
+runfabric generate function --interactive
+```
+
+Interactive resource/addon flows:
+
+```bash
+runfabric generate resource --interactive
+runfabric generate addon --interactive
+```
+
+Automation-safe non-interactive mode (no prompts, deterministic behavior):
+
+```bash
+runfabric generate function hello --trigger http --route GET:/hello --no-interactive
+runfabric generate resource db --type database --connection-env DATABASE_URL --no-interactive
+```
+
+Use `--dry-run` to preview, `--force` to overwrite an existing handler file. See [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md).
 
 Migrate existing `serverless.yml` (best-effort bootstrap):
 

@@ -4,9 +4,8 @@ This document is an **implementation guide** for the hosted **RunFabric Extensio
 
 It complements:
 
-- [EXTERNAL_EXTENSIONS_PLAN.md](EXTERNAL_EXTENSIONS_PLAN.md) — how plugins are discovered/loaded on disk.
 - [EXTENSION_DEVELOPMENT_GUIDE.md](EXTENSION_DEVELOPMENT_GUIDE.md) — how addons/plugins are authored.
-- **Repo layout scaffolding**: `registry/` (API + `registry/web` SPA), `schemas/registry/` (see project root).
+- **Repo layout scaffolding**: `apps/registry/` (API + `apps/registry/web` SPA), `schemas/registry/` (see project root).
 
 ---
 
@@ -78,7 +77,9 @@ The response is always a single object:
 ```json
 {
   "request": { "id": "…", "core": "…", "os": "…", "arch": "…" },
-  "resolved": { /* addon or plugin version record */ },
+  "resolved": {
+    /* addon or plugin version record */
+  },
   "meta": { "resolvedAt": "…", "registryVersion": "v1", "requestId": "…" }
 }
 ```

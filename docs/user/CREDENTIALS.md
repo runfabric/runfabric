@@ -46,11 +46,11 @@ AWS_ACCESS_KEY_ID="..." AWS_SECRET_ACCESS_KEY="..." AWS_REGION="us-east-1" runfa
 
 For production, avoid committing credentials. Store them in your cloud’s secret manager and inject them into the environment before running `runfabric`:
 
-| Cloud | Service | Typical usage |
-|-------|---------|----------------|
-| **AWS** | [SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html) or [Secrets Manager](https://docs.aws.amazon.com/secretsmanager/) | Fetch at deploy time or in CI: `aws ssm get-parameter --name /app/runfabric/aws-key --with-decryption --query Parameter.Value --output text` and export. |
-| **GCP** | [Secret Manager](https://cloud.google.com/secret-manager/docs) | Use `gcloud secrets versions access latest --secret=runfabric-gcp-key` or workload identity to inject into CI. |
-| **Azure** | [Key Vault](https://azure.microsoft.com/products/key-vault) | Use `az keyvault secret show` or managed identity in CI to populate `AZURE_CLIENT_SECRET` and related env vars. |
+| Cloud     | Service                                                                                                                                                                                    | Typical usage                                                                                                                                            |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AWS**   | [SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html) or [Secrets Manager](https://docs.aws.amazon.com/secretsmanager/) | Fetch at deploy time or in CI: `aws ssm get-parameter --name /app/runfabric/aws-key --with-decryption --query Parameter.Value --output text` and export. |
+| **GCP**   | [Secret Manager](https://cloud.google.com/secret-manager/docs)                                                                                                                             | Use `gcloud secrets versions access latest --secret=runfabric-gcp-key` or workload identity to inject into CI.                                           |
+| **Azure** | [Key Vault](https://azure.microsoft.com/products/key-vault)                                                                                                                                | Use `az keyvault secret show` or managed identity in CI to populate `AZURE_CLIENT_SECRET` and related env vars.                                          |
 
 In CI (e.g. GitHub Actions), use the provider’s “secret” or “vault” integration to set env vars before running `runfabric doctor`, `runfabric deploy`, etc. The RunFabric engine reads credentials from environment variables and now resolves `${secret:KEY}` in `runfabric.yml` via:
 
@@ -64,7 +64,7 @@ In CI (e.g. GitHub Actions), use the provider’s “secret” or “vault” in
 - Rollback on failure precedence:
   - `runfabric deploy --rollback-on-failure|--no-rollback-on-failure`
   - `deploy.rollbackOnFailure` in `runfabric.yml`
-  - legacy env fallback `RUNFABRIC_ROLLBACK_ON_FAILURE=1`
+  - env fallback `RUNFABRIC_ROLLBACK_ON_FAILURE=1`
 
 Per-provider real mode flag:
 
@@ -74,49 +74,49 @@ Per-provider real mode flag:
 
 ## Provider Credential Matrix
 
-| Provider | Required Credentials |
-| --- | --- |
-| `aws-lambda` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` |
-| `gcp-functions` | `GCP_PROJECT_ID`, `GCP_SERVICE_ACCOUNT_KEY` |
-| `azure-functions` | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` |
-| `kubernetes` | `KUBECONFIG`, `KUBE_CONTEXT`, `KUBE_NAMESPACE` |
-| `cloudflare-workers` | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
-| `vercel` | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` |
-| `netlify` | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` |
-| `alibaba-fc` | `ALICLOUD_ACCESS_KEY_ID`, `ALICLOUD_ACCESS_KEY_SECRET`, `ALICLOUD_REGION` |
-| `digitalocean-functions` | `DIGITALOCEAN_ACCESS_TOKEN`, `DIGITALOCEAN_NAMESPACE` |
-| `fly-machines` | `FLY_API_TOKEN`, `FLY_APP_NAME` |
-| `ibm-openwhisk` | `IBM_CLOUD_API_KEY`, `IBM_CLOUD_REGION`, `IBM_CLOUD_NAMESPACE` |
+| Provider                 | Required Credentials                                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `aws-lambda`             | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`                                                   |
+| `gcp-functions`          | `GCP_PROJECT_ID`, `GCP_SERVICE_ACCOUNT_KEY`                                                                  |
+| `azure-functions`        | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` |
+| `kubernetes`             | `KUBECONFIG`, `KUBE_CONTEXT`, `KUBE_NAMESPACE`                                                               |
+| `cloudflare-workers`     | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`                                                              |
+| `vercel`                 | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                                                         |
+| `netlify`                | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`                                                                      |
+| `alibaba-fc`             | `ALICLOUD_ACCESS_KEY_ID`, `ALICLOUD_ACCESS_KEY_SECRET`, `ALICLOUD_REGION`                                    |
+| `digitalocean-functions` | `DIGITALOCEAN_ACCESS_TOKEN`, `DIGITALOCEAN_NAMESPACE`                                                        |
+| `fly-machines`           | `FLY_API_TOKEN`, `FLY_APP_NAME`                                                                              |
+| `ibm-openwhisk`          | `IBM_CLOUD_API_KEY`, `IBM_CLOUD_REGION`, `IBM_CLOUD_NAMESPACE`                                               |
 
 Install the corresponding provider adapter package in your project (for example `@runfabric/provider-aws-lambda`).
 
 ## State Backend Credential Matrix
 
-| State Backend | Required Credentials |
-| --- | --- |
-| `local` | none |
-| `postgres` | `RUNFABRIC_STATE_POSTGRES_URL` (or custom env named by `state.postgres.connectionStringEnv`) |
-| `s3` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` (or equivalent AWS credential chain) |
-| `gcs` | `GOOGLE_APPLICATION_CREDENTIALS` (or workload identity) |
-| `azblob` | `AZURE_STORAGE_CONNECTION_STRING` OR `AZURE_STORAGE_ACCOUNT` + `AZURE_STORAGE_KEY` |
+| State Backend | Required Credentials                                                                            |
+| ------------- | ----------------------------------------------------------------------------------------------- |
+| `local`       | none                                                                                            |
+| `postgres`    | `RUNFABRIC_STATE_POSTGRES_URL` (or custom env named by `state.postgres.connectionStringEnv`)    |
+| `s3`          | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` (or equivalent AWS credential chain) |
+| `gcs`         | `GOOGLE_APPLICATION_CREDENTIALS` (or workload identity)                                         |
+| `azblob`      | `AZURE_STORAGE_CONNECTION_STRING` OR `AZURE_STORAGE_ACCOUNT` + `AZURE_STORAGE_KEY`              |
 
 ## Real Deploy Execution Matrix
 
 When real mode is enabled, every provider has a built-in deployer path. Command envs are optional overrides.
 
-| Provider | Built-in Real Deploy Path | Optional Override Env |
-| --- | --- | --- |
-| `aws-lambda` | AWS SDK deploy + destroy | `RUNFABRIC_AWS_DEPLOY_CMD`, `RUNFABRIC_AWS_DESTROY_CMD` |
-| `gcp-functions` | built-in `gcloud` command contract | `RUNFABRIC_GCP_DEPLOY_CMD`, `RUNFABRIC_GCP_DESTROY_CMD` |
-| `azure-functions` | built-in `func/az` command contract | `RUNFABRIC_AZURE_DEPLOY_CMD`, `RUNFABRIC_AZURE_DESTROY_CMD` |
-| `kubernetes` | built-in `kubectl` command contract | `RUNFABRIC_KUBERNETES_DEPLOY_CMD`, `RUNFABRIC_KUBERNETES_DESTROY_CMD` |
-| `cloudflare-workers` | Cloudflare Workers API deploy + destroy | `RUNFABRIC_CLOUDFLARE_DESTROY_CMD` |
-| `vercel` | built-in `vercel` command contract | `RUNFABRIC_VERCEL_DEPLOY_CMD`, `RUNFABRIC_VERCEL_DESTROY_CMD` |
-| `netlify` | built-in `netlify` command contract | `RUNFABRIC_NETLIFY_DEPLOY_CMD`, `RUNFABRIC_NETLIFY_DESTROY_CMD` |
-| `alibaba-fc` | built-in `s` command contract | `RUNFABRIC_ALIBABA_DEPLOY_CMD`, `RUNFABRIC_ALIBABA_DESTROY_CMD` |
-| `digitalocean-functions` | built-in `doctl` command contract | `RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD`, `RUNFABRIC_DIGITALOCEAN_DESTROY_CMD` |
-| `fly-machines` | built-in `flyctl` command contract | `RUNFABRIC_FLY_DEPLOY_CMD`, `RUNFABRIC_FLY_DESTROY_CMD` |
-| `ibm-openwhisk` | built-in `ibmcloud` command contract | `RUNFABRIC_IBM_DEPLOY_CMD`, `RUNFABRIC_IBM_DESTROY_CMD` |
+| Provider                 | Built-in Real Deploy Path               | Optional Override Env                                                     |
+| ------------------------ | --------------------------------------- | ------------------------------------------------------------------------- |
+| `aws-lambda`             | AWS SDK deploy + destroy                | `RUNFABRIC_AWS_DEPLOY_CMD`, `RUNFABRIC_AWS_DESTROY_CMD`                   |
+| `gcp-functions`          | built-in `gcloud` command contract      | `RUNFABRIC_GCP_DEPLOY_CMD`, `RUNFABRIC_GCP_DESTROY_CMD`                   |
+| `azure-functions`        | built-in `func/az` command contract     | `RUNFABRIC_AZURE_DEPLOY_CMD`, `RUNFABRIC_AZURE_DESTROY_CMD`               |
+| `kubernetes`             | built-in `kubectl` command contract     | `RUNFABRIC_KUBERNETES_DEPLOY_CMD`, `RUNFABRIC_KUBERNETES_DESTROY_CMD`     |
+| `cloudflare-workers`     | Cloudflare Workers API deploy + destroy | `RUNFABRIC_CLOUDFLARE_DESTROY_CMD`                                        |
+| `vercel`                 | built-in `vercel` command contract      | `RUNFABRIC_VERCEL_DEPLOY_CMD`, `RUNFABRIC_VERCEL_DESTROY_CMD`             |
+| `netlify`                | built-in `netlify` command contract     | `RUNFABRIC_NETLIFY_DEPLOY_CMD`, `RUNFABRIC_NETLIFY_DESTROY_CMD`           |
+| `alibaba-fc`             | built-in `s` command contract           | `RUNFABRIC_ALIBABA_DEPLOY_CMD`, `RUNFABRIC_ALIBABA_DESTROY_CMD`           |
+| `digitalocean-functions` | built-in `doctl` command contract       | `RUNFABRIC_DIGITALOCEAN_DEPLOY_CMD`, `RUNFABRIC_DIGITALOCEAN_DESTROY_CMD` |
+| `fly-machines`           | built-in `flyctl` command contract      | `RUNFABRIC_FLY_DEPLOY_CMD`, `RUNFABRIC_FLY_DESTROY_CMD`                   |
+| `ibm-openwhisk`          | built-in `ibmcloud` command contract    | `RUNFABRIC_IBM_DEPLOY_CMD`, `RUNFABRIC_IBM_DESTROY_CMD`                   |
 
 Notes:
 
@@ -125,31 +125,35 @@ Notes:
 
 ## Provider Observability Command Matrix
 
-Optional provider-native overrides for `runfabric traces` and `runfabric metrics`.
+Optional provider-native overrides for `runfabric invoke traces` and `runfabric invoke metrics`.
 If these are unset, runfabric falls back to local artifact-derived traces/metrics.
 
-| Provider | Traces Command Env | Metrics Command Env |
-| --- | --- | --- |
-| `aws-lambda` | `RUNFABRIC_AWS_TRACES_CMD` | `RUNFABRIC_AWS_METRICS_CMD` |
-| `gcp-functions` | `RUNFABRIC_GCP_TRACES_CMD` | `RUNFABRIC_GCP_METRICS_CMD` |
-| `azure-functions` | `RUNFABRIC_AZURE_TRACES_CMD` | `RUNFABRIC_AZURE_METRICS_CMD` |
-| `kubernetes` | `RUNFABRIC_KUBERNETES_TRACES_CMD` | `RUNFABRIC_KUBERNETES_METRICS_CMD` |
-| `cloudflare-workers` | `RUNFABRIC_CLOUDFLARE_TRACES_CMD` | `RUNFABRIC_CLOUDFLARE_METRICS_CMD` |
-| `vercel` | `RUNFABRIC_VERCEL_TRACES_CMD` | `RUNFABRIC_VERCEL_METRICS_CMD` |
-| `netlify` | `RUNFABRIC_NETLIFY_TRACES_CMD` | `RUNFABRIC_NETLIFY_METRICS_CMD` |
-| `alibaba-fc` | `RUNFABRIC_ALIBABA_TRACES_CMD` | `RUNFABRIC_ALIBABA_METRICS_CMD` |
+| Provider                 | Traces Command Env                  | Metrics Command Env                  |
+| ------------------------ | ----------------------------------- | ------------------------------------ |
+| `aws-lambda`             | `RUNFABRIC_AWS_TRACES_CMD`          | `RUNFABRIC_AWS_METRICS_CMD`          |
+| `gcp-functions`          | `RUNFABRIC_GCP_TRACES_CMD`          | `RUNFABRIC_GCP_METRICS_CMD`          |
+| `azure-functions`        | `RUNFABRIC_AZURE_TRACES_CMD`        | `RUNFABRIC_AZURE_METRICS_CMD`        |
+| `kubernetes`             | `RUNFABRIC_KUBERNETES_TRACES_CMD`   | `RUNFABRIC_KUBERNETES_METRICS_CMD`   |
+| `cloudflare-workers`     | `RUNFABRIC_CLOUDFLARE_TRACES_CMD`   | `RUNFABRIC_CLOUDFLARE_METRICS_CMD`   |
+| `vercel`                 | `RUNFABRIC_VERCEL_TRACES_CMD`       | `RUNFABRIC_VERCEL_METRICS_CMD`       |
+| `netlify`                | `RUNFABRIC_NETLIFY_TRACES_CMD`      | `RUNFABRIC_NETLIFY_METRICS_CMD`      |
+| `alibaba-fc`             | `RUNFABRIC_ALIBABA_TRACES_CMD`      | `RUNFABRIC_ALIBABA_METRICS_CMD`      |
 | `digitalocean-functions` | `RUNFABRIC_DIGITALOCEAN_TRACES_CMD` | `RUNFABRIC_DIGITALOCEAN_METRICS_CMD` |
-| `fly-machines` | `RUNFABRIC_FLY_TRACES_CMD` | `RUNFABRIC_FLY_METRICS_CMD` |
-| `ibm-openwhisk` | `RUNFABRIC_IBM_TRACES_CMD` | `RUNFABRIC_IBM_METRICS_CMD` |
+| `fly-machines`           | `RUNFABRIC_FLY_TRACES_CMD`          | `RUNFABRIC_FLY_METRICS_CMD`          |
+| `ibm-openwhisk`          | `RUNFABRIC_IBM_TRACES_CMD`          | `RUNFABRIC_IBM_METRICS_CMD`          |
 
 Example output contract:
 
 ```json
-{"traces":[{"timestamp":"2026-01-01T00:00:00.000Z","message":"trace line"}]}
+{
+  "traces": [
+    { "timestamp": "2026-01-01T00:00:00.000Z", "message": "trace line" }
+  ]
+}
 ```
 
 ```json
-{"metrics":[{"name":"invocations","value":42,"unit":"count"}]}
+{ "metrics": [{ "name": "invocations", "value": 42, "unit": "count" }] }
 ```
 
 ## Examples

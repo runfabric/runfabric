@@ -1,7 +1,9 @@
 """Flask adapter: mount handler as route."""
+from typing import Optional
+
 from ...core import Handler
 
-def mount(app, handler: Handler, path: str = "/", methods: list | None = None):
+def mount(app, handler: Handler, path: str = "/", methods: Optional[list] = None):
     if methods is None:
         methods = ["POST"]
     try:

@@ -14,10 +14,11 @@ runfabric/
 ├── .github/
 │   └── workflows/
 │
-├── bin/                      # built binaries (e.g. `bin/runfabric`)
+├── bin/                      # built binaries (e.g. `bin/runfabric`, `bin/runfabricd`)
 │
-├── engine/
-│   └── ...                     # shared engine source / binary build logic
+├── cmd/                      # binary entrypoints (runfabric, runfabricd)
+├── internal/                 # shared engine/internal source
+├── platform/                 # providers, runtime, extensions, state, observability
 │
 ├── packages/
 │   ├── node/
@@ -39,9 +40,12 @@ runfabric/
 │
 ├── schemas/                  # JSON schemas (runfabric.yml, resources, workflows, protocol)
 │
-├── registry/                 # extension registry service (API + SPA)
-│   ├── internal/             # backend APIs and data services
-│   └── web/                  # registry UI (extension docs + marketplace + auth)
+├── apps/                     # externally-executed services
+│   ├── cli/
+│   ├── daemon/
+│   └── registry/             # extension registry service (API + SPA)
+│       ├── internal/         # backend APIs and data services
+│       └── web/              # registry UI (extension docs + marketplace + auth)
 │
 └── examples/
     ├── node/
@@ -54,29 +58,29 @@ runfabric/
 Notes:
 
 - `docs/` remains the source of truth for long-form docs content.
-- `registry/web/` renders extension-dev docs and marketplace UX; it should not duplicate markdown trees from `docs/`.
-- `registry/` owns both API and UI deployment; keep backend business rules in `registry/internal/*` and UI consumption in `registry/web/*`.
+- `apps/registry/web/` renders extension-dev docs and marketplace UX; it should not duplicate markdown trees from `docs/`.
+- `apps/registry/` owns both API and UI deployment; keep backend business rules in `apps/registry/internal/*` and UI consumption in `apps/registry/web/*`.
 
 ## Package naming conventions
 
 ### Node
 
-| Package       | Install                  | Usage |
-|---------------|--------------------------|--------|
-| @runfabric/cli | `npm i @runfabric/cli -g` | CLI + programmatic `run`, `deploy`, `inspect`, `build` |
+| Package        | Install                   | Usage                                                              |
+| -------------- | ------------------------- | ------------------------------------------------------------------ |
+| @runfabric/cli | `npm i @runfabric/cli -g` | CLI + programmatic `run`, `deploy`, `inspect`, `build`             |
 | @runfabric/sdk | `npm i @runfabric/sdk`    | `import { createHandler, UniversalHandler } from "@runfabric/sdk"` |
 
 ### Python
 
-| Package        | Install                | Usage |
-|----------------|------------------------|--------|
-| runfabric      | `pip install runfabric` | CLI + programmatic `run`, `plan`, `deploy`, `build` |
-| runfabric-sdk  | *(future)* `pip install runfabric-sdk` | `from runfabric_sdk import Handler` or `from runfabric.sdk import UniversalHandler` |
+| Package       | Install                                | Usage                                                                               |
+| ------------- | -------------------------------------- | ----------------------------------------------------------------------------------- |
+| runfabric     | `pip install runfabric`                | CLI + programmatic `run`, `plan`, `deploy`, `build`                                 |
+| runfabric-sdk | _(future)_ `pip install runfabric-sdk` | `from runfabric_sdk import Handler` or `from runfabric.sdk import UniversalHandler` |
 
 ### Java (Maven / Gradle)
 
-- **GroupId:** `io.runfabric`  
-- **ArtifactId:** `runfabric-sdk`  
+- **GroupId:** `io.runfabric`
+- **ArtifactId:** `runfabric-sdk`
 
 ```gradle
 implementation "io.runfabric:runfabric-sdk:1.0.0"
@@ -84,7 +88,7 @@ implementation "io.runfabric:runfabric-sdk:1.0.0"
 
 ### .NET (NuGet)
 
-- **Package:** `RunFabric.Sdk`  
+- **Package:** `RunFabric.Sdk`
 
 ```csharp
 using RunFabric.Sdk;

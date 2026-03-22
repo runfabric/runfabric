@@ -2,7 +2,7 @@ services:
   registry:
     build:
       context: ..
-      dockerfile: registry/Dockerfile
+      dockerfile: apps/registry-api/Dockerfile
     image: runfabric-registry:latest
     ports:
       - "8787:8787"
@@ -14,5 +14,5 @@ services:
       REGISTRY_METADATA_PROVIDER: json
       REGISTRY_ALLOW_ANONYMOUS_READ: "true"
     volumes:
-      - ../registry/data:/app/data
+      - ../apps/registry-api/data:/app/data
     restart: unless-stopped

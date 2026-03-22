@@ -22,7 +22,7 @@ go.work
 *.tar.zstd.zstd.bz2
 *.tar.zstd.zstd.xz
 go.work.sum
-
+stubplugin*
 # Dependency directories (rare with Go modules but sometimes used)
 vendor/
 
@@ -34,6 +34,7 @@ bin/
 /build/
 dist/
 /runfabric
+/runfabricd
 # Binary left in engine/ when building from engine dir (use 'make build' → bin/runfabric)
 engine/runfabric
 engine/runfabric.exe

@@ -13,22 +13,35 @@ Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-
 - **Daemon/UI**: Daemon, dashboard, and config API
 - **State/recovery**: State + Recovery and inspection
 
+## CLI organization (developer note)
+
+- Commands are grouped by domain under `internal/cli/` (`lifecycle`, `invocation`, `project`, `configuration`, `extensions`, `infrastructure`, `admin`, `fabric`, `common`) and registered in root.
+- CLI command handlers call the internal app boundary (`internal/app`) for orchestration.
+- Preferred grouped namespaces: `runfabric auth ...`, `runfabric invoke ...`, `runfabric state ...`, `runfabric extensions ...`.
+
 ## Project setup and scaffolding
 
 - `runfabric init [--dir <path>] [--template <api|worker|queue|cron|storage|eventbridge|pubsub>] [--provider <name>] [--state-backend <local|postgres|s3|gcs|azblob>] [--lang <node|ts|js|python|go>] [--service <name>] [--pm <npm|pnpm|yarn|bun>] [--skip-install] [--call-local] [--with-build] [--with-ci <github-actions>] [--no-interactive]` — Use `--with-ci github-actions` to add `.github/workflows/deploy.yml` (doctor → plan → deploy on push). `init` currently scaffolds a subset of backends for simplicity.
 - `runfabric generate` — Scaffold artifacts in an existing project: `generate function`, `generate resource`, `generate addon`, `generate provider-override`.
-- `runfabric generate function <name> [--trigger http|cron|queue] [--route <method>:<path>] [--schedule <cron>] [--queue-name <name>] [--provider <key>] [--lang js|ts|python|go] [--entry <path>] [--dry-run] [--force] [--no-backup] [--json]` — Add a new function: creates handler file and patches runfabric.yml. Infers provider and language from config and project; use `--trigger` (default http), `--route` (e.g. GET:/hello), `--schedule`, `--queue-name`. Fails if function name already exists; `--force` overwrites handler file only. See [GENERATE_PROPOSAL.md](../developer/GENERATE_PROPOSAL.md).
-- `runfabric generate resource <name> [--type database|cache|queue] [--connection-env <VAR>] [--dry-run] [--no-backup] [--json]` — Add `resources.<name>` to runfabric.yml (type and connection env var for DATABASE_URL, REDIS_URL, etc.).
-- `runfabric generate addon <name> [--version <semver>] [--dry-run] [--no-backup] [--json]` — Add `addons.<name>` to runfabric.yml; attach to functions via `functions.<name>.addons: [<name>]`.
-- `runfabric generate provider-override <key> [--provider <name>] [--runtime <runtime>] [--region <region>] [--dry-run] [--no-backup] [--json]` — Add `providerOverrides.<key>` for multi-cloud; use with `runfabric deploy --provider <key>`.
+- `runfabric generate function <name> [--trigger http|cron|queue] [--route <method>:<path>] [--schedule <cron>] [--queue-name <name>] [--provider <key>] [--lang js|ts|python|go] [--entry <path>] [--dry-run] [--force] [--no-backup] [--interactive|--no-interactive] [--json]` — Add a new function: creates handler file and patches runfabric.yml. Infers provider and language from config and project; use `--trigger` (default http), `--route` (e.g. GET:/hello), `--schedule`, `--queue-name`. Fails if function name already exists; `--force` overwrites handler file only.
+- `runfabric generate resource <name> [--type database|cache|queue] [--connection-env <VAR>] [--dry-run] [--no-backup] [--interactive|--no-interactive] [--json]` — Add `resources.<name>` to runfabric.yml (type and connection env var for DATABASE_URL, REDIS_URL, etc.).
+- `runfabric generate addon <name> [--version <semver>] [--dry-run] [--no-backup] [--interactive|--no-interactive] [--json]` — Add `addons.<name>` to runfabric.yml; attach to functions via the function entry's `addons: [<name>]` field.
+- `runfabric generate provider-override <key> [--provider <name>] [--runtime <runtime>] [--region <region>] [--dry-run] [--no-backup] [--interactive|--no-interactive] [--json]` — Add `providerOverrides.<key>` for multi-cloud; use with `runfabric deploy --provider <key>`.
 
-## Docs and AI workflow utilities
+Generate interactive notes:
+
+- `--interactive` prompts for missing/invalid values, previews changes, and asks for confirmation before file writes.
+- `--no-interactive` (or global `--non-interactive`) disables prompts for automation and CI.
+- Using both `--interactive` and `--no-interactive` is invalid.
+
+## Docs and workflow utilities
 
 - `runfabric docs check [--config <path>] [--stage <name>] [--readme <path>] [--json]`
 - `runfabric docs sync [--config <path>] [--stage <name>] [--readme <path>] [--dry-run] [--json]`
-- `runfabric ai validate -c <config> [--json]` — Validate `runfabric.yml`; when `aiWorkflow.enable: true`, validates AI workflow nodes/edges/types/entrypoint.
-- `runfabric ai graph -c <config> [--json]` — Compile and export the AI workflow DAG (order/levels/hash) for tooling.
-- AI replay (`runfabric ai replay` / re-run-from-node) is currently out of scope in the Go CLI.
+- `runfabric workflow run -c <config> [--stage <name>] [--provider <key>] [--name <workflow-name>] [--run-id <id>] [--input <json-object>] [--json]` — Start a workflow run from `workflows`.
+- `runfabric workflow status -c <config> [--stage <name>] --run-id <id> [--json]` — Read a workflow run record from local run state.
+- `runfabric workflow cancel -c <config> [--stage <name>] --run-id <id> [--json]` — Mark a workflow run as cancel-requested.
+- `runfabric workflow replay -c <config> [--stage <name>] [--provider <key>] --run-id <id> --from-step <step-id> [--json]` — Replay a run from a specific step.
 
 ## Core lifecycle (doctor → plan → build/package → deploy → operate → remove)
 
@@ -49,48 +62,50 @@ Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-
 
 ## Local development and debugging
 
-- `runfabric call-local -c <config> [--serve] [--watch] [--host <host>] [--port <number>] [--provider <name>] [--method <GET|POST|...>] [--path </route>] [--query <k=v&k2=v2>] [--header <k:v>] [--body <text>] [--event <file>] [--entry <path>]` — With `--serve --watch`, polls project files (runfabric.yml, *.js, *.ts) and reloads the local server on change. Same behavior as `runfabric dev --watch`.
-- `runfabric dev -c <config> [--watch] [--stage <name>] [--provider <name>] [--stream-from <stage>] [--tunnel-url <url>] [--preset ...] [--host <host>] [--port <number>] ...` — `--watch`: poll project files (runfabric.yml, *.js, *.ts, etc.) and auto-reload the dev server on change. `--stream-from` / `--tunnel-url`: run local server and point API Gateway at tunnel; restores on exit (Ctrl+C). See [DEV_LIVE_STREAM.md](DEV_LIVE_STREAM.md).
+- `runfabric invoke local -c <config> [--serve] [--watch] [--host <host>] [--port <number>] [--provider <name>] [--method <GET|POST|...>] [--path </route>] [--query <k=v&k2=v2>] [--header <k:v>] [--body <text>] [--event <file>] [--entry <path>]` — With `--serve --watch`, polls project files (runfabric.yml, _.js, _.ts) and reloads the local server on change. Same behavior as `runfabric invoke dev --watch`.
+- `runfabric invoke dev -c <config> [--watch] [--stage <name>] [--provider <name>] [--stream-from <stage>] [--tunnel-url <url>] [--preset ...] [--host <host>] [--port <number>] ...` — `--watch`: poll project files (runfabric.yml, _.js, _.ts, etc.) and auto-reload the dev server on change. `--stream-from` / `--tunnel-url`: run local server and point API Gateway at tunnel; restores on exit (Ctrl+C). See [DEV_LIVE_STREAM.md](DEV_LIVE_STREAM.md).
 - `runfabric debug -c <config> [--stage <name>] [--host <addr>] [--port <number>] [--json]` — Start local server and print PID for attaching a debugger (default host 127.0.0.1, port 3000).
 - `runfabric test -c <config> [--json]` — Run project test suite (npm test, go test, or pytest in project directory).
 
 ## Invocation, logs, and observability
 
-- `runfabric invoke -c <config> [--stage <name>] [--provider <key>] --function <name> [--payload <text-or-json>] [--json]` — Use `--provider` when `runfabric.yml` has `providerOverrides` (multi-cloud).
-- `runfabric logs -c <config> [--stage <name>] [--provider <key>] (--function <name> | --all) [--service <name>] [--json]` — Unified source: provider logs (AWS: CloudWatch; GCP: Cloud Logging, last 1h) plus optional local files from `logs.path` in config (default `.runfabric/logs`: `<stage>.log`, `<function>_<stage>.log`). `--all` aggregates by service/stage; `--provider` for multi-cloud. When `--service` is provided, it must match `service` in `runfabric.yml`.
-- `runfabric traces [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] ... [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS: X-Ray trace summaries (last 1h). GCP: Cloud Trace summaries (when available). Azure: Application Insights traces (when available). When `--service` is provided, it must match `service` in `runfabric.yml`.
-- `runfabric metrics [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] [--since <iso>] [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS Lambda: CloudWatch (Invocations, Errors, Duration, last 1h). GCP: Cloud Monitoring metrics (when available). Azure: Application Insights metrics (when available). When `--service` is provided, it must match `service` in `runfabric.yml`.
+- `runfabric invoke run -c <config> [--stage <name>] [--provider <key>] --function <name> [--payload <text-or-json>] [--json]` — Use `--provider` when `runfabric.yml` has `providerOverrides` (multi-cloud).
+- `runfabric invoke logs -c <config> [--stage <name>] [--provider <key>] (--function <name> | --all) [--service <name>] [--json]` — Unified source: provider logs (AWS: CloudWatch; GCP: Cloud Logging, last 1h) plus optional local files from `logs.path` in config (default `.runfabric/logs`: `<stage>.log`, `<function>_<stage>.log`). `--all` aggregates by service/stage; `--provider` for multi-cloud. When `--service` is provided, it must match `service` in `runfabric.yml`.
+- `runfabric invoke traces [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] ... [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS: X-Ray trace summaries (last 1h). GCP: Cloud Trace summaries (when available). Azure: Application Insights traces (when available). When `--service` is provided, it must match `service` in `runfabric.yml`.
+- `runfabric invoke metrics [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] [--since <iso>] [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS Lambda: CloudWatch (Invocations, Errors, Duration, last 1h). GCP: Cloud Monitoring metrics (when available). Azure: Application Insights metrics (when available). When `--service` is provided, it must match `service` in `runfabric.yml`.
 
 ## Extensions (addons and plugins)
 
-- `runfabric addons list [--json]` — **v1 catalog view** for RunFabric Addons (Phase 15). List add-ons in the built-in catalog; if `addonCatalogUrl` is set in config, fetches and merges from that URL. Add-ons are declared under `addons`; use `functions.<name>.addons: [sentry]` to attach only selected addons per function; secrets are bound at deploy. Alias: **addon** (e.g. `runfabric addon list`).
-- `runfabric addons validate [addon-id] [--json]` — Validate runfabric.yml and optional addon (e.g. `sentry`). If addon-id is given, ensures it is declared in addons or functions.*.addons.
-- `runfabric addons add <addon-id> --function <name> [--json]` — Add an addon to a function (patches runfabric.yml: appends to `functions.<name>.addons`).
-- `runfabric plugin list [--json]` — List provider plugins (aws, aws-lambda, gcp-functions).
-- `runfabric plugin info <name> [--json]` — Show plugin manifest or metadata for a provider.
-- `runfabric plugin doctor [name] [-c <config>] [--stage <name>] [--json]` — Run doctor for a provider. If name is omitted, uses provider from config.
-- `runfabric plugin enable <name>` — Mark a plugin as enabled (writes to `.runfabric/plugins.json`).
-- `runfabric plugin disable <name>` — Mark a plugin as disabled (writes to `.runfabric/plugins.json`).
-- `runfabric plugin capabilities <name> [--json]` — Show plugin capabilities (runtimes, triggers, resources).
-- `runfabric extension list [--kind provider|runtime|simulator] [--prefer-external] [--show-invalid] [--json]` — List RunFabric Plugins (providers, runtimes, simulators). Merges built-in + external plugins found under `RUNFABRIC_HOME/plugins/...` (default `~/.runfabric/plugins`). `--prefer-external` lets external manifests override built-ins on ID conflict; otherwise built-in wins. `--show-invalid` prints (or returns JSON) for skipped plugin entries and why.
-- `runfabric extension info <id> [--version <v>] [--prefer-external] [--json]` — Show plugin manifest for a given plugin ID (e.g. `aws-lambda`, `nodejs`). For external plugins, `--version` selects a specific installed version dir (best-effort).
-- `runfabric extension search [query] [--json]` — Search plugins by id or name (case-insensitive).
-- `runfabric extension install <id> [--source <url|path>] [--registry <url>] [--registry-token <token>] [--kind provider|runtime|simulator] [--version <v>] [--json]` — Install an external plugin. If `--source` is provided, installs from a `.zip`/`.tar.gz` archive (URL or local file) and validates `plugin.yaml`. If `--source` is omitted, installs via the registry **resolve** endpoint (default registry: `https://registry.runfabric.cloud`, override via `--registry`, `RUNFABRIC_REGISTRY_URL`, or `.runfabricrc` `registry.url`). Auth can be provided via `--registry-token`, `RUNFABRIC_REGISTRY_TOKEN`, or `.runfabricrc` `registry.token`.
-- `runfabric extension uninstall <id> [--kind provider|runtime|simulator] [--version <v>] [--json]` — Uninstall an installed external plugin (remove one version or all versions).
-- `runfabric extension upgrade <id> [--source <url|path>] [--registry <url>] [--registry-token <token>] [--kind provider|runtime|simulator] [--json]` — Upgrade an external plugin by reinstalling it from the given source (archive or registry resolve). Registry config/auth can also come from `.runfabricrc`.
-- `runfabric extension publish init <id> --version <v> --artifact <path> [--type plugin|addon] [--plugin-kind provider|runtime|simulator] [--registry <url>] [--registry-token <token>] [--json]` — Create a publish session and receive signed upload URLs. Saves local session metadata under `RUNFABRIC_HOME/publish-sessions/<publishId>.json`.
-- `runfabric extension publish upload --publish-id <id> [--key <file-key>] [--artifact <path>] [--json]` — Upload staged files for a publish session using saved upload URLs.
-- `runfabric extension publish finalize --publish-id <id> [--registry <url>] [--registry-token <token>] [--json]` — Finalize publish after uploads complete.
-- `runfabric extension publish status --publish-id <id> [--registry <url>] [--registry-token <token>] [--json]` — Check publish session status (`staged`, `uploaded`, `published`, etc.).
-- `runfabric primitives [--kind triggers|resources|workflows|all] [--provider <id>] [--json]` — Discover supported primitives: trigger capability matrix, managed resource primitives, and workflow step primitives.
+- `runfabric extensions addons list [--json]` — **v1 catalog view** for RunFabric Addons (Phase 15). List add-ons in the built-in catalog; if `addonCatalogUrl` is set in config, fetches and merges from that URL. Add-ons are declared under `addons`; use a function entry's `addons: [sentry]` field to attach only selected addons per function; secrets are bound at deploy.
+- `runfabric extensions addons validate [addon-id] [--json]` — Validate runfabric.yml and optional addon (e.g. `sentry`). If addon-id is given, ensures it is declared in addons or functions.\*.addons.
+- `runfabric extensions addons add <addon-id> --function <name> [--json]` — Add an addon to a function (patches the matching function entry's `addons` list in runfabric.yml).
+- `runfabric extensions addons remove <addon-id> --function <name> [--json]` — Remove an addon from a function's `addons` list in runfabric.yml. No-op if the addon is not attached to that function.
+- `runfabric extensions plugin list [--json]` — List provider plugins (aws, aws-lambda, gcp-functions).
+- `runfabric extensions plugin info <name> [--json]` — Show plugin manifest or metadata for a provider.
+- `runfabric extensions plugin doctor [name] [-c <config>] [--stage <name>] [--json]` — Run doctor for a provider. If name is omitted, uses provider from config.
+- `runfabric extensions plugin enable <name>` — Mark a plugin as enabled (writes to `.runfabric/plugins.json`).
+- `runfabric extensions plugin disable <name>` — Mark a plugin as disabled (writes to `.runfabric/plugins.json`).
+- `runfabric extensions plugin capabilities <name> [--json]` — Show plugin capabilities (runtimes, triggers, resources).
+- `runfabric extensions extension list [--kind provider|runtime|simulator] [--prefer-external] [--show-invalid] [--json]` — List RunFabric Plugins (providers, runtimes, simulators). Merges built-in + external plugins found under `RUNFABRIC_HOME/plugins/...` (default `~/.runfabric/plugins`). `--prefer-external` lets external manifests override built-ins on ID conflict; otherwise built-in wins. `--show-invalid` prints (or returns JSON) for skipped plugin entries and why.
+- `runfabric extensions extension info <id> [--version <v>] [--prefer-external] [--json]` — Show plugin manifest for a given plugin ID (e.g. `aws-lambda`, `nodejs`). For external plugins, `--version` selects a specific installed version dir (best-effort).
+- `runfabric extensions extension search [query] [--json]` — Search plugins by id or name (case-insensitive).
+- `runfabric extensions extension install <id> [--source <url|path>] [--registry <url>] [--registry-token <token>] [--kind provider|runtime|simulator] [--version <v>] [--json]` — Install an external plugin. If `--source` is provided, installs from a `.zip`/`.tar.gz` archive (URL or local file) and validates `plugin.yaml`. If `--source` is omitted, installs via the registry **resolve** endpoint (default registry: `https://registry.runfabric.cloud`, override via `--registry`, `RUNFABRIC_REGISTRY_URL`, or `.runfabricrc` `registry.url`). Auth can be provided via `--registry-token`, `RUNFABRIC_REGISTRY_TOKEN`, or `.runfabricrc` `registry.token`.
+- `runfabric extensions extension uninstall <id> [--kind provider|runtime|simulator] [--version <v>] [--json]` — Uninstall an installed external plugin (remove one version or all versions).
+- `runfabric extensions extension upgrade <id> [--source <url|path>] [--registry <url>] [--registry-token <token>] [--kind provider|runtime|simulator] [--json]` — Upgrade an external plugin by reinstalling it from the given source (archive or registry resolve). Registry config/auth can also come from `.runfabricrc`.
+- `runfabric extensions publish init <id> --version <v> --artifact <path> [--type plugin|addon] [--plugin-kind provider|runtime|simulator] [--registry <url>] [--registry-token <token>] [--json]` — Create a publish session and receive signed upload URLs. Saves local session metadata under `RUNFABRIC_HOME/publish-sessions/<publishId>.json`.
+- `runfabric extensions publish upload --publish-id <id> [--key <file-key>] [--artifact <path>] [--json]` — Upload staged files for a publish session using saved upload URLs.
+- `runfabric extensions publish finalize --publish-id <id> [--registry <url>] [--registry-token <token>] [--json]` — Finalize publish after uploads complete.
+- `runfabric extensions publish status --publish-id <id> [--registry <url>] [--registry-token <token>] [--json]` — Check publish session status (`staged`, `uploaded`, `published`, etc.).
+- `runfabric extensions providers` — Provider extension utility command.
+- `runfabric extensions primitives [--kind triggers|resources|workflows|all] [--provider <id>] [--json]` — Discover supported primitives: trigger capability matrix, managed resource primitives, and workflow step primitives.
 
 ## Auth and identity
 
-- `runfabric login [--auth-url <url>] [--client-id <id>] [--scope <scopes>] [--json]` — Start OAuth device-code login: request device code, show verification URL/user code, poll token endpoint, store local tokens, and set active session.
-- `runfabric whoami [--auth-url <url>] [--json]` — Call `/me` with active token and print current identity.
-- `runfabric logout [--auth-url <url>] [--remote] [--json]` — Delete local tokens and optionally call `/auth/logout`.
-- `runfabric token list [--json]` — List local token/session metadata (redacted; no raw token values).
-- `runfabric token revoke [<token-id>] [--all] [--auth-url <url>] [--json]` — Revoke selected token(s) via auth API and remove local token records.
+- `runfabric auth login [--auth-url <url>] [--client-id <id>] [--scope <scopes>] [--json]` — Start OAuth device-code login: request device code, show verification URL/user code, poll token endpoint, store local tokens, and set active session.
+- `runfabric auth whoami [--auth-url <url>] [--json]` — Call `/me` with active token and print current identity.
+- `runfabric auth logout [--auth-url <url>] [--remote] [--json]` — Delete local tokens and optionally call `/auth/logout`.
+- `runfabric auth token list [--json]` — List local token/session metadata (redacted; no raw token values).
+- `runfabric auth token revoke [<token-id>] [--all] [--auth-url <url>] [--json]` — Revoke selected token(s) via auth API and remove local token records.
 
 Auth URL resolution order: `--auth-url` -> `RUNFABRIC_AUTH_URL` -> `.runfabricrc` `auth.url` -> `.runfabricrc` `registry.url` -> `https://auth.runfabric.cloud`.
 
@@ -110,9 +125,9 @@ Auth URL resolution order: `--auth-url` -> `RUNFABRIC_AUTH_URL` -> `.runfabricrc
 
 - `runfabric recover -c <config> [--stage <name>] [--mode rollback|resume|inspect] [--json]` — Recover from an unfinished transaction journal. Default mode: rollback.
 - `runfabric recover-dry-run -c <config> [--stage <name>] [--json]` — Inspect recovery feasibility without mutating state.
-- `runfabric unlock -c <config> [--stage <name>] [--force] [--json]` — Release the deploy lock (use with care).
-- `runfabric lock-steal -c <config> [--stage <name>] [--json]` — Steal the deploy lock (e.g. after a crashed process).
-- `runfabric backend-migrate -c <config> [--stage <name>] [--target <local|postgres|sqlite|s3|aws|dynamodb|gcs|azblob>] [--json]` — Migrate receipt and journal to another backend.
+- `runfabric state unlock -c <config> [--stage <name>] [--force] [--json]` — Release the deploy lock (use with care).
+- `runfabric state lock-steal -c <config> [--stage <name>] [--json]` — Steal the deploy lock (e.g. after a crashed process).
+- `runfabric state backend-migrate -c <config> [--stage <name>] [--target <local|postgres|sqlite|s3|aws|dynamodb|gcs|azblob>] [--json]` — Migrate receipt and journal to another backend.
 
 ## Runtime fabric
 
@@ -130,7 +145,7 @@ Auth URL resolution order: `--auth-url` -> `RUNFABRIC_AUTH_URL` -> `.runfabricrc
 
 ## State
 
-Supported backend kinds for state commands: `local`, `postgres`, `sqlite`, `s3`, `aws`, `dynamodb`, `gcs`, `azblob`.
+Supported backend kinds for state commands: `local`, `postgres`, `sqlite`, `s3`, `dynamodb`, `gcs`, `azblob`.
 
 - `runfabric state pull --provider <name> [--config <path>] [--backend <kind>] [--stage <name>] [--service <name>] [--json]`
 - `runfabric state list [--config <path>] [--backend <kind>] [--stage <name>] [--service <name>] [--provider <name>] [--json]`
@@ -149,7 +164,7 @@ Supported backend kinds for state commands: `local`, `postgres`, `sqlite`, `s3`,
 - Optional deploy rollback precedence:
   - CLI flag: `--rollback-on-failure` / `--no-rollback-on-failure`
   - config: `deploy.rollbackOnFailure` in `runfabric.yml`
-  - legacy env fallback: `RUNFABRIC_ROLLBACK_ON_FAILURE=1`
+  - env fallback: `RUNFABRIC_ROLLBACK_ON_FAILURE=1`
 - Deploy progress/state logs are shown in standard output; use `--json` for machine-readable output without progress logs.
 - Remove recovery notes: `.runfabric/recovery/remove/*.json`
 

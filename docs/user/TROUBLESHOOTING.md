@@ -20,10 +20,10 @@ Common errors and fixes per provider and workflow.
 - **Cause:** The chosen provider does not support the trigger in the config (e.g. cron on fly-machines).
 - **Fix:** Change trigger in `runfabric.yml` or switch provider. See [EXAMPLES_MATRIX.md](EXAMPLES_MATRIX.md) for support matrix.
 
-### "functions must be a map to patch"
+### "functions must be an array to patch"
 
-- **Cause:** `runfabric generate function` only patches when `functions` is a map in `runfabric.yml`.
-- **Fix:** Use a map-style `functions:` (e.g. from `runfabric init`) or add the function entry manually.
+- **Cause:** `runfabric generate function` patches the reference-format `functions` array in `runfabric.yml`.
+- **Fix:** Keep `functions` as an array of entries with `name`, `entry`, and `triggers`, or edit the config manually.
 
 ---
 

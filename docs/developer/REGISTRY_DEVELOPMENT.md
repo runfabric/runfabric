@@ -5,9 +5,8 @@ This repo includes the hosted **RunFabric Extension Registry** module for local 
 ## Quick navigation
 
 - **Registry API contract**: [EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md)
-- **External plugin loading**: [EXTERNAL_EXTENSIONS_PLAN.md](EXTERNAL_EXTENSIONS_PLAN.md)
+- **External plugin loading**: [EXTENSION_DEVELOPMENT_GUIDE.md](EXTENSION_DEVELOPMENT_GUIDE.md)
 - **Registry MVP spec (API + DB schema)**: [REGISTRY_API_DB_SCHEMA_MVP_V1.md](REGISTRY_API_DB_SCHEMA_MVP_V1.md)
-- **Registry final backend implementation map**: [REGISTRY_BACKEND_FINAL_IMPLEMENTATION_MAP.md](REGISTRY_BACKEND_FINAL_IMPLEMENTATION_MAP.md)
 - **Production security + DDoS**: [REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md](REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md)
 
 ---
@@ -16,42 +15,40 @@ This repo includes the hosted **RunFabric Extension Registry** module for local 
 
 ```
 runfabric/
-├── engine/               # RunFabric CLI + engine (Go module)
-├── registry/             # Registry service (API + SPA in one deployable)
+├── cmd/                  # binary entrypoints (runfabric, runfabricd)
+├── internal/             # core CLI/app packages
+├── platform/             # contracts, state, planner, runtime, extensions
+├── apps/registry/        # Registry service (API + SPA in one deployable)
 │   ├── internal/         # API handlers, auth, policy, metadata adapters
 │   └── web/              # Registry UI (extension docs + marketplace + auth UX)
 ├── schemas/              # Core schemas (runfabric.yml) + registry schemas (schemas/registry/)
 ```
 
-### `engine/`
-
-The main RunFabric CLI/engine implementation (what users run).
-
-### `registry/`
+### `apps/registry/`
 
 A service (separate Go module) that implements the registry API plus static SPA serving from the same process.
-The API stack is in `registry/internal/*`; the frontend is in `registry/web/` and builds to `registry/web/dist`.
+The API stack is in `apps/registry/internal/*`; the frontend is in `apps/registry/web/` and builds to `apps/registry/web/dist`.
 
 Run locally:
 
 ```bash
-cd registry
+cd apps/registry
 npm --prefix web run build
 go run ./cmd/registry --listen 127.0.0.1:8787 --web-dir ./web/dist
 ```
 
 Required templates:
 
-- `registry/.env.example` for environment-based local/prod setup.
-- `registry/configs/config.yaml` for canonical deployment/operator config mapping.
-- `registry/web/` for SPA source and docs-loader build pipeline.
+- `apps/registry/.env.example` for environment-based local/prod setup.
+- `apps/registry/configs/config.yaml` for canonical deployment/operator config mapping.
+- `apps/registry/web/` for SPA source and docs-loader build pipeline.
 - Registry supports `--config <path>` (or `REGISTRY_CONFIG`) to load YAML config.
 - Config precedence is `flags > env > config file > defaults`.
 
 Production-style local run (Postgres + Redis + OIDC/JWKS):
 
 ```bash
-cd registry
+cd apps/registry
 go run ./cmd/registry \
   --listen 127.0.0.1:8787 \
   --web-dir ./web/dist \
@@ -71,7 +68,7 @@ go run ./cmd/registry \
 Production-style local run (MongoDB + Redis + OIDC/JWKS):
 
 ```bash
-cd registry
+cd apps/registry
 go run ./cmd/registry \
   --listen 127.0.0.1:8787 \
   --web-dir ./web/dist \
@@ -134,10 +131,10 @@ Artifact URL mode:
 
 Postgres migrations:
 
-- SQL migration file: `registry/internal/adapter/repository/postgres/migrations/001_init.sql`
+- SQL migration file: `apps/registry/internal/adapter/repository/postgres/migrations/001_init.sql`
 - Migrations are applied automatically on startup when `--postgres-dsn` is configured.
 - Postgres driver is provided via `database/sql`; ensure your runtime registers the driver named by `--postgres-driver` (default: `pgx`).
-- Metadata adapters are isolated in `registry/internal/adapter/repository/{postgres,mongodb}`; `registry/internal/store` uses a config-driven metadata interface boundary.
+- Metadata adapters are isolated in `apps/registry/internal/adapter/repository/{postgres,mongodb}`; `apps/registry/internal/store` uses a config-driven metadata interface boundary.
 - Metadata backend selection is config-driven (`--metadata-provider auto|json|postgres|mongodb`) with parity tests across JSON/Postgres/MongoDB paths.
 - Auth identity is strict for tenant safety: authenticated calls must resolve both `subject` and `tenant_id`, and JWT tenant source is `tenant_id` claim only.
 - Tenant-bound policy subjects do not fall back to token roles for unbound tenants.
@@ -145,7 +142,7 @@ Postgres migrations:
 Integration test (optional, requires a reachable Postgres DSN):
 
 ```bash
-cd registry
+cd apps/registry
 REGISTRY_TEST_POSTGRES_DSN="postgres://user:pass@127.0.0.1:5432/registry?sslmode=disable" \
 REGISTRY_TEST_POSTGRES_DRIVER=pgx \
 go test ./internal/adapter/repository/postgres -run TestRepositoryIntegration_PostgresLifecycle -v
@@ -154,7 +151,7 @@ go test ./internal/adapter/repository/postgres -run TestRepositoryIntegration_Po
 Metadata parity test for MongoDB path (optional, requires reachable MongoDB URI):
 
 ```bash
-cd registry
+cd apps/registry
 REGISTRY_TEST_MONGODB_URI="mongodb://127.0.0.1:27017" \
 REGISTRY_TEST_MONGODB_DATABASE="runfabric_registry_test" \
 go test ./internal/store -run TestMetadataParity_MongoDB -v
@@ -195,20 +192,20 @@ registry.url=http://127.0.0.1:8787
 registry.token=local-dev-token
 EOF
 
-runfabric extension publish init acme-provider --version 1.0.0 --artifact ./dist/provider.zip
-runfabric extension publish upload --publish-id <publishId>
-runfabric extension publish finalize --publish-id <publishId>
-runfabric extension publish status --publish-id <publishId>
+runfabric extensions publish init acme-provider --version 1.0.0 --artifact ./dist/provider.zip
+runfabric extensions publish upload --publish-id <publishId>
+runfabric extensions publish finalize --publish-id <publishId>
+runfabric extensions publish status --publish-id <publishId>
 ```
 
-### `registry/web/`
+### `apps/registry/web/`
 
 Registry-centric frontend app (static SPA):
 
 - route surface: `/`, `/docs`, `/docs/[...slug]`, `/extensions`, `/extensions/[id]`, `/extensions/[id]/versions/[version]`, `/publishers/[publisher]`, `/search`, `/auth`
-- docs loader: `registry/web/lib/docs` maps extension-dev docs from `docs/developer` into `docs-index.json`
+- docs loader: `apps/registry/web/lib/docs` maps extension-dev docs from `docs/developer` into `docs-index.json`
 - marketplace pages consume live registry endpoints (`/v1/extensions/*`, `/packages*`)
-- build output: `registry/web/dist` (served by registry server with cache-friendly asset headers)
+- build output: `apps/registry/web/dist` (served by registry server with cache-friendly asset headers)
 - auth redirect is config-driven via `server.ui_auth_url` / `REGISTRY_UI_AUTH_URL` (`/v1/ui/config` for SPA consumption)
 - CLI docs link in UI footer is config-driven via `server.ui_docs_url` / `REGISTRY_UI_DOCS_URL`
 

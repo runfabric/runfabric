@@ -1,6 +1,7 @@
 APP=runfabric
+DAEMON_APP=runfabricd
 
-.PHONY: all help build build-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-run docker-daemon-up docker-daemon-down registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down
+.PHONY: all help build build-daemon build-platform build-daemon-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
 
 # UPX: compress binaries for smaller distribution. Override with e.g. make build-upx UPX="upx --best"
 # On macOS, UPX requires --force-macos; compressed binaries may need re-signing for notarization.
@@ -13,6 +14,10 @@ GOOS   := $(shell go env GOOS)
 GOARCH := $(shell go env GOARCH)
 BIN_SUFFIX := $(if $(filter windows,$(GOOS)),.exe,)
 PLATFORM_BIN := bin/$(APP)-$(GOOS)-$(GOARCH)$(BIN_SUFFIX)
+PLATFORM_DAEMON_BIN := bin/$(DAEMON_APP)-$(GOOS)-$(GOARCH)$(BIN_SUFFIX)
+EXAMPLE_CONFIG ?= examples/node/hello-aws/runfabric.yml
+EXAMPLE_STAGE ?= dev
+AUDIT_DIR ?= .runfabric/audit
 
 # Default target
 all: build
@@ -20,8 +25,10 @@ all: build
 help:
 	@echo "RunFabric Makefile targets:"
 	@echo "  make              same as make build"
-	@echo "  make build        build CLI to bin/runfabric"
+	@echo "  make build        build binaries to bin/runfabric and bin/runfabricd"
+	@echo "  make build-daemon build daemon binary to bin/runfabricd"
 	@echo "  make build-platform  build CLI to bin/runfabric-$(GOOS)-$(GOARCH)$(BIN_SUFFIX) (for SDK)"
+	@echo "  make build-daemon-platform  build daemon binary to bin/runfabricd-$(GOOS)-$(GOARCH)$(BIN_SUFFIX)"
 	@echo "  make build-all-platforms  build all GoReleaser targets into bin/"
 	@echo "  make build-upx    build then compress bin/runfabric with UPX"
 	@echo "  make build-platform-upx   build platform binary then compress with UPX"
@@ -39,8 +46,8 @@ help:
 	@echo "  make clean        remove bin/ and go caches"
 	@echo "  make version      show VERSION and binary -v"
 	@echo "  make doctor plan deploy ...  run runfabric commands via go run (see Makefile)"
-	@echo "  make mcp-install   npm install in protocol/mcp (MCP server)"
-	@echo "  make mcp-build     build MCP server (protocol/mcp)"
+	@echo "  make mcp-install   npm install in packages/node/mcp (MCP server)"
+	@echo "  make mcp-build     build MCP server (packages/node/mcp)"
 	@echo "  make mcp           run MCP server (stdio; requires runfabric on PATH)"
 	@echo "  make daemon-background  start daemon in background (logs: .runfabric/daemon.log)"
 	@echo "  make daemon-stop   stop daemon started with daemon-background"
@@ -50,25 +57,38 @@ help:
 	@echo "  make docker-daemon-run   run daemon container (API on port 8766)"
 	@echo "  make docker-daemon-up    docker compose up daemon + Redis (infra/docker-compose.daemon.yml)"
 	@echo "  make docker-daemon-down  docker compose down daemon stack"
-	@echo "  make registry-api    run local extension registry API (registry/)"
+	@echo "  make registry-api    run local extension registry API (apps/registry)"
 	@echo "  make docker-registry-build  build registry Docker image (registry/Dockerfile)"
 	@echo "  make docker-registry-run    run registry container (port 8787)"
 	@echo "  make docker-registry-stop   stop registry container"
 	@echo "  make docker-registry-up     docker compose up registry stack (infra/docker-compose.registry.yml)"
 	@echo "  make docker-registry-down   docker compose down registry stack"
+	@echo "  make audit-gaps      scan for TODO/stub/missing-implementation signals and write $(AUDIT_DIR)/gaps.txt"
+	@echo "  make audit-unused    run dangling/unused checks and write $(AUDIT_DIR)/unused.txt"
+	@echo "  make audit           run both audit-gaps and audit-unused"
 
 VERSION_FILE := $(shell cat VERSION 2>/dev/null | tr -d '\n' || echo "0.0.0-dev")
-ENGINE_LDFLAGS := -s -w -X github.com/runfabric/runfabric/engine/internal/runtime.Version=$(VERSION_FILE) -X github.com/runfabric/runfabric/engine/internal/runtime.ProtocolVersion=1
+PLATFORM_LDFLAGS := -s -w -X github.com/runfabric/runfabric/platform/core/model.Version=$(VERSION_FILE)
 
 build:
 	@mkdir -p bin
-	cd engine && go build -trimpath -ldflags "$(ENGINE_LDFLAGS)" -o ../bin/$(APP) ./cmd/runfabric
+	go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(APP) ./cmd/runfabric
+	go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(DAEMON_APP) ./cmd/runfabricd
+
+build-daemon:
+	@mkdir -p bin
+	go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(DAEMON_APP) ./cmd/runfabricd
 
 # Platform-specific binary (name matches SDK: runfabric-darwin-arm64, runfabric-windows-amd64.exe, etc.)
 build-platform:
 	@mkdir -p bin
-	cd engine && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "$(ENGINE_LDFLAGS)" -o ../$(PLATFORM_BIN) ./cmd/runfabric
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o $(PLATFORM_BIN) ./cmd/runfabric
 	@echo "Built $(PLATFORM_BIN)"
+
+build-daemon-platform:
+	@mkdir -p bin
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o $(PLATFORM_DAEMON_BIN) ./cmd/runfabricd
+	@echo "Built $(PLATFORM_DAEMON_BIN)"
 
 # Build all platforms (same matrix as .goreleaser.yaml) into bin/
 build-all-platforms:
@@ -77,10 +97,10 @@ build-all-platforms:
 		GOOS=$${pair%/*} GOARCH=$${pair#*/}; \
 		SUF=; [ "$$GOOS" = "windows" ] && SUF=".exe"; \
 		echo "Building $$GOOS-$$GOARCH..."; \
-		cd engine && CGO_ENABLED=0 GOOS=$$GOOS GOARCH=$$GOARCH go build -trimpath -ldflags "$(ENGINE_LDFLAGS)" -o ../bin/$(APP)-$$GOOS-$$GOARCH$$SUF ./cmd/runfabric; \
-		cd ..; \
+		CGO_ENABLED=0 GOOS=$$GOOS GOARCH=$$GOARCH go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(APP)-$$GOOS-$$GOARCH$$SUF ./cmd/runfabric; \
+		CGO_ENABLED=0 GOOS=$$GOOS GOARCH=$$GOARCH go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(DAEMON_APP)-$$GOOS-$$GOARCH$$SUF ./cmd/runfabricd; \
 	done
-	@echo "Built all platform binaries in bin/"
+	@echo "Built all platform binaries (runfabric + runfabricd) in bin/"
 
 # Build then compress with UPX (requires: go build, upx). Use for smaller distribution size.
 build-upx: build
@@ -106,23 +126,23 @@ build-all-platforms-upx: build-all-platforms
 # Fast CI check: vet, build, test without -race. Use for quick PR feedback before full release-check.
 check-syntax:
 	@echo "Running go vet..."
-	@cd engine && go vet ./...
+	@go vet ./...
 	@echo "Building all packages..."
-	@cd engine && go build -v ./...
+	@go build -v ./...
 	@echo "Running tests (no -race)..."
-	@cd engine && go test -count=1 ./...
+	@go test -count=1 ./...
 	@echo "check-syntax OK"
 
 # Pre-release validation: format, vet, build all, test with race, build CLI, then compress with UPX if available (matches CI; AGENTS.md default gate).
 release-check:
 	@echo "Checking format (gofmt)..."
-	@test -z "$$(cd engine && gofmt -l .)" || { echo "Go code is not formatted. Run: cd engine && gofmt -w ."; cd engine && gofmt -d .; exit 1; }
+	@test -z "$$(gofmt -l .)" || { echo "Go code is not formatted. Run: gofmt -w ."; gofmt -d .; exit 1; }
 	@echo "Running go vet..."
-	@cd engine && go vet ./...
+	@go vet ./...
 	@echo "Building all packages..."
-	@cd engine && go build -v ./...
+	@go build -v ./...
 	@echo "Running tests (with -race)..."
-	@cd engine && go test -v -race ./...
+	@go test -v -race ./...
 	@echo "Building CLI binary..."
 	@$(MAKE) build
 	@if command -v upx >/dev/null 2>&1; then echo "Compressing with UPX..."; $(UPX) bin/$(APP); else echo "UPX not found; skipping compression"; fi
@@ -148,19 +168,29 @@ check-docs-sync:
 	done; \
 	outdated=$$(grep -rE 'packages/planner|packages/core' docs/ 2>/dev/null | grep -v ROADMAP_PHASES || true); \
 	if [ -n "$$outdated" ]; then echo "  Outdated refs (packages/planner or packages/core) in docs/" >> "$$tmp"; fi; \
+	if ! grep -q '"integrations"' schemas/runfabric.schema.json; then echo "  Missing schema key: integrations" >> "$$tmp"; fi; \
+	if ! grep -q '"policies"' schemas/runfabric.schema.json; then echo "  Missing schema key: policies" >> "$$tmp"; fi; \
+	if ! grep -q '"human-approval"' schemas/runfabric.schema.json; then echo "  Missing workflow step kind in schema: human-approval" >> "$$tmp"; fi; \
+	if ! grep -q '"ai-structured"' schemas/runfabric.schema.json; then echo "  Missing workflow step kind in schema: ai-structured" >> "$$tmp"; fi; \
+	if ! grep -q '"stepFunctions"' schemas/runfabric.schema.json; then echo "  Missing Step Functions schema section under extensions.aws-lambda" >> "$$tmp"; fi; \
+	if ! grep -q '`integrations`' docs/user/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section/key: integrations" >> "$$tmp"; fi; \
+	if ! grep -q '`policies`' docs/user/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section/key: policies" >> "$$tmp"; fi; \
+	if ! grep -q 'human-approval' docs/user/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section: human-approval workflow lifecycle" >> "$$tmp"; fi; \
+	if ! grep -q 'ai-structured' docs/user/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section: typed workflow step kinds" >> "$$tmp"; fi; \
+	if ! grep -q 'MCP' docs/user/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs mention: MCP integration config" >> "$$tmp"; fi; \
 	if [ -s "$$tmp" ]; then cat "$$tmp"; rm -f "$$tmp"; exit 1; fi; \
 	rm -f "$$tmp"; echo "check-docs-sync OK"
 
 # Pre-push: linting and validation (format, vet, build, test, docs). Used by .githooks/pre-push. Skips UPX.
 pre-push:
 	@echo "Checking format (gofmt)..."
-	@test -z "$$(cd engine && gofmt -l .)" || { echo "Go code is not formatted. Run: cd engine && gofmt -w ."; cd engine && gofmt -d .; exit 1; }
+	@test -z "$$(gofmt -l .)" || { echo "Go code is not formatted. Run: gofmt -w ."; gofmt -d .; exit 1; }
 	@echo "Running go vet..."
-	@cd engine && go vet ./...
+	@go vet ./...
 	@echo "Building all packages..."
-	@cd engine && go build -v ./...
+	@go build -v ./...
 	@echo "Running tests (with -race)..."
-	@cd engine && go test -v -race ./...
+	@go test -v -race ./...
 	@echo "Building CLI binary..."
 	@$(MAKE) build
 	@$(MAKE) check-docs-sync
@@ -168,7 +198,10 @@ pre-push:
 
 # Create and push version tag to trigger CI release (goreleaser + npm). Run after release-check.
 release-tag:
-	@./scripts/release.sh tag
+	@tag="v$$(cat VERSION | tr -d '\n')"; \
+	echo "Creating and pushing $$tag..."; \
+	git tag "$$tag"; \
+	git push origin "$$tag"
 
 # Strip macOS quarantine so binaries in bin/ run without being killed (e.g. after copying from CI).
 bin-clear-quarantine:
@@ -180,19 +213,67 @@ version:
 
 clean:
 	rm -rf bin/
-	cd engine && go clean -cache -testcache 2>/dev/null || true
+	go clean -cache -testcache 2>/dev/null || true
 
 lint:
-	@cd engine && (command -v golangci-lint >/dev/null 2>&1 && golangci-lint run ./... || go vet ./...)
+	@(command -v golangci-lint >/dev/null 2>&1 && golangci-lint run ./... || go vet ./...)
 
 test:
-	cd engine && go test ./...
+	go test ./...
+
+# Scan potential feature gaps/stubs and write a report that can be converted into TODOs.
+audit-gaps:
+	@mkdir -p $(AUDIT_DIR)
+	@out="$(AUDIT_DIR)/gaps.txt"; \
+	{ \
+		echo "RunFabric Gap Scan"; \
+		echo "Generated: $$(date -u +'%Y-%m-%dT%H:%M:%SZ')"; \
+		echo; \
+		echo "[1] TODO/FIXME/XXX markers"; \
+		rg -n --glob '*.go' 'TODO|FIXME|XXX' cmd internal platform apps 2>/dev/null || true; \
+		echo; \
+		echo "[2] Stub/no-op indicators (high-signal)"; \
+		rg -n --glob '*.go' 'currently returns empty|not implemented for this provider|not yet supported|panic\("TODO|panic\("not implemented|func main\(\) \{\s*\}' cmd internal platform apps 2>/dev/null || true; \
+		echo; \
+		echo "[3] Informational: legacy alias wording"; \
+		rg -n --glob '*.go' 'legacy alias' cmd internal platform apps 2>/dev/null || true; \
+	} > "$$out"; \
+	echo "Wrote $$out"; \
+	echo "Review and add actionable items to your task TODO list."
+
+# Run unused/dangling checks (compiler+vet baseline, optional staticcheck U1000, module drift).
+audit-unused:
+	@mkdir -p $(AUDIT_DIR)
+	@out="$(AUDIT_DIR)/unused.txt"; \
+	{ \
+		echo "RunFabric Unused/Dangling Scan"; \
+		echo "Generated: $$(date -u +'%Y-%m-%dT%H:%M:%SZ')"; \
+		echo; \
+		echo "[1] go vet ./..."; \
+		go vet ./... 2>&1 || true; \
+		echo; \
+		echo "[2] staticcheck U1000 (pinned fallback for toolchain compatibility)"; \
+		if command -v staticcheck >/dev/null 2>&1; then \
+			staticcheck -checks U1000 ./... 2>&1 || { \
+				echo "local staticcheck failed; retrying with pinned v0.6.1"; \
+				go run honnef.co/go/tools/cmd/staticcheck@v0.6.1 -checks U1000 ./... 2>&1 || true; \
+			}; \
+		else \
+			go run honnef.co/go/tools/cmd/staticcheck@v0.6.1 -checks U1000 ./... 2>&1 || true; \
+		fi; \
+		echo; \
+		echo "[3] go mod tidy -diff"; \
+		go mod tidy -diff 2>&1 || true; \
+	} > "$$out"; \
+	echo "Wrote $$out"
+
+audit: audit-gaps audit-unused
 
 # Local extension registry API (development scaffold).
 # Override listen address: make registry-api REGISTRY_LISTEN=0.0.0.0:8787
 REGISTRY_LISTEN ?= 127.0.0.1:8787
 registry-api:
-	cd registry && go run ./cmd/registry --listen $(REGISTRY_LISTEN)
+	cd apps/registry && go run ./cmd/registry --listen $(REGISTRY_LISTEN)
 
 # Build registry Docker image. Image name: make docker-registry-build REGISTRY_IMAGE=myorg/runfabric-registry
 REGISTRY_IMAGE ?= runfabric-registry:latest
@@ -200,7 +281,7 @@ REGISTRY_CONTAINER ?= runfabric-registry
 REGISTRY_COMPOSE ?= infra/docker-compose.registry.yml
 
 docker-registry-build:
-	docker build -t $(REGISTRY_IMAGE) -f registry/Dockerfile .
+	docker build -t $(REGISTRY_IMAGE) -f apps/registry/Dockerfile .
 
 docker-registry-run: docker-registry-build
 	docker run -d --name $(REGISTRY_CONTAINER) -p 8787:8787 $(REGISTRY_IMAGE)
@@ -217,77 +298,81 @@ docker-registry-down:
 	docker compose -f $(REGISTRY_COMPOSE) down
 	docker rm -f $(REGISTRY_CONTAINER) 2>/dev/null || true
 
-# Test coverage for engine. Target: 95%% for critical packages (internal/config, internal/planner). View: cd engine && go tool cover -html=coverage.out
+# Test coverage for workspace packages. View: go tool cover -html=coverage.out
 coverage:
-	@cd engine && go test -coverprofile=coverage.out ./...
-	@cd engine && go tool cover -func=coverage.out | tail -1
+	@go test -coverprofile=coverage.out ./...
+	@go tool cover -func=coverage.out | tail -1
 
 # Coverage gate: fail if total coverage is below COVERAGE_THRESHOLD (e.g. make coverage-gate COVERAGE_THRESHOLD=10). Omit to only report.
 coverage-gate:
-	@cd engine && go test -coverprofile=coverage.out ./...
-	@cd engine && go tool cover -func=coverage.out | tail -1
+	@go test -coverprofile=coverage.out ./...
+	@go tool cover -func=coverage.out | tail -1
 	@if [ -n "$(COVERAGE_THRESHOLD)" ]; then \
-		cd engine && go tool cover -func=coverage.out | tail -1 | awk -v t=$(COVERAGE_THRESHOLD) '{gsub(/%/,""); if ($$NF+0 < t) { print "Coverage " $$NF "% is below threshold " t "%"; exit 1 } }'; \
+		go tool cover -func=coverage.out | tail -1 | awk -v t=$(COVERAGE_THRESHOLD) '{gsub(/%/,""); if ($$NF+0 < t) { print "Coverage " $$NF "% is below threshold " t "%"; exit 1 } }'; \
 		echo "Coverage gate passed (threshold $(COVERAGE_THRESHOLD)%)"; \
 	fi
 
 test-integration:
-	cd engine && RUNFABRIC_AWS_INTEGRATION=1 go test ./test/integration -v
+	RUNFABRIC_AWS_INTEGRATION=1 go test ./platform/test/integration -v
+
+# CLI command shortcuts (root layout).
+# Override with: make <target> EXAMPLE_CONFIG=path/to/runfabric.yml EXAMPLE_STAGE=dev
+CLI_RUN := go run ./cmd/runfabric
 
 doctor:
-	cd engine && go run ./cmd/runfabric doctor --config ../examples/node/hello-aws/runfabric.yml --stage dev
+	$(CLI_RUN) doctor --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE)
 
 # Init: without DIR, creates a folder named after the service in engine/; with DIR uses that path.
 # e.g. make init DIR=./test-exmp  or  make init INIT_ARGS="--no-interactive --service my-api --provider aws-lambda"
 init:
-	cd engine && go run ./cmd/runfabric init $(if $(DIR),--dir $(DIR),) $(INIT_ARGS)
+	$(CLI_RUN) init $(if $(DIR),--dir $(DIR),) $(INIT_ARGS)
 
 plan:
-	cd engine && go run ./cmd/runfabric plan --config ../examples/node/hello-aws/runfabric.yml --stage dev
+	$(CLI_RUN) plan --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE)
 
 deploy:
-	cd engine && go run ./cmd/runfabric deploy --config ../examples/node/hello-aws/runfabric.yml --stage dev
+	$(CLI_RUN) deploy --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE)
 
 remove:
-	cd engine && go run ./cmd/runfabric remove --config ../examples/node/hello-aws/runfabric.yml --stage dev
+	$(CLI_RUN) remove --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE)
 
 invoke:
-	cd engine && go run ./cmd/runfabric invoke --config ../examples/node/hello-aws/runfabric.yml --stage dev --function hello --payload '{"name":"Yogesh"}'
+	$(CLI_RUN) invoke --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE) --function hello --payload '{"name":"Yogesh"}'
 
 logs:
-	cd engine && go run ./cmd/runfabric logs --config ../examples/node/hello-aws/runfabric.yml --stage dev --function hello
+	$(CLI_RUN) logs --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE) --function hello
 
 inspect:
-	cd engine && go run ./cmd/runfabric inspect --config ../examples/node/hello-aws/runfabric.yml --stage dev
+	$(CLI_RUN) inspect --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE)
 
 recover:
-	cd engine && go run ./cmd/runfabric recover --config ../examples/node/hello-aws/runfabric.yml --stage dev
+	$(CLI_RUN) recover --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE)
 
 unlock:
-	cd engine && go run ./cmd/runfabric unlock --config ../examples/node/hello-aws/runfabric.yml --stage dev --force
+	$(CLI_RUN) unlock --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE) --force
 
 inspect-remote:
-	cd engine && RUNFABRIC_BACKEND=aws \
+	RUNFABRIC_BACKEND=s3 \
 	RUNFABRIC_S3_BUCKET=$(RUNFABRIC_S3_BUCKET) \
 	RUNFABRIC_S3_PREFIX=$(RUNFABRIC_S3_PREFIX) \
 	RUNFABRIC_DYNAMODB_TABLE=$(RUNFABRIC_DYNAMODB_TABLE) \
-	go run ./cmd/runfabric inspect --config ../examples/node/hello-aws/runfabric.yml --stage dev
+	$(CLI_RUN) inspect --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE)
 
 lock-steal:
-	cd engine && go run ./cmd/runfabric lock-steal --config ../examples/node/hello-aws/runfabric.yml --stage dev
+	$(CLI_RUN) lock-steal --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE)
 
 backend-migrate:
-	cd engine && go run ./cmd/runfabric backend-migrate --config ../examples/node/hello-aws/runfabric.yml --stage dev --target aws
+	$(CLI_RUN) backend-migrate --config $(EXAMPLE_CONFIG) --stage $(EXAMPLE_STAGE) --target s3
 
-# MCP server (protocol/mcp). Requires Node.js. Use with Cursor/IDE MCP client (stdio).
+# MCP server (packages/node/mcp). Requires Node.js. Use with Cursor/IDE MCP client (stdio).
 mcp-install:
-	cd protocol/mcp && npm install
+	cd packages/node/mcp && npm install
 
 mcp-build: mcp-install
-	cd protocol/mcp && npm run build
+	cd packages/node/mcp && npm run build
 
 mcp: mcp-build
-	cd protocol/mcp && npm start
+	cd packages/node/mcp && npm start
 
 # Daemon: run in background (does not hold terminal). Uses bin/runfabric; logs in .runfabric/daemon.log
 daemon-background:

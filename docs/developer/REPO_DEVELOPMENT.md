@@ -18,8 +18,8 @@ Contributor setup for the RunFabric repo. The CLI is the Go binary; packages (CL
 ## Local setup
 
 ```bash
-# Build CLI from engine
-make build          # → bin/runfabric
+# Build local binaries
+make build          # → bin/runfabric and bin/runfabricd
 make test           # run tests
 make release-check  # format, vet, build, test (CI gate)
 ```
@@ -36,9 +36,10 @@ Or install the npm package from `packages/node/cli` (after `make build-all-platf
 ## Layout
 
 - **engine/** – Go CLI and core (config, planner, deploy, state, providers).
-- **registry/** – Extension registry service:
-  - API backend (`registry/internal/*`) for resolve/search/detail/advisories/publish APIs.
-  - frontend SPA (`registry/web/*`) for extension docs + marketplace + auth UX.
+- **cmd/** + **internal/** + **platform/** – Go CLI and core (config, planner, deploy, state, providers).
+- **apps/registry/** – Extension registry service:
+  - API backend (`apps/registry/internal/*`) for resolve/search/detail/advisories/publish APIs.
+  - frontend SPA (`apps/registry/web/*`) for extension docs + marketplace + auth UX.
 - **packages/** – Node CLI (`packages/node/cli`), Node SDK (`packages/node/sdk`), Python (`packages/python/runfabric`), Go (`packages/go/sdk`), Java (`packages/java/sdk`), .NET (`packages/dotnet/sdk`).
 - **schemas/** – JSON schema for `runfabric.yml` and registry payload schemas (`schemas/registry/`).
 - **docs/** – User and contributor documentation.

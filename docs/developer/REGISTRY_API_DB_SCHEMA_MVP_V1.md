@@ -17,7 +17,7 @@ Scope:
 
 - **Registry**: `registry.runfabric.cloud` (metadata + publish/resolve/search)
 - **CDN**: `cdn.runfabric.cloud` (artifact delivery)
-- **CLI**: `runfabric extension install` and `runfabric extension publish`
+- **CLI**: `runfabric extensions extension install` and `runfabric extensions publish`
 
 Out of scope (MVP v1):
 
@@ -687,4 +687,3 @@ Phase 4:
 - analytics
 - richer search
 - verified/community workflows
-
