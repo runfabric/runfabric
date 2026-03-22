@@ -55,7 +55,7 @@ jobs:
           go test -coverprofile=coverage.out ./...
           go tool cover -func=coverage.out | tail -5
 
-  npm-package:
+  build-cli-packages:
     runs-on: ubuntu-latest
     permissions:
       contents: read
