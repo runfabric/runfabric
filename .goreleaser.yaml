@@ -7,7 +7,7 @@ project_name: runfabric
 
 builds:
   - id: runfabric
-    dir: engine
+    dir: platform/engine
     main: ./cmd/runfabric
     binary: runfabric
     goos:

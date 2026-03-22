@@ -2,11 +2,11 @@ FROM golang:1.25-alpine AS builder
 RUN apk add --no-cache ca-certificates
 WORKDIR /build
 
-COPY engine/ engine/
+COPY platform/engine/ platform/engine/
 COPY VERSION /build/VERSION
 
 RUN VERSION_FILE=$(cat /build/VERSION 2>/dev/null | tr -d '\n' || echo "0.0.0-dev") && \
-    cd engine && \
+    cd platform/engine && \
     CGO_ENABLED=0 go build -trimpath \
     -ldflags "-s -w -X github.com/runfabric/runfabric/engine/internal/runtime.Version=${VERSION_FILE} -X github.com/runfabric/runfabric/engine/internal/runtime.ProtocolVersion=1" \
     -o /build/runfabric ./cmd/runfabric
