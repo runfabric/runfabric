@@ -2,6 +2,8 @@ package resolution
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
@@ -66,6 +68,38 @@ func (p *apiProviderAdapter) Invoke(ctx context.Context, req providers.InvokeReq
 
 func (p *apiProviderAdapter) Logs(ctx context.Context, req providers.LogsRequest) (*providers.LogsResult, error) {
 	return deployapi.Logs(ctx, p.name, req.Config, req.Stage, req.Function, "", nil)
+}
+
+func (p *apiProviderAdapter) SyncOrchestrations(ctx context.Context, req providers.OrchestrationSyncRequest) (*providers.OrchestrationSyncResult, error) {
+	if p.name != "azure-functions" {
+		return &providers.OrchestrationSyncResult{}, nil
+	}
+	return deployapi.SyncOrchestrations(ctx, p.name, req)
+}
+
+func (p *apiProviderAdapter) RemoveOrchestrations(ctx context.Context, req providers.OrchestrationRemoveRequest) (*providers.OrchestrationSyncResult, error) {
+	if p.name != "azure-functions" {
+		return &providers.OrchestrationSyncResult{}, nil
+	}
+	return deployapi.RemoveOrchestrations(ctx, p.name, req)
+}
+
+func (p *apiProviderAdapter) InvokeOrchestration(ctx context.Context, req providers.OrchestrationInvokeRequest) (*providers.InvokeResult, error) {
+	if p.name != "azure-functions" {
+		return nil, fmt.Errorf("provider %q does not support orchestration", p.name)
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return nil, fmt.Errorf("orchestration name is required")
+	}
+	return deployapi.InvokeOrchestration(ctx, p.name, req.Config, req.Stage, req.Root, name, req.Payload)
+}
+
+func (p *apiProviderAdapter) InspectOrchestrations(ctx context.Context, req providers.OrchestrationInspectRequest) (map[string]any, error) {
+	if p.name != "azure-functions" {
+		return map[string]any{}, nil
+	}
+	return deployapi.InspectOrchestrations(ctx, p.name, req.Config, req.Stage, req.Root)
 }
 
 // RegisterAPIProviders registers provider adapters for API-dispatched providers.

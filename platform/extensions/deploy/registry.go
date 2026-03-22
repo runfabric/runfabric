@@ -22,7 +22,7 @@ var apiProviders = map[string]Provider{
 	"netlify":                newAPIProvider("netlify", &netlify.Runner{}, &netlify.Remover{}, &netlify.Invoker{}, &netlify.Logger{}),
 	"fly-machines":           newAPIProvider("fly-machines", &fly.Runner{}, &fly.Remover{}, &fly.Invoker{}, &fly.Logger{}),
 	"gcp-functions":          newAPIProvider("gcp-functions", &extgcpprovider.Runner{}, &extgcpprovider.Remover{}, &extgcpprovider.Invoker{}, &extgcpprovider.Logger{}),
-	"azure-functions":        newAPIProvider("azure-functions", &azure.Runner{}, &azure.Remover{}, &azure.Invoker{}, &azure.Logger{}),
+	"azure-functions":        newAPIProvider("azure-functions", &azure.Runner{}, &azure.Remover{}, &azure.Invoker{}, &azure.Logger{}, &azure.Runner{}),
 	"kubernetes":             newAPIProvider("kubernetes", &k8s.Runner{}, &k8s.Remover{}, &k8s.Invoker{}, &k8s.Logger{}),
 	"alibaba-fc":             newAPIProvider("alibaba-fc", &alibaba.Runner{}, &alibaba.Remover{}, &alibaba.Invoker{}, &alibaba.Logger{}),
 	"ibm-openwhisk":          newAPIProvider("ibm-openwhisk", &ibm.Runner{}, &ibm.Remover{}, &ibm.Invoker{}, &ibm.Logger{}),
