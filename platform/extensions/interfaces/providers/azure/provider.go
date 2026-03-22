@@ -7,6 +7,7 @@ import (
 	coreconfig "github.com/runfabric/runfabric/platform/core/model/config"
 	engconfig "github.com/runfabric/runfabric/platform/core/model/config"
 	azuretarget "github.com/runfabric/runfabric/platform/extensions/internal/providers/azure"
+	devstreamtarget "github.com/runfabric/runfabric/platform/extensions/internal/providers/devstream"
 )
 
 // FunctionMetrics keeps a stable metrics contract between workflow and provider entities.
@@ -25,6 +26,9 @@ type TraceSummary struct {
 	ServiceCount *int    `json:"serviceCount,omitempty"`
 	HasError     *bool   `json:"hasError,omitempty"`
 }
+
+// DevStreamState keeps a stable lifecycle-hook contract for Azure dev stream mode.
+type DevStreamState = devstreamtarget.LifecycleState
 
 func FetchMetrics(ctx context.Context, cfg *coreconfig.Config, stage string) (map[string]FunctionMetrics, error) {
 	if cfg == nil {
@@ -71,6 +75,15 @@ func FetchTraces(ctx context.Context, cfg *coreconfig.Config, stage string) ([]T
 		}
 	}
 	return result, nil
+}
+
+// RedirectToTunnel prepares Azure dev-stream lifecycle state.
+func RedirectToTunnel(ctx context.Context, cfg *coreconfig.Config, stage, tunnelURL string) (*DevStreamState, error) {
+	_ = ctx
+	if cfg == nil {
+		return nil, fmt.Errorf("config required")
+	}
+	return devstreamtarget.RedirectToTunnel("azure-functions", cfg, stage, tunnelURL)
 }
 
 // Conversion helper

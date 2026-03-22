@@ -26,6 +26,9 @@ type TraceSummary struct {
 	HasError     *bool   `json:"hasError,omitempty"`
 }
 
+// DevStreamState holds state for redirecting Cloud Functions to a tunnel and restoring on exit.
+type DevStreamState = gcptarget.DevStreamState
+
 func FetchMetrics(ctx context.Context, cfg *coreconfig.Config, stage string) (map[string]FunctionMetrics, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config required")
@@ -71,6 +74,14 @@ func FetchTraces(ctx context.Context, cfg *coreconfig.Config, stage string) ([]T
 		}
 	}
 	return result, nil
+}
+
+// RedirectToTunnel finds the Cloud Function for the service/stage and redirects it to the tunnel.
+func RedirectToTunnel(ctx context.Context, cfg *coreconfig.Config, stage, tunnelURL string) (*DevStreamState, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config required")
+	}
+	return gcptarget.RedirectToTunnel(ctx, cfg, stage, tunnelURL)
 }
 
 // Conversion helper
