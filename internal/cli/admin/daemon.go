@@ -403,9 +403,7 @@ func runDaemonStart(c *cobra.Command, _ []string) error {
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.Dir = filepath.Dir(dir)
-	if runtime.GOOS != "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	}
+	configureDaemonChildProcess(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start daemon: %w", err)
 	}
