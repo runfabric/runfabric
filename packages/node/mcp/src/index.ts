@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /**
- * RunFabric MCP server — exposes doctor, plan, build, deploy, remove, invoke, logs, list, inspect, releases for agents and IDEs.
+ * RunFabric MCP server — exposes doctor, plan, build, deploy, remove, invoke, logs, list, inspect, releases, generate, state, workflow for agents and IDEs.
  * Requires `runfabric` CLI on PATH (e.g. from repo: make build then bin/runfabric).
  */
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const RUNFABRIC_CMD = process.env.RUNFABRIC_CMD ?? "runfabric";
+function runfabricCmd(): string {
+  return process.env.RUNFABRIC_CMD ?? "runfabric";
+}
 
 const argsSchema = z.object({
   configPath: z.string().optional().describe("Path to runfabric.yml (default: runfabric.yml)"),
@@ -32,6 +35,15 @@ const logsArgsSchema = argsSchema.extend({
   provider: z.string().optional(),
 });
 
+const generateArgsSchema = argsSchema.extend({
+  args: z.array(z.string()).optional().describe("Additional args passed after `runfabric generate`"),
+});
+
+const scopedCommandArgsSchema = argsSchema.extend({
+  command: z.string().describe("Subcommand after the scoped command, e.g. list, inspect, invoke"),
+  args: z.array(z.string()).optional().describe("Additional args passed after the subcommand"),
+});
+
 function runRunfabric(
   subcommand: string[],
   args: { configPath?: string; stage?: string; preview?: string; provider?: string },
@@ -45,7 +57,7 @@ function runRunfabric(
   cmdArgs.push(...extraArgs, "--json", "--non-interactive", "--yes");
 
   return new Promise((resolve) => {
-    const proc = spawn(RUNFABRIC_CMD, cmdArgs, {
+    const proc = spawn(runfabricCmd(), cmdArgs, {
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
     });
@@ -58,180 +70,198 @@ function runRunfabric(
       const notFound = err.code === "ENOENT" || err.message?.includes("not found");
       const msg = notFound
         ? [
-            "RunFabric CLI not found (runfabric not on PATH and RUNFABRIC_CMD not set).",
-            "Fix: (1) Build CLI: make build, then export PATH=/path/to/repo/bin:$PATH",
-            "  or (2) Set RUNFABRIC_CMD=/absolute/path/to/runfabric for the MCP server process.",
-            "See @runfabric/mcp-stdio README section 'For AI agents'.",
-          ].join("\n")
+          "RunFabric CLI not found (runfabric not on PATH and RUNFABRIC_CMD not set).",
+          "Fix: (1) Build CLI: make build, then export PATH=/path/to/repo/bin:$PATH",
+          "  or (2) Set RUNFABRIC_CMD=/absolute/path/to/runfabric for the MCP server process.",
+          "See @runfabric/mcp-stdio README section 'For AI agents'.",
+        ].join("\n")
         : String(err.message || err);
       resolve({ stdout: "", stderr: msg, code: 1 });
     });
   });
 }
 
-const server = new McpServer(
-  { name: "runfabric", version: "0.1.0" },
-  { capabilities: { tools: { listChanged: true } } }
-);
+type ToolArgs = { configPath?: string; stage?: string; preview?: string; provider?: string };
 
-server.registerTool(
-  "runfabric_doctor",
-  {
-    description: "Run runfabric doctor to validate config and credentials",
-    inputSchema: z.object({
+function resultPayload(stdout: string, stderr: string, code: number | null) {
+  const out = (stdout || stderr).trim() || "No output";
+  return { content: [{ type: "text" as const, text: out }], isError: code !== 0 };
+}
+
+function registerBaseTool(
+  server: McpServer,
+  toolName: string,
+  description: string,
+  subcommand: string[],
+  inputSchema: z.AnyZodObject,
+  extraArgsFromInput?: (args: Record<string, unknown>) => string[],
+) {
+  server.registerTool(
+    toolName,
+    {
+      description,
+      inputSchema,
+    },
+    async (rawArgs) => {
+      const args = (rawArgs ?? {}) as Record<string, unknown>;
+      const base: ToolArgs = {
+        configPath: typeof args.configPath === "string" ? args.configPath : undefined,
+        stage: typeof args.stage === "string" ? args.stage : undefined,
+        preview: typeof args.preview === "string" ? args.preview : undefined,
+        provider: typeof args.provider === "string" ? args.provider : undefined,
+      };
+      const extra = extraArgsFromInput ? extraArgsFromInput(args) : [];
+      const { stdout, stderr, code } = await runRunfabric(subcommand, base, extra);
+      return resultPayload(stdout, stderr, code);
+    },
+  );
+}
+
+export function createServer(): McpServer {
+  const server = new McpServer(
+    { name: "runfabric", version: "0.1.0" },
+    { capabilities: { tools: { listChanged: true } } }
+  );
+
+  registerBaseTool(
+    server,
+    "runfabric_doctor",
+    "Run runfabric doctor to validate config and credentials",
+    ["doctor"],
+    z.object({
       configPath: z.string().optional(),
       stage: z.string().optional(),
-    }),
-  },
-  async (args) => {
-    const { configPath, stage } = args ?? {};
-    const { stdout, stderr, code } = await runRunfabric(["doctor"], { configPath, stage });
-    const out = (stdout || stderr).trim() || "No output";
-    return { content: [{ type: "text", text: out }], isError: code !== 0 };
-  }
-);
+    })
+  );
 
-server.registerTool(
-  "runfabric_plan",
-  {
-    description: "Run runfabric plan to show deployment plan",
-    inputSchema: argsSchema.extend({ provider: z.string().optional() }),
-  },
-  async (args) => {
-    const { configPath, stage, provider } = args ?? {};
-    const { stdout, stderr, code } = await runRunfabric(["plan"], { configPath, stage, provider });
-    const out = (stdout || stderr).trim() || "No output";
-    return { content: [{ type: "text", text: out }], isError: code !== 0 };
-  }
-);
+  registerBaseTool(
+    server,
+    "runfabric_plan",
+    "Run runfabric plan to show deployment plan",
+    ["plan"],
+    argsSchema.extend({ provider: z.string().optional() })
+  );
 
-server.registerTool(
-  "runfabric_build",
-  {
-    description: "Run runfabric build to build artifacts for deploy",
-    inputSchema: argsSchema.extend({ provider: z.string().optional() }),
-  },
-  async (args) => {
-    const { configPath, stage, provider } = args ?? {};
-    const { stdout, stderr, code } = await runRunfabric(["build"], { configPath, stage, provider });
-    const out = (stdout || stderr).trim() || "No output";
-    return { content: [{ type: "text", text: out }], isError: code !== 0 };
-  }
-);
+  registerBaseTool(
+    server,
+    "runfabric_build",
+    "Run runfabric build to build artifacts for deploy",
+    ["build"],
+    argsSchema.extend({ provider: z.string().optional() })
+  );
 
-server.registerTool(
-  "runfabric_deploy",
-  {
-    description: "Run runfabric deploy",
-    inputSchema: deployArgsSchema,
-  },
-  async (args) => {
-    const { configPath, stage, preview, provider } = args ?? {};
-    const { stdout, stderr, code } = await runRunfabric(["deploy"], {
-      configPath,
-      stage,
-      preview,
-      provider,
-    });
-    const out = (stdout || stderr).trim() || "No output";
-    return { content: [{ type: "text", text: out }], isError: code !== 0 };
-  }
-);
+  registerBaseTool(
+    server,
+    "runfabric_deploy",
+    "Run runfabric deploy",
+    ["deploy"],
+    deployArgsSchema
+  );
 
-server.registerTool(
-  "runfabric_remove",
-  {
-    description: "Run runfabric remove to tear down deployed resources",
-    inputSchema: argsSchema.extend({ provider: z.string().optional() }),
-  },
-  async (args) => {
-    const { configPath, stage, provider } = args ?? {};
-    const { stdout, stderr, code } = await runRunfabric(["remove"], { configPath, stage, provider });
-    const out = (stdout || stderr).trim() || "No output";
-    return { content: [{ type: "text", text: out }], isError: code !== 0 };
-  }
-);
+  registerBaseTool(
+    server,
+    "runfabric_remove",
+    "Run runfabric remove to tear down deployed resources",
+    ["remove"],
+    argsSchema.extend({ provider: z.string().optional() })
+  );
 
-server.registerTool(
-  "runfabric_invoke",
-  {
-    description: "Invoke a deployed function",
-    inputSchema: invokeArgsSchema,
-  },
-  async (args) => {
-    const { configPath, stage, function: fn, payload, provider } = args ?? {};
-    if (!fn) return { content: [{ type: "text", text: "Missing required argument: function" }], isError: true };
-    const extraArgs = ["--function", fn, ...(payload ? ["--payload", payload] : [])];
-    const { stdout, stderr, code } = await runRunfabric(
-      ["invoke"],
-      { configPath, stage, provider },
-      extraArgs
-    );
-    const out = (stdout || stderr).trim() || "No output";
-    return { content: [{ type: "text", text: out }], isError: code !== 0 };
-  }
-);
+  registerBaseTool(
+    server,
+    "runfabric_invoke",
+    "Invoke a deployed function",
+    ["invoke"],
+    invokeArgsSchema,
+    (args) => {
+      const fn = typeof args.function === "string" ? args.function : "";
+      if (!fn) return [];
+      const payload = typeof args.payload === "string" ? args.payload : "";
+      return ["--function", fn, ...(payload ? ["--payload", payload] : [])];
+    }
+  );
 
-server.registerTool(
-  "runfabric_logs",
-  {
-    description: "Fetch logs for a deployed function or all functions (provider logs + optional local)",
-    inputSchema: logsArgsSchema,
-  },
-  async (args) => {
-    const { configPath, stage, function: fn, all: allFlag, provider } = args ?? {};
-    const extraArgs = allFlag ? ["--all"] : fn ? ["--function", fn] : ["--all"];
-    const { stdout, stderr, code } = await runRunfabric(
-      ["logs"],
-      { configPath, stage, provider },
-      extraArgs
-    );
-    const out = (stdout || stderr).trim() || "No output";
-    return { content: [{ type: "text", text: out }], isError: code !== 0 };
-  }
-);
+  registerBaseTool(
+    server,
+    "runfabric_logs",
+    "Fetch logs for a deployed function or all functions (provider logs + optional local)",
+    ["logs"],
+    logsArgsSchema,
+    (args) => {
+      const fn = typeof args.function === "string" ? args.function : "";
+      const allFlag = Boolean(args.all);
+      return allFlag ? ["--all"] : fn ? ["--function", fn] : ["--all"];
+    }
+  );
 
-server.registerTool(
-  "runfabric_list",
-  {
-    description: "List functions from runfabric.yml and deployment status from receipt",
-    inputSchema: argsSchema.extend({ provider: z.string().optional() }),
-  },
-  async (args) => {
-    const { configPath, stage, provider } = args ?? {};
-    const { stdout, stderr, code } = await runRunfabric(["list"], { configPath, stage, provider });
-    const out = (stdout || stderr).trim() || "No output";
-    return { content: [{ type: "text", text: out }], isError: code !== 0 };
-  }
-);
+  registerBaseTool(
+    server,
+    "runfabric_list",
+    "List functions from runfabric.yml and deployment status from receipt",
+    ["list"],
+    argsSchema.extend({ provider: z.string().optional() })
+  );
 
-server.registerTool(
-  "runfabric_inspect",
-  {
-    description: "Show lock, journal, and receipt state for the current backend",
-    inputSchema: argsSchema.extend({ provider: z.string().optional() }),
-  },
-  async (args) => {
-    const { configPath, stage, provider } = args ?? {};
-    const { stdout, stderr, code } = await runRunfabric(["inspect"], { configPath, stage, provider });
-    const out = (stdout || stderr).trim() || "No output";
-    return { content: [{ type: "text", text: out }], isError: code !== 0 };
-  }
-);
+  registerBaseTool(
+    server,
+    "runfabric_inspect",
+    "Show lock, journal, and receipt state for the current backend",
+    ["inspect"],
+    argsSchema.extend({ provider: z.string().optional() })
+  );
 
-server.registerTool(
-  "runfabric_releases",
-  {
-    description: "List deployment history (releases) for the stage from receipt backend",
-    inputSchema: argsSchema.extend({ provider: z.string().optional() }),
-  },
-  async (args) => {
-    const { configPath, stage, provider } = args ?? {};
-    const { stdout, stderr, code } = await runRunfabric(["releases"], { configPath, stage, provider });
-    const out = (stdout || stderr).trim() || "No output";
-    return { content: [{ type: "text", text: out }], isError: code !== 0 };
-  }
-);
+  registerBaseTool(
+    server,
+    "runfabric_releases",
+    "List deployment history (releases) for the stage from receipt backend",
+    ["releases"],
+    argsSchema.extend({ provider: z.string().optional() })
+  );
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+  registerBaseTool(
+    server,
+    "runfabric_generate",
+    "Run runfabric generate with optional additional arguments",
+    ["generate"],
+    generateArgsSchema,
+    (args) => Array.isArray(args.args) ? (args.args as unknown[]).filter((v): v is string => typeof v === "string") : []
+  );
+
+  registerBaseTool(
+    server,
+    "runfabric_state",
+    "Run runfabric state <command> with additional arguments",
+    ["state"],
+    scopedCommandArgsSchema,
+    (args) => {
+      const cmd = typeof args.command === "string" ? args.command.trim() : "";
+      const rest = Array.isArray(args.args) ? (args.args as unknown[]).filter((v): v is string => typeof v === "string") : [];
+      return cmd ? [cmd, ...rest] : rest;
+    }
+  );
+
+  registerBaseTool(
+    server,
+    "runfabric_workflow",
+    "Run runfabric workflow <command> with additional arguments",
+    ["workflow"],
+    scopedCommandArgsSchema,
+    (args) => {
+      const cmd = typeof args.command === "string" ? args.command.trim() : "";
+      const rest = Array.isArray(args.args) ? (args.args as unknown[]).filter((v): v is string => typeof v === "string") : [];
+      return cmd ? [cmd, ...rest] : rest;
+    }
+  );
+
+  return server;
+}
+
+export async function startServer(): Promise<void> {
+  const server = createServer();
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMain) {
+  await startServer();
+}
