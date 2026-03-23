@@ -6,7 +6,7 @@ This repo includes the hosted **RunFabric Extension Registry** module for local 
 
 - **Registry API contract**: [EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md)
 - **External plugin loading**: [EXTENSION_DEVELOPMENT_GUIDE.md](EXTENSION_DEVELOPMENT_GUIDE.md)
-- **Registry MVP spec (API + DB schema)**: [REGISTRY_API_DB_SCHEMA_MVP_V1.md](REGISTRY_API_DB_SCHEMA_MVP_V1.md)
+- **Registry MVP spec (API + DB schema)**: [REGISTRY_API_DB_SCHEMA_MVP.md](REGISTRY_API_DB_SCHEMA_MVP.md)
 - **Production security + DDoS**: [REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md](REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md)
 
 ---

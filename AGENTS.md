@@ -34,8 +34,8 @@ Instructions for coding agents working in the RunFabric monorepo.
 - `internal/lifecycle`, `internal/backends`, `internal/transactions`: lifecycle fallback, backends, journal
 - `providers/<name>`: provider-specific adapters (deploy, remove, invoke, logs; resources/; triggers/)
 - `test/`: unit/integration tests
-- `docs/`: documentation (split by audience: `docs/user/` and `docs/developer/`)
-- `packages/`: per-runtime CLI and SDK (Node cli/sdk, Python, Go, Java, .NET); see `docs/developer/FILE_STRUCTURE.md`
+- `docs/`: documentation (user and developer guides together)
+- `packages/`: per-runtime CLI and SDK (Node cli/sdk, Python, Go, Java, .NET); see `docs/FILE_STRUCTURE.md`
 
 ## Architecture guardrails
 
@@ -49,12 +49,12 @@ Instructions for coding agents working in the RunFabric monorepo.
 ### CLI behavior change
 
 - Update tests for command behavior.
-- Update `README.md` and `docs/user/QUICKSTART.md` if user-facing behavior changed.
+- Update `README.md` and `docs/QUICKSTART.md` if user-facing behavior changed.
 
 ### Schema/config change
 
 - Update schema compatibility checks.
-- Update `docs/user/RUNFABRIC_YML_REFERENCE.md`.
+- Update `docs/RUNFABRIC_YML_REFERENCE.md`.
 - Update migration/versioning docs if breaking or behaviorally significant.
 
 ### Provider adapter change
@@ -81,10 +81,10 @@ Minimum allowed lighter checks:
 
 ## Documentation triggers
 
-- CLI/lifecycle changes -> `README.md`, `docs/user/QUICKSTART.md`, `docs/user/COMMAND_REFERENCE.md`
-- credentials/doctor changes -> `docs/user/CREDENTIALS.md`, `docs/user/PROVIDER_SETUP.md`
-- schema changes -> `docs/user/RUNFABRIC_YML_REFERENCE.md`
-- architecture/plugin changes -> `docs/developer/ARCHITECTURE.md`, `docs/developer/PLUGINS.md`
+- CLI/lifecycle changes -> `README.md`, `docs/QUICKSTART.md`, `docs/COMMAND_REFERENCE.md`
+- credentials/doctor changes -> `docs/CREDENTIALS.md`, `docs/PROVIDER_SETUP.md`
+- schema changes -> `docs/RUNFABRIC_YML_REFERENCE.md`
+- architecture/plugin changes -> `docs/ARCHITECTURE.md`, `apps/registry/docs/PLUGINS.md`
 
 ## Do not
 
@@ -98,8 +98,8 @@ Minimum allowed lighter checks:
 - **Core / engine:** `platform/engine/cmd`, `platform/engine/internal` (config, planner, state, deploy/api, controlplane, lifecycle) — framework maintainers.
 - **Providers:** `platform/engine/providers/<name>` — per-provider owners; keep adapter logic in providers, not in `internal/`.
 - **Docs:** `docs/` — keep in sync with CLI and config; see COMMAND_REFERENCE, RUNFABRIC_YML_REFERENCE, ROADMAP.
-- **Docs (user):** `docs/user/` — CLI usage + config + providers + troubleshooting.
-- **Docs (developer):** `docs/developer/` — internals + extensions/registry + repo development.
+- **Docs (user):** `docs/*.md` — CLI usage + config + providers + troubleshooting.
+- **Docs (developer):** `docs/` — internals + extensions/registry + repo development.
 - **SDKs / packages:** `packages/node`, `packages/python`, etc. — runtime-specific owners; contract in `internal/providers` and protocol docs.
 
 ## Final output expectations

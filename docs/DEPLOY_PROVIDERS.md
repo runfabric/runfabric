@@ -38,4 +38,4 @@ The following providers have API-based deploy/remove/invoke/logs (see `engine/in
 - **azure-functions:** Azure Functions; storage and triggers per matrix.
 - **Others:** See [PROVIDER_SETUP.md](PROVIDER_SETUP.md) for credentials and [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) for deploy flags.
 
-**See also:** [BUILD_AND_RELEASE.md](../developer/BUILD_AND_RELEASE.md), [ARCHITECTURE.md](../developer/ARCHITECTURE.md).
+**See also:** [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md), [ARCHITECTURE.md](ARCHITECTURE.md).

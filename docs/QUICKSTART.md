@@ -100,7 +100,9 @@ Provider IDs (copy/paste):
 It also creates:
 
 - `package.json` with zero runtime dependencies and, for TypeScript scaffolds, devDependencies plus a `build` script
-- `call:local` script that runs `runfabric invoke local -c runfabric.yml --serve --watch`
+- `call:local` script:
+  - TypeScript scaffolds: runs initial `tsc` build and then runs `tsc --watch` in parallel with `runfabric invoke local -c runfabric.yml --serve --watch`
+  - JavaScript scaffolds: runs `runfabric invoke local -c runfabric.yml --serve --watch`
 - `.env.example` with provider and selected state backend variables
 - project-scoped random state prefix for object backends (`s3`, `gcs`, `azblob`)
 
@@ -406,5 +408,5 @@ export const handler: UniversalHandler = createHandler(appOrFastifyOrNestApp);
 
 More handler examples:
 
-- `docs/HANDLER_SCENARIOS.md`
+- `packages/node/sdk/README.md` — Handler patterns and framework adapters
 - `examples/handler-scenarios/README.md`

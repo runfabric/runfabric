@@ -14,33 +14,30 @@ Addons that participate in **build-time application** (env injection, generated 
 
 ```ts
 export interface Addon {
-  name: string
-  kind: "addon"
-  version: string
+  name: string;
+  kind: "addon";
+  version: string;
 
-  supports(input: {
-    runtime: string
-    provider: string
-  }): boolean
+  supports(input: { runtime: string; provider: string }): boolean;
 
   apply(input: {
-    functionName: string
-    functionConfig: unknown
-    addonConfig: unknown
-    projectRoot: string
-    buildDir: string
-    generatedDir: string
-  }): Promise<AddonResult>
+    functionName: string;
+    functionConfig: unknown;
+    addonConfig: unknown;
+    projectRoot: string;
+    buildDir: string;
+    generatedDir: string;
+  }): Promise<AddonResult>;
 }
 
 export type AddonResult = {
-  env?: Record<string, string>
-  files?: Array<{ path: string; content: string }>
-  patches?: Array<{ path: string; find: string; replace: string }>
-  handlerWrappers?: string[]
-  buildSteps?: string[]
-  warnings?: string[]
-}
+  env?: Record<string, string>;
+  files?: Array<{ path: string; content: string }>;
+  patches?: Array<{ path: string; find: string; replace: string }>;
+  handlerWrappers?: string[];
+  buildSteps?: string[];
+  warnings?: string[];
+};
 ```
 
 ---
@@ -62,6 +59,7 @@ export type AddonResult = {
   - **`warnings`**: Non-fatal messages to surface to the user.
 
 Inputs to **`apply`**:
+
 - **`functionName`**: The function key from `runfabric.yml` (e.g. `api`, `worker`).
 - **`functionConfig`**: Resolved config for that function (runtime, handler, triggers, etc.).
 - **`addonConfig`**: The entry from `addons.<key>` (options, secrets refs).
@@ -76,5 +74,4 @@ Inputs to **`apply`**:
 - **`runfabric.yml`** declares addons under **`addons`** and optionally **`functions.<name>.addons`**. The Go engine resolves addon **secrets** and injects them at deploy; it does not call `supports` or `apply`.
 - The **Node/TS build pipeline** (SDK or thin CLI) loads addon modules, calls `supports(runtime, provider)` and, when true, calls `apply(...)`. It then merges **AddonResult** (env, files, patches, handlerWrappers, buildSteps) into the build. Resulting env is typically merged with the engine’s addon secret injection.
 
-See also: [../user/ADDONS.md](../user/ADDONS.md) (declarative usage), [PLUGINS.md](PLUGINS.md) (plugins vs addons), [../user/RUNFABRIC_YML_REFERENCE.md](../user/RUNFABRIC_YML_REFERENCE.md) (addons section).
-
+See also: [PLUGINS.md](PLUGINS.md) (plugins vs addons). For declarative addon usage and configuration, refer to the RunFabric configuration documentation.

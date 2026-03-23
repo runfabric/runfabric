@@ -1,6 +1,6 @@
 # runfabric.yml Reference
 
-Canonical config reference for the current release train. Aligned with [upstream RUNFABRIC_YML_REFERENCE](https://github.com/runfabric/runfabric/blob/main/docs/RUNFABRIC_YML_REFERENCE.md). In this repo the Go engine normalizes reference format into `provider`/`backend`/`functions`. **JSON Schema:** [schemas/runfabric.schema.json](../../schemas/runfabric.schema.json).
+Canonical config reference for the current release train. Aligned with [upstream RUNFABRIC_YML_REFERENCE](https://github.com/runfabric/runfabric/blob/main/docs/RUNFABRIC_YML_REFERENCE.md). In this repo the Go engine normalizes reference format into `provider`/`backend`/`functions`. **JSON Schema:** [schemas/runfabric.schema.json](../schemas/runfabric.schema.json).
 
 ## Quick navigation
 
@@ -433,7 +433,7 @@ Provider logs (e.g. CloudWatch for AWS) are fetched first; local file lines are 
 
 ## Build order
 
-Optional ordering of build steps or hook modules. When you have multiple hooks (see [PLUGINS.md](../developer/PLUGINS.md)), `build.order` defines the execution order. Values can use `${env:VAR}`.
+Optional ordering of build steps or hook modules. When you have multiple hooks (see [PLUGINS.md](../apps/registry/docs/PLUGINS.md)), `build.order` defines the execution order. Values can use `${env:VAR}`.
 
 ```yaml
 build:
@@ -715,16 +715,15 @@ Durable declarations are now applied through explicit Azure management-plane app
 
 ## Schema files
 
-| File                                                                 | Purpose                                                              |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| [schemas/runfabric.schema.json](../../schemas/runfabric.schema.json) | Full schema for the current config contract.                         |
-| [schemas/resource.schema.json](../../schemas/resource.schema.json)   | Resource definition schema (binding + optional provisioning fields). |
-| [schemas/workflow.schema.json](../../schemas/workflow.schema.json)   | Workflow definition schema (`name`, `steps`, optional retry policy). |
-| [schemas/secrets.schema.json](../../schemas/secrets.schema.json)     | Secrets map shape.                                                   |
+| File                                                              | Purpose                                                              |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [schemas/runfabric.schema.json](../schemas/runfabric.schema.json) | Full schema for the current config contract.                         |
+| [schemas/resource.schema.json](../schemas/resource.schema.json)   | Resource definition schema (binding + optional provisioning fields). |
+| [schemas/workflow.schema.json](../schemas/workflow.schema.json)   | Workflow definition schema (`name`, `steps`, optional retry policy). |
+| [schemas/secrets.schema.json](../schemas/secrets.schema.json)     | Secrets map shape.                                                   |
 
 ## Related Docs
 
 - [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) — CLI commands and flags.
-- [ROADMAP.md](../developer/ROADMAP.md) — Current scope and next steps.
+- [MCP.md](MCP.md) — MCP server (plan, deploy, doctor, invoke) for agents and IDEs.
 - [QUICKSTART.md](QUICKSTART.md)
-- [HANDLER_SCENARIOS.md](../developer/HANDLER_SCENARIOS.md)

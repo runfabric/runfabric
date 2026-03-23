@@ -23,4 +23,4 @@ Output:
 
 Docs source of truth:
 
-- `docs/developer/*` via `registry/web/lib/docs` loader (no mirrored markdown tree in `registry/web`).
+- `docs/*` and `apps/registry/docs/*` via `registry/web/lib/docs` loader (no mirrored markdown tree in `registry/web`).

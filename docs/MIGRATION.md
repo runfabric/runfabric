@@ -22,4 +22,4 @@ runfabric migrate --input serverless.yml [--output runfabric.yml] [--provider <i
 
 After migration, run **`runfabric doctor`** and **`runfabric plan`** to validate.
 
-**See also:** [RUNFABRIC_YML_REFERENCE.md](../user/RUNFABRIC_YML_REFERENCE.md), [COMMAND_REFERENCE.md](../user/COMMAND_REFERENCE.md).
+**See also:** [RUNFABRIC_YML_REFERENCE.md](RUNFABRIC_YML_REFERENCE.md), [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md).

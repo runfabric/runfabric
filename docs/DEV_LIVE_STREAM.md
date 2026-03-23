@@ -74,5 +74,5 @@ Examples:
 
 ## See also
 
-- [ROADMAP.md](../developer/ROADMAP.md) — Next steps (Dev mode).
+- [MCP.md](MCP.md) — MCP server for agents and IDEs.
 - [TESTING_GUIDE.md](TESTING_GUIDE.md) — `call-local` and invoke patterns.

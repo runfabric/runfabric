@@ -32,18 +32,18 @@ runfabric daemon --api-key my-secret --rate-limit 60 --dashboard --config runfab
 
 ## Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--address` | `0.0.0.0` | Listen address |
-| `--port`, `-p` | `8766` | Listen port (different from config-api default 8765) |
-| `--config`, `-c` | `runfabric.yml` | Path to runfabric.yml (needed for `--dashboard` and for API actions that use config) |
-| `--stage`, `-s` | `dev` | Default stage for API and dashboard |
-| `--dashboard` | `false` | Serve dashboard at GET / (requires `--config`) |
-| `--workspace` | (none) | Project root; `--config` is resolved relative to this (e.g. `--workspace .` when run from project root in systemd/launchd) |
-| `--cache-ttl` | `5m` | API cache TTL when `--cache-url` is set. Use `0` for per-endpoint defaults (validate 10m, resolve/plan 5m, releases 1m). |
-| `--cache-url` | (none) | **Distributed API cache:** Redis URL (e.g. `redis://localhost:6379/0`). When set, caches Config API (POST /validate, /resolve, /plan, /releases). Env: `RUNFABRIC_DAEMON_CACHE_URL`. |
-| `--api-key` | (none) | If set, require `X-API-Key` header on all API requests |
-| `--rate-limit` | `0` | Max requests per minute per client (0 = disabled) |
+| Flag             | Default         | Description                                                                                                                                                                          |
+| ---------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--address`      | `0.0.0.0`       | Listen address                                                                                                                                                                       |
+| `--port`, `-p`   | `8766`          | Listen port (different from config-api default 8765)                                                                                                                                 |
+| `--config`, `-c` | `runfabric.yml` | Path to runfabric.yml (needed for `--dashboard` and for API actions that use config)                                                                                                 |
+| `--stage`, `-s`  | `dev`           | Default stage for API and dashboard                                                                                                                                                  |
+| `--dashboard`    | `false`         | Serve dashboard at GET / (requires `--config`)                                                                                                                                       |
+| `--workspace`    | (none)          | Project root; `--config` is resolved relative to this (e.g. `--workspace .` when run from project root in systemd/launchd)                                                           |
+| `--cache-ttl`    | `5m`            | API cache TTL when `--cache-url` is set. Use `0` for per-endpoint defaults (validate 10m, resolve/plan 5m, releases 1m).                                                             |
+| `--cache-url`    | (none)          | **Distributed API cache:** Redis URL (e.g. `redis://localhost:6379/0`). When set, caches Config API (POST /validate, /resolve, /plan, /releases). Env: `RUNFABRIC_DAEMON_CACHE_URL`. |
+| `--api-key`      | (none)          | If set, require `X-API-Key` header on all API requests                                                                                                                               |
+| `--rate-limit`   | `0`             | Max requests per minute per client (0 = disabled)                                                                                                                                    |
 
 ## Caching
 
@@ -112,4 +112,4 @@ The daemon serves:
 ## See also
 
 - [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) — Full CLI reference.
-- [MCP.md](../developer/MCP.md) — MCP server for agents/IDEs (plan, deploy, doctor, invoke).
+- [MCP.md](MCP.md) — MCP server for agents/IDEs (plan, deploy, doctor, invoke).

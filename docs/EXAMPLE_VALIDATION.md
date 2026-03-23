@@ -61,7 +61,8 @@ runfabric docs check -c runfabric.yml
 Local execution:
 
 - HTTP examples:
-  - `runfabric invoke local -c runfabric.yml --serve --watch`
+  - JavaScript scaffold script: `runfabric invoke local -c runfabric.yml --serve --watch`
+  - TypeScript scaffold script: initial `tsc` build, then `tsc --watch` in parallel with `runfabric invoke local -c runfabric.yml --serve --watch`
 - Event-driven examples:
   - `runfabric invoke local -c runfabric.yml --event ./event.json`
   - `runfabric invoke dev -c runfabric.yml --preset queue --once`

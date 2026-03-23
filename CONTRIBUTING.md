@@ -68,15 +68,12 @@ Use clear, scoped commit messages. Suggested prefixes:
 
 ## Architecture References
 
-- `docs/developer/REPO_DEVELOPMENT.md`
-- `docs/developer/ARCHITECTURE.md`
-- `docs/user/CREDENTIALS.md`
-- `docs/user/QUICKSTART.md`
-- `docs/developer/BUILD_AND_RELEASE.md`
+- `docs/REPO_DEVELOPMENT.md`
+- `docs/ARCHITECTURE.md`
+- `docs/CREDENTIALS.md`
+- `docs/QUICKSTART.md`
+- `docs/BUILD_AND_RELEASE.md`
 - `RELEASE_PROCESS.md`
 - `CHANGELOG_POLICY.md`
 
-Docs are split by audience:
-
-- **User docs:** `docs/user/`
-- **Developer docs:** `docs/developer/`
+Docs are in `docs/`.

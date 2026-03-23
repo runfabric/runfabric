@@ -8,7 +8,7 @@ The format is based on the policy in `CHANGELOG_POLICY.md` and follows Semantic 
 
 ### Added
 
-- **runfabric generate** — In-project scaffolding: `runfabric generate function <name>` with triggers http, cron, queue. Creates handler file and patches `runfabric.yml`; supports `--trigger`, `--route`, `--schedule`, `--queue-name`, `--dry-run`, `--force`, `--no-backup`. See [GENERATE_PROPOSAL.md](docs/GENERATE_PROPOSAL.md).
+- **runfabric generate** — In-project scaffolding: `runfabric generate function <name>` with triggers http, cron, queue. Creates handler file and patches `runfabric.yml`; supports `--trigger`, `--route`, `--schedule`, `--queue-name`, `--dry-run`, `--force`, `--no-backup`.
 - **configpatch** — Safe YAML patching in `engine/internal/configpatch` (add function with backup, collision detection, dry-run plan).
 - **scaffold** — Shared handler templates and function-entry builder in `engine/internal/scaffold` for init and generate.
 - Unit and integration tests for generate, configpatch, and scaffold (init-then-generate flow).

@@ -11,7 +11,7 @@ These schemas validate:
 
 Authoritative contract:
 
-- [docs/developer/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](../../docs/developer/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md)
+- [apps/registry/docs/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](../../apps/registry/docs/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md)
 
 Included:
 

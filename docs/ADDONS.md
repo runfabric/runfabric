@@ -72,14 +72,14 @@ Extend the built-in list in the engine (e.g. `engine/internal/config/addons.go` 
 
 ## Implementation contract (when you’re building an addon)
 
-Addons that participate in build-time application (env, files, patches, handler wrappers, build steps) must implement the **Addon** interface: `supports({ runtime, provider })` and `apply(...)` returning **AddonResult**. See [ADDON_CONTRACT.md](../developer/ADDON_CONTRACT.md) for the TypeScript interface and semantics.
+Addons that participate in build-time application (env, files, patches, handler wrappers, build steps) must implement the **Addon** interface: `supports({ runtime, provider })` and `apply(...)` returning **AddonResult**. See [ADDON_CONTRACT.md](../apps/registry/docs/ADDON_CONTRACT.md) for the TypeScript interface and semantics.
 
-**Development:** For step-by-step addon development (contract, catalog, permissions, testing), see [EXTENSION_DEVELOPMENT_GUIDE.md](../developer/EXTENSION_DEVELOPMENT_GUIDE.md) (Part 1: Addon development).
+**Development:** For step-by-step addon development (contract, catalog, permissions, testing), see [EXTENSION_DEVELOPMENT_GUIDE.md](../apps/registry/docs/EXTENSION_DEVELOPMENT_GUIDE.md) (Part 1: Addon development).
 
 ---
 
 ## See also
 
 - [RUNFABRIC_YML_REFERENCE.md](RUNFABRIC_YML_REFERENCE.md) (addons and `addonCatalogUrl`)
-- [PLUGINS.md](../developer/PLUGINS.md) (plugins vs hooks)
-- [EXTENSION_DEVELOPMENT_GUIDE.md](../developer/EXTENSION_DEVELOPMENT_GUIDE.md) (addon development)
+- [PLUGINS.md](../apps/registry/docs/PLUGINS.md) (plugins vs hooks)
+- [EXTENSION_DEVELOPMENT_GUIDE.md](../apps/registry/docs/EXTENSION_DEVELOPMENT_GUIDE.md) (addon development)

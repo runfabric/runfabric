@@ -66,8 +66,7 @@ Input to `apply`: `functionName`, `functionConfig`, `addonConfig`, `projectRoot`
 ### 1.5 References (addons)
 
 - [ADDON_CONTRACT.md](ADDON_CONTRACT.md) — Full TypeScript interface and semantics.
-- [ADDONS.md](../user/ADDONS.md) — Declarative usage in `runfabric.yml`.
-- [RUNFABRIC_YML_REFERENCE.md](../user/RUNFABRIC_YML_REFERENCE.md) — `addons` and `addonCatalogUrl`.
+- For declarative usage in `runfabric.yml` and `addonCatalogUrl` configuration, refer to the RunFabric configuration documentation.
 
 ---
 
@@ -153,14 +152,13 @@ Minimal flow:
 2. Support `handshake` and provider methods you implement (e.g. `provider.doctor`).
 3. Package with `plugin.yaml` and install via `runfabric extensions extension install ...`.
 
-See [EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md) for hosted registry and install contract details, and [packages/go/plugin-sdk/README.md](../../packages/go/plugin-sdk/README.md) for a runnable example.
+See [EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md) for hosted registry and install contract details, and [packages/go/plugin-sdk/README.md](../../../packages/go/plugin-sdk/README.md) for a runnable example.
 
 ### 2.6 References (extensions)
 
 - [PLUGINS.md](PLUGINS.md) — Provider plugin interface, ProviderRegistry, lifecycle hooks.
-- [ARCHITECTURE.md](ARCHITECTURE.md) — Deploy flow and provider layout.
-- [COMMAND_REFERENCE.md](../user/COMMAND_REFERENCE.md) — `extensions plugin list|info|doctor|capabilities`, `extensions extension list|info|search`.
 - [EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md) — Registry resolve contract and install flow.
+- For deploy flow, provider layout, and CLI command reference, refer to the RunFabric core documentation.
 
 ---
 
@@ -175,4 +173,4 @@ See [EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](EXTENSION_REGISTRY_IMPLEMENTATI
 
 ---
 
-See also: [ROADMAP.md](ROADMAP.md) (Phase 15 extensions), [RUNFABRIC_YML_REFERENCE.md](../user/RUNFABRIC_YML_REFERENCE.md) (addons and provider config).
+See also: [REGISTRY_DEVELOPMENT.md](REGISTRY_DEVELOPMENT.md) (Registry development and setup).

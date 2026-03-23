@@ -68,7 +68,7 @@ func TestCrossSDKHandlerParityMarkers(t *testing.T) {
 
 func TestHookParityDocsAligned(t *testing.T) {
 	root := repoRoot(t)
-	docPath := filepath.Join(root, "docs", "developer", "SDK_FRAMEWORKS.md")
+	docPath := filepath.Join(root, "docs", "SDK_FRAMEWORKS.md")
 	b, err := os.ReadFile(docPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", docPath, err)

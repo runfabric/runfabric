@@ -149,7 +149,7 @@ release-check:
 	@echo "release-check OK"
 
 # Verify docs: (1) relative .md links in docs/ resolve to existing files; (2) no outdated refs to packages/planner, packages/core.
-# Validates docs/*.md, docs/user/**/*.md, and docs/developer/**/*.md.
+# Validates docs/*.md, docs/developer/**/*.md, and apps/registry/docs/**/*.md.
 check-docs-sync:
 	@echo "Checking doc links..."
 	@tmp=$$(mktemp); \
@@ -173,11 +173,11 @@ check-docs-sync:
 	if ! grep -q '"human-approval"' schemas/runfabric.schema.json; then echo "  Missing workflow step kind in schema: human-approval" >> "$$tmp"; fi; \
 	if ! grep -q '"ai-structured"' schemas/runfabric.schema.json; then echo "  Missing workflow step kind in schema: ai-structured" >> "$$tmp"; fi; \
 	if ! grep -q '"stepFunctions"' schemas/runfabric.schema.json; then echo "  Missing Step Functions schema section under extensions.aws-lambda" >> "$$tmp"; fi; \
-	if ! grep -q '`integrations`' docs/user/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section/key: integrations" >> "$$tmp"; fi; \
-	if ! grep -q '`policies`' docs/user/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section/key: policies" >> "$$tmp"; fi; \
-	if ! grep -q 'human-approval' docs/user/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section: human-approval workflow lifecycle" >> "$$tmp"; fi; \
-	if ! grep -q 'ai-structured' docs/user/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section: typed workflow step kinds" >> "$$tmp"; fi; \
-	if ! grep -q 'MCP' docs/user/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs mention: MCP integration config" >> "$$tmp"; fi; \
+	if ! grep -q '`integrations`' docs/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section/key: integrations" >> "$$tmp"; fi; \
+	if ! grep -q '`policies`' docs/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section/key: policies" >> "$$tmp"; fi; \
+	if ! grep -q 'human-approval' docs/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section: human-approval workflow lifecycle" >> "$$tmp"; fi; \
+	if ! grep -q 'ai-structured' docs/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs section: typed workflow step kinds" >> "$$tmp"; fi; \
+	if ! grep -q 'MCP' docs/RUNFABRIC_YML_REFERENCE.md; then echo "  Missing docs mention: MCP integration config" >> "$$tmp"; fi; \
 	if [ -s "$$tmp" ]; then cat "$$tmp"; rm -f "$$tmp"; exit 1; fi; \
 	rm -f "$$tmp"; echo "check-docs-sync OK"
 

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { docsManifest, docsRootRelative } from "./manifest.mjs";
+import { docsManifest, docsLocations } from "./manifest.mjs";
 
 function firstMatch(pattern, text) {
   const match = text.match(pattern);
@@ -33,10 +33,11 @@ export async function buildDocsIndex(options = {}) {
   const currentFile = fileURLToPath(import.meta.url);
   const webDir = options.webDir ?? path.resolve(path.dirname(currentFile), "..", "..");
   const repoRoot = options.repoRoot ?? path.resolve(webDir, "..", "..", "..");
-  const docsRoot = options.docsRoot ?? path.join(repoRoot, docsRootRelative);
 
   const docs = [];
   for (const entry of docsManifest) {
+    const docsRootRelative = docsLocations[entry.location] || docsLocations.developer;
+    const docsRoot = path.join(repoRoot, docsRootRelative);
     const sourcePath = path.join(docsRoot, entry.file);
     const markdown = await fs.readFile(sourcePath, "utf8");
     const headingTitle = firstMatch(/^#\s+(.+)$/m, markdown);

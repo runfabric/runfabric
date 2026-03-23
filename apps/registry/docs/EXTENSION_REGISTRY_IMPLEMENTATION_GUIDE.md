@@ -16,7 +16,7 @@ It complements:
 - **Artifacts**: CDN layout and required metadata (checksum, signature)
 - **Security**: trust model, keys, SBOM/provenance
 - **Production security**: [REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md](REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md)
-- **MVP spec (API + DB schema)**: [REGISTRY_API_DB_SCHEMA_MVP_V1.md](REGISTRY_API_DB_SCHEMA_MVP_V1.md)
+- **MVP spec (API + DB schema)**: [REGISTRY_API_DB_SCHEMA_MVP.md](REGISTRY_API_DB_SCHEMA_MVP.md)
 - **CLI install algorithm**: exactly what the CLI does
 - **Suggested minimal schema set**: JSON schema IDs and versioning
 

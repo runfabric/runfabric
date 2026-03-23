@@ -18,7 +18,7 @@ The current repository structure has **good high-level separation** (platform/co
 
 ### ✅ What's Well-Organized
 
-- **Platform modules** ([platform/core](file:///platform/core), [platform/extensions](file:///platform/extensions), [platform/deploy](file:///platform/deploy), [platform/runtime](file:///platform/runtime)) — separated by responsibility
+- **Platform modules** ([platform/core](platform/core), [platform/extensions](platform/extensions), [platform/deploy](platform/deploy), [platform/runtime](platform/runtime)) — separated by responsibility
 - **Extensions structure** (after recent refactor) — clear internal/providers, internal/runtimes, internal/simulators
 - **Provider implementations** — each provider in isolated directory
 - **Config and state** — clearly separated contracts
@@ -474,7 +474,7 @@ Fix: Define AppService interface; CLI depends on interface not implementation
 
 - [ ] Define AppService interface in internal/app/
 - [ ] Ensure all CLI commands use AppService
-- [ ] Document app contract in docs/developer/
+- [ ] Document app contract in docs/
 - [ ] Add tests for app layer isolation
 
 ### Phase 3: Platform Contracts Organization (MEDIUM PRIORITY)

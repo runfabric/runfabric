@@ -166,4 +166,4 @@ export default {
 
 ---
 
-See also: [RUNFABRIC_YML_REFERENCE.md](../user/RUNFABRIC_YML_REFERENCE.md) (build order), [ADDONS.md](../user/ADDONS.md) (declarative integrations).
+See [ADDON_CONTRACT.md](ADDON_CONTRACT.md) for addon implementation details and [EXTENSION_DEVELOPMENT_GUIDE.md](EXTENSION_DEVELOPMENT_GUIDE.md) for full extension development guidance.
