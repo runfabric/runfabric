@@ -2,8 +2,8 @@
 
 This folder is the starting point for the **RunFabric Extension Registry** service described in:
 
-- [docs/developer/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](../docs/developer/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md)
-- [docs/developer/REGISTRY_BACKEND_FINAL_IMPLEMENTATION_MAP.md](../docs/developer/REGISTRY_BACKEND_FINAL_IMPLEMENTATION_MAP.md)
+- [docs/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](./docs/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md)
+- [docs/REGISTRY_DEVELOPMENT.md](./docs/REGISTRY_DEVELOPMENT.md)
 
 ## What this service is
 
@@ -33,7 +33,8 @@ It also serves a static SPA for extension docs + marketplace pages from the same
   - tenant-aware policy enforcement (`subject`, `object`, `action`, `tenant`).
 - Registry endpoints:
   - `GET /v1/extensions/resolve`
-  - `GET /v1/extensions/search`
+  - `GET /v1/extensions/list` (browse endpoint; supports deterministic sort and pagination, does not accept `q`)
+  - `GET /v1/extensions/search` (text query endpoint; use `q` for relevance-style lookup)
   - `GET /v1/extensions/{id}`
   - `GET /v1/extensions/{id}/versions`
   - `GET /v1/extensions/{id}/versions/{version}`

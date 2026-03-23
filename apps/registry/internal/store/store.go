@@ -190,6 +190,35 @@ type SearchOutput struct {
 	Total    int          `json:"total"`
 }
 
+type ListInput struct {
+	Type       string
+	PluginKind string
+	Page       int
+	PageSize   int
+	SortBy     string
+	Order      string
+}
+
+type ListItem struct {
+	ID            string         `json:"id"`
+	Name          string         `json:"name"`
+	Type          string         `json:"type"`
+	PluginKind    string         `json:"pluginKind,omitempty"`
+	Description   string         `json:"description,omitempty"`
+	LatestVersion string         `json:"latestVersion,omitempty"`
+	Publisher     map[string]any `json:"publisher,omitempty"`
+	PublishedAt   string         `json:"publishedAt,omitempty"`
+}
+
+type ListOutput struct {
+	Items    []ListItem `json:"items"`
+	Page     int        `json:"page"`
+	PageSize int        `json:"pageSize"`
+	Total    int        `json:"total"`
+	SortBy   string     `json:"sortBy"`
+	Order    string     `json:"order"`
+}
+
 type PublishFileInput struct {
 	Key       string
 	Name      string
@@ -727,17 +756,128 @@ func (s *Store) Search(in SearchInput) (*SearchOutput, error) {
 	return &SearchOutput{Items: items[start:end], Page: page, PageSize: sz, Total: total}, nil
 }
 
+func (s *Store) List(in ListInput) (*ListOutput, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	typ := strings.ToLower(strings.TrimSpace(in.Type))
+	kind := strings.ToLower(strings.TrimSpace(in.PluginKind))
+	page := in.Page
+	if page <= 0 {
+		page = 1
+	}
+	sz := in.PageSize
+	if sz <= 0 {
+		sz = 20
+	}
+	if sz > 100 {
+		sz = 100
+	}
+	sortBy := strings.ToLower(strings.TrimSpace(in.SortBy))
+	if sortBy == "" {
+		sortBy = "publishedat"
+	}
+	if sortBy != "id" && sortBy != "publishedat" {
+		sortBy = "publishedat"
+	}
+	order := strings.ToLower(strings.TrimSpace(in.Order))
+	if order == "" {
+		order = "desc"
+	}
+	if order != "asc" && order != "desc" {
+		order = "desc"
+	}
+
+	items := make([]ListItem, 0, len(s.data.Extensions))
+	for _, ext := range s.data.Extensions {
+		if typ != "" && strings.ToLower(ext.Type) != typ {
+			continue
+		}
+		if kind != "" && strings.ToLower(ext.PluginKind) != kind {
+			continue
+		}
+		latest, publishedAt := latestPublishedMeta(ext)
+		pub := s.data.Publishers[ext.PublisherID]
+		items = append(items, ListItem{
+			ID:            ext.ID,
+			Name:          ext.Name,
+			Type:          ext.Type,
+			PluginKind:    ext.PluginKind,
+			Description:   ext.Description,
+			LatestVersion: latest,
+			PublishedAt:   publishedAt,
+			Publisher: map[string]any{
+				"id":       pub.ID,
+				"name":     pub.Name,
+				"verified": pub.Verified,
+				"trust":    pub.Trust,
+			},
+		})
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		left := items[i]
+		right := items[j]
+		switch sortBy {
+		case "id":
+			if strings.EqualFold(left.ID, right.ID) {
+				if order == "asc" {
+					return left.PublishedAt < right.PublishedAt
+				}
+				return left.PublishedAt > right.PublishedAt
+			}
+			if order == "asc" {
+				return left.ID < right.ID
+			}
+			return left.ID > right.ID
+		default:
+			if left.PublishedAt == right.PublishedAt {
+				if order == "asc" {
+					return left.ID < right.ID
+				}
+				return left.ID > right.ID
+			}
+			if order == "asc" {
+				return left.PublishedAt < right.PublishedAt
+			}
+			return left.PublishedAt > right.PublishedAt
+		}
+	})
+
+	total := len(items)
+	start := (page - 1) * sz
+	if start > total {
+		start = total
+	}
+	end := start + sz
+	if end > total {
+		end = total
+	}
+	sortByOut := sortBy
+	if sortByOut == "publishedat" {
+		sortByOut = "publishedAt"
+	}
+	return &ListOutput{Items: items[start:end], Page: page, PageSize: sz, Total: total, SortBy: sortByOut, Order: order}, nil
+}
+
 func latestPublishedVersion(ext *Extension) string {
+	best, _ := latestPublishedMeta(ext)
+	return best
+}
+
+func latestPublishedMeta(ext *Extension) (version string, publishedAt string) {
 	best := ""
+	bestPublishedAt := ""
 	for _, v := range ext.Versions {
 		if v == nil || strings.TrimSpace(v.ReleaseStatus) != "published" {
 			continue
 		}
 		if best == "" || compareVersion(v.Version, best) > 0 {
 			best = v.Version
+			bestPublishedAt = strings.TrimSpace(v.PublishedAt)
 		}
 	}
-	return best
+	return best, bestPublishedAt
 }
 
 func (s *Store) GetExtension(id string) (*Extension, Publisher, error) {

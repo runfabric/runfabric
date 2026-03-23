@@ -432,6 +432,27 @@ func TestResolveAndSearchEndpoints(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("search status=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/extensions/list?type=plugin&page=1&pageSize=5", nil)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestListEndpoint_RejectsSearchQueryParam(t *testing.T) {
+	h := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/extensions/list?q=provider", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("list with q status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "q is not supported for list") {
+		t.Fatalf("expected list contract error message, body=%s", rr.Body.String())
+	}
 }
 
 func TestPublishFlowEndpoints(t *testing.T) {

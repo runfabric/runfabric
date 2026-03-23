@@ -201,3 +201,54 @@ func TestOpen_MetadataProviderMongoDBRequiresURI(t *testing.T) {
 		t.Fatalf("expected mongodb uri hint in error, got: %v", err)
 	}
 }
+
+func TestList_SortsByIDAscAndPaginatesDeterministically(t *testing.T) {
+	tmp := t.TempDir()
+	s, err := Open(OpenOptions{DBPath: filepath.Join(tmp, "registry.db.json")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+
+	first, err := s.List(ListInput{Type: "plugin", SortBy: "id", Order: "asc", Page: 1, PageSize: 2})
+	if err != nil {
+		t.Fatalf("list first page: %v", err)
+	}
+	second, err := s.List(ListInput{Type: "plugin", SortBy: "id", Order: "asc", Page: 2, PageSize: 2})
+	if err != nil {
+		t.Fatalf("list second page: %v", err)
+	}
+	if len(first.Items) == 0 {
+		t.Fatal("expected list to return plugin items")
+	}
+	if first.SortBy != "id" || first.Order != "asc" {
+		t.Fatalf("unexpected sort metadata: sortBy=%q order=%q", first.SortBy, first.Order)
+	}
+	for i := 1; i < len(first.Items); i++ {
+		if first.Items[i-1].ID > first.Items[i].ID {
+			t.Fatalf("expected ascending IDs, got %q before %q", first.Items[i-1].ID, first.Items[i].ID)
+		}
+	}
+	if len(second.Items) > 0 && first.Items[len(first.Items)-1].ID >= second.Items[0].ID {
+		t.Fatalf("expected stable pagination order, page1 last=%q page2 first=%q", first.Items[len(first.Items)-1].ID, second.Items[0].ID)
+	}
+}
+
+func TestList_FiltersByPluginKind(t *testing.T) {
+	tmp := t.TempDir()
+	s, err := Open(OpenOptions{DBPath: filepath.Join(tmp, "registry.db.json")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	out, err := s.List(ListInput{Type: "plugin", PluginKind: "provider", SortBy: "id", Order: "asc", Page: 1, PageSize: 50})
+	if err != nil {
+		t.Fatalf("list provider plugins: %v", err)
+	}
+	if len(out.Items) == 0 {
+		t.Fatal("expected provider plugin items")
+	}
+	for _, item := range out.Items {
+		if strings.ToLower(item.PluginKind) != "provider" {
+			t.Fatalf("unexpected plugin kind in list item: %q", item.PluginKind)
+		}
+	}
+}

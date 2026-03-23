@@ -139,6 +139,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/ready", s.handleHealthz)
 	mux.HandleFunc("/v1/ui/config", s.handleUIConfig)
 	mux.HandleFunc("/v1/extensions/resolve", s.handleResolve)
+	mux.HandleFunc("/v1/extensions/list", s.handleList)
 	mux.HandleFunc("/v1/extensions/search", s.handleSearch)
 	mux.HandleFunc("/v1/extensions/publish/init", s.handlePublishInit)
 	mux.HandleFunc("/v1/extensions/publish/finalize", s.handlePublishFinalize)
@@ -340,6 +341,44 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	s.writeAndCacheJSON(w, r, http.StatusOK, out, "extensions_search", 20*time.Second)
 	s.audit(r, "search", "ok", map[string]any{"q": q, "total": out.Total})
+}
+
+func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.methodNotAllowed(w, r)
+		return
+	}
+	if s.readCachedJSON(w, r, "extensions_list") {
+		return
+	}
+	if strings.TrimSpace(r.URL.Query().Get("q")) != "" {
+		writeAPIError(w, r, http.StatusBadRequest, apiError{
+			Code:      "INVALID_REQUEST",
+			Message:   "q is not supported for list",
+			Details:   map[string]any{"unsupported": []string{"q"}},
+			Hint:      "use /v1/extensions/search for text queries",
+			RequestID: requestIDFromRequest(r),
+		})
+		s.audit(r, "list", "error", map[string]any{"cause": "unsupported q"})
+		return
+	}
+
+	typ := strings.TrimSpace(r.URL.Query().Get("type"))
+	kind := strings.TrimSpace(r.URL.Query().Get("pluginKind"))
+	page, _ := strconvAtoiDefault(r.URL.Query().Get("page"), 1)
+	pageSize, _ := strconvAtoiDefault(r.URL.Query().Get("pageSize"), 20)
+	sortBy := strings.TrimSpace(r.URL.Query().Get("sortBy"))
+	order := strings.TrimSpace(r.URL.Query().Get("order"))
+
+	out, err := s.store.List(store.ListInput{Type: typ, PluginKind: kind, Page: page, PageSize: pageSize, SortBy: sortBy, Order: order})
+	if err != nil {
+		writeAPIError(w, r, http.StatusInternalServerError, apiError{Code: "INTERNAL", Message: "list failed", Details: map[string]any{"cause": err.Error()}, RequestID: requestIDFromRequest(r)})
+		s.audit(r, "list", "error", map[string]any{"cause": err.Error()})
+		return
+	}
+
+	s.writeAndCacheJSON(w, r, http.StatusOK, out, "extensions_list", 20*time.Second)
+	s.audit(r, "list", "ok", map[string]any{"type": typ, "pluginKind": kind, "total": out.Total})
 }
 
 func (s *Server) handleExtensionRoutes(w http.ResponseWriter, r *http.Request) {
@@ -915,6 +954,8 @@ func classifyRateLimit(r *http.Request) (limit int, window time.Duration, group 
 		return 120, time.Minute, "artifact_get"
 	case path == "/v1/extensions/resolve":
 		return 120, time.Minute, "resolve"
+	case path == "/v1/extensions/list":
+		return 60, time.Minute, "list"
 	case path == "/v1/extensions/search":
 		return 60, time.Minute, "search"
 	case path == "/v1/extensions/publish/init":
