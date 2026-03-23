@@ -115,13 +115,16 @@ func TestInstallAndUninstall_FromLocalTarGz(t *testing.T) {
 
 	pluginRoot := t.TempDir()
 	pm := pluginYAML{
-		APIVersion:  "runfabric.io/v1alpha1",
-		Kind:        "provider",
-		ID:          "stub",
-		Name:        "Stub Provider",
-		Description: "stub",
-		Version:     "0.1.0",
-		Executable:  "stubplugin",
+		APIVersion:       "runfabric.io/v1alpha1",
+		Kind:             "provider",
+		ID:               "stub",
+		Name:             "Stub Provider",
+		Description:      "stub",
+		Version:          "0.1.0",
+		Executable:       "stubplugin",
+		Capabilities:     []string{"doctor", "plan", "deploy", "remove", "invoke", "logs"},
+		SupportsTriggers: []string{"http"},
+		SupportsRuntime:  []string{"nodejs"},
 	}
 	pm.Permissions.FS = true
 	yml, err := yaml.Marshal(pm)

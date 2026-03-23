@@ -26,6 +26,7 @@ import (
 type ExternalProviderAdapter struct {
 	name        string
 	executable  string
+	meta        providers.ProviderMeta
 	timeout     time.Duration
 	idleTimeout time.Duration
 
@@ -80,10 +81,14 @@ func (b *limitedBuffer) String() string {
 	return string(b.buf)
 }
 
-func NewExternalProviderAdapter(name, executable string) *ExternalProviderAdapter {
+func NewExternalProviderAdapter(name, executable string, meta providers.ProviderMeta) *ExternalProviderAdapter {
+	if strings.TrimSpace(meta.Name) == "" {
+		meta.Name = name
+	}
 	return &ExternalProviderAdapter{
 		name:        name,
 		executable:  executable,
+		meta:        meta,
 		timeout:     30 * time.Second,
 		idleTimeout: defaultIdleTimeout,
 		debug:       isTruthyEnv(envPluginDebug),
@@ -91,11 +96,11 @@ func NewExternalProviderAdapter(name, executable string) *ExternalProviderAdapte
 }
 
 func (p *ExternalProviderAdapter) Meta() providers.ProviderMeta {
-	return providers.ProviderMeta{
-		Name:            p.name,
-		Capabilities:    []string{"deploy", "remove", "invoke", "logs", "doctor", "plan"},
-		SupportsRuntime: []string{"nodejs", "python"},
+	meta := p.meta
+	if strings.TrimSpace(meta.Name) == "" {
+		meta.Name = p.name
 	}
+	return meta
 }
 
 func (p *ExternalProviderAdapter) ValidateConfig(ctx context.Context, req providers.ValidateConfigRequest) error {
@@ -335,6 +340,18 @@ func (p *ExternalProviderAdapter) handshakeLocked() error {
 			hs.Version,
 			hs.Platform,
 		)
+	}
+	if len(hs.Capabilities) > 0 {
+		p.meta.Capabilities = append([]string(nil), hs.Capabilities...)
+	}
+	if len(hs.SupportsRuntime) > 0 {
+		p.meta.SupportsRuntime = append([]string(nil), hs.SupportsRuntime...)
+	}
+	if len(hs.SupportsTriggers) > 0 {
+		p.meta.SupportsTriggers = append([]string(nil), hs.SupportsTriggers...)
+	}
+	if len(hs.SupportsResources) > 0 {
+		p.meta.SupportsResources = append([]string(nil), hs.SupportsResources...)
 	}
 
 	p.proc.handshaked = true

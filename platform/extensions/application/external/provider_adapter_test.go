@@ -13,7 +13,7 @@ import (
 
 func TestExternalProviderAdapter_Doctor(t *testing.T) {
 	exe := buildStubPlugin(t)
-	p := NewExternalProviderAdapter("stub", exe)
+	p := NewExternalProviderAdapter("stub", exe, providers.ProviderMeta{Name: "stub"})
 
 	cfg := &config.Config{Service: "svc"}
 	res, err := p.Doctor(context.Background(), providers.DoctorRequest{Config: (*providers.Config)(cfg), Stage: "dev"})
@@ -25,6 +25,13 @@ func TestExternalProviderAdapter_Doctor(t *testing.T) {
 	}
 	if len(res.Checks) == 0 {
 		t.Fatalf("expected checks")
+	}
+	meta := p.Meta()
+	if len(meta.SupportsTriggers) != 2 {
+		t.Fatalf("expected hydrated trigger metadata, got %#v", meta.SupportsTriggers)
+	}
+	if len(meta.Capabilities) == 0 {
+		t.Fatalf("expected hydrated capabilities, got %#v", meta.Capabilities)
 	}
 }
 

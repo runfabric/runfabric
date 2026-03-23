@@ -13,7 +13,7 @@ import (
 
 func TestExternalProviderAdapter_Doctor(t *testing.T) {
 	exe := buildStubPlugin(t)
-	p := NewExternalProviderAdapter("stub", exe)
+	p := NewExternalProviderAdapter("stub", exe, providers.ProviderMeta{Name: "stub"})
 
 	cfg := &config.Config{Service: "svc"}
 	res, err := p.Doctor(context.Background(), providers.DoctorRequest{Config: (*providers.Config)(cfg), Stage: "dev"})

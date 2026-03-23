@@ -14,22 +14,28 @@ func TestDiscoverLatest_SelectsLatestVersionPerID(t *testing.T) {
 
 	// providers/foo/{0.1.0,0.2.0}
 	writePlugin(t, filepath.Join(tmp, "plugins", "providers", "foo", "0.1.0"), pluginYAML{
-		APIVersion:  "runfabric.io/plugin/v1",
-		Kind:        "provider",
-		ID:          "foo",
-		Name:        "Foo",
-		Description: "Foo provider",
-		Version:     "0.1.0",
-		Executable:  "runfabric-provider-foo",
+		APIVersion:       "runfabric.io/plugin/v1",
+		Kind:             "provider",
+		ID:               "foo",
+		Name:             "Foo",
+		Description:      "Foo provider",
+		Version:          "0.1.0",
+		Executable:       "runfabric-provider-foo",
+		Capabilities:     []string{"deploy"},
+		SupportsTriggers: []string{"http"},
+		SupportsRuntime:  []string{"nodejs"},
 	})
 	writePlugin(t, filepath.Join(tmp, "plugins", "providers", "foo", "0.2.0"), pluginYAML{
-		APIVersion:  "runfabric.io/plugin/v1",
-		Kind:        "provider",
-		ID:          "foo",
-		Name:        "Foo",
-		Description: "Foo provider",
-		Version:     "0.2.0",
-		Executable:  "runfabric-provider-foo",
+		APIVersion:       "runfabric.io/plugin/v1",
+		Kind:             "provider",
+		ID:               "foo",
+		Name:             "Foo",
+		Description:      "Foo provider",
+		Version:          "0.2.0",
+		Executable:       "runfabric-provider-foo",
+		Capabilities:     []string{"deploy", "doctor"},
+		SupportsTriggers: []string{"http", "cron"},
+		SupportsRuntime:  []string{"nodejs"},
 	})
 
 	plugins, err := DiscoverLatest()
@@ -61,12 +67,15 @@ func TestDiscoverLatest_SupportsKindAliasesAndDirectoryAliases(t *testing.T) {
 	t.Setenv(envHome, tmp)
 
 	writePlugin(t, filepath.Join(tmp, "plugins", "provider", "alias-provider", "1.2.3"), pluginYAML{
-		APIVersion: "runfabric.io/plugin/v1",
-		Kind:       "providers",
-		ID:         "alias-provider",
-		Name:       "Alias Provider",
-		Version:    "1.2.3",
-		Executable: "runfabric-provider-alias",
+		APIVersion:       "runfabric.io/plugin/v1",
+		Kind:             "providers",
+		ID:               "alias-provider",
+		Name:             "Alias Provider",
+		Version:          "1.2.3",
+		Executable:       "runfabric-provider-alias",
+		Capabilities:     []string{"deploy"},
+		SupportsTriggers: []string{"http"},
+		SupportsRuntime:  []string{"nodejs"},
 	})
 
 	plugins, err := DiscoverLatest()

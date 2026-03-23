@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
@@ -115,13 +116,16 @@ func TestInstallAndUninstall_FromLocalTarGz(t *testing.T) {
 
 	pluginRoot := t.TempDir()
 	pm := pluginYAML{
-		APIVersion:  "runfabric.io/v1alpha1",
-		Kind:        "provider",
-		ID:          "stub",
-		Name:        "Stub Provider",
-		Description: "stub",
-		Version:     "0.1.0",
-		Executable:  "stubplugin",
+		APIVersion:       "runfabric.io/v1alpha1",
+		Kind:             "provider",
+		ID:               "stub",
+		Name:             "Stub Provider",
+		Description:      "stub",
+		Version:          "0.1.0",
+		Executable:       "stubplugin",
+		Capabilities:     []string{"doctor", "plan", "deploy", "remove", "invoke", "logs"},
+		SupportsTriggers: []string{"http"},
+		SupportsRuntime:  []string{"nodejs"},
 	}
 	pm.Permissions.FS = true
 	yml, err := yaml.Marshal(pm)
@@ -181,6 +185,129 @@ func TestInstallAndUninstall_FromLocalTarGz(t *testing.T) {
 		if p.ID == "stub" {
 			t.Fatalf("expected stub removed, still discovered")
 		}
+	}
+}
+
+func TestInstall_FromLocalTarGz_RejectsProviderMissingCapabilities(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(envHome, home)
+
+	pluginRoot := t.TempDir()
+	pm := pluginYAML{
+		APIVersion:       "runfabric.io/v1alpha1",
+		Kind:             "provider",
+		ID:               "stub",
+		Name:             "Stub Provider",
+		Description:      "stub",
+		Version:          "0.1.0",
+		Executable:       "stubplugin",
+		SupportsTriggers: []string{"http"},
+		SupportsRuntime:  []string{"nodejs"},
+	}
+	yml, err := yaml.Marshal(pm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, "plugin.yaml"), yml, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, "stubplugin"), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := filepath.Join(t.TempDir(), "stub-invalid-0.1.0.tar.gz")
+	if err := writeTarGz(archive, pluginRoot); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = Install(InstallOptions{ID: "stub", Kind: manifests.KindProvider, Source: archive})
+	if err == nil {
+		t.Fatal("expected install to fail for provider missing capabilities")
+	}
+	if !strings.Contains(err.Error(), "must declare capabilities") {
+		t.Fatalf("expected capabilities validation error, got %v", err)
+	}
+}
+
+func TestInstall_FromLocalTarGz_RejectsProviderMissingSupportsTriggers(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(envHome, home)
+
+	pluginRoot := t.TempDir()
+	pm := pluginYAML{
+		APIVersion:      "runfabric.io/v1alpha1",
+		Kind:            "provider",
+		ID:              "stub",
+		Name:            "Stub Provider",
+		Description:     "stub",
+		Version:         "0.1.0",
+		Executable:      "stubplugin",
+		Capabilities:    []string{"http"},
+		SupportsRuntime: []string{"nodejs"},
+	}
+	yml, err := yaml.Marshal(pm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, "plugin.yaml"), yml, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, "stubplugin"), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := filepath.Join(t.TempDir(), "stub-invalid-0.1.0.tar.gz")
+	if err := writeTarGz(archive, pluginRoot); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = Install(InstallOptions{ID: "stub", Kind: manifests.KindProvider, Source: archive})
+	if err == nil {
+		t.Fatal("expected install to fail for provider missing supportsTriggers")
+	}
+	if !strings.Contains(err.Error(), "must declare supportsTriggers") {
+		t.Fatalf("expected supportsTriggers validation error, got %v", err)
+	}
+}
+
+func TestInstall_FromLocalTarGz_RejectsProviderMissingSupportsRuntime(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(envHome, home)
+
+	pluginRoot := t.TempDir()
+	pm := pluginYAML{
+		APIVersion:       "runfabric.io/v1alpha1",
+		Kind:             "provider",
+		ID:               "stub",
+		Name:             "Stub Provider",
+		Description:      "stub",
+		Version:          "0.1.0",
+		Executable:       "stubplugin",
+		Capabilities:     []string{"http"},
+		SupportsTriggers: []string{"http"},
+	}
+	yml, err := yaml.Marshal(pm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, "plugin.yaml"), yml, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginRoot, "stubplugin"), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := filepath.Join(t.TempDir(), "stub-invalid-0.1.0.tar.gz")
+	if err := writeTarGz(archive, pluginRoot); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = Install(InstallOptions{ID: "stub", Kind: manifests.KindProvider, Source: archive})
+	if err == nil {
+		t.Fatal("expected install to fail for provider missing supportsRuntime")
+	}
+	if !strings.Contains(err.Error(), "must declare supportsRuntime") {
+		t.Fatalf("expected supportsRuntime validation error, got %v", err)
 	}
 }
 

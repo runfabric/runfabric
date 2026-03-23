@@ -367,6 +367,9 @@ func locateAndParsePluginYAML(root string) (pluginDir string, m *pluginYAML, err
 		pm.Kind = strings.TrimSpace(pm.Kind)
 		pm.ID = strings.TrimSpace(pm.ID)
 		pm.Version = strings.TrimSpace(pm.Version)
+		if err := validatePluginMetadata(&pm); err != nil {
+			return "", nil, err
+		}
 		return dir, &pm, nil
 	}
 	return "", nil, fmt.Errorf("install: plugin.yaml not found in archive root")

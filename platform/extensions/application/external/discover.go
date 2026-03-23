@@ -31,15 +31,19 @@ func HomeDir() (string, error) {
 }
 
 type pluginYAML struct {
-	APIVersion  string `yaml:"apiVersion"`
-	Kind        string `yaml:"kind"` // provider | runtime | simulator
-	ID          string `yaml:"id"`
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
-	Version     string `yaml:"version"`
-	PluginVer   any    `yaml:"pluginVersion"`
-	Executable  string `yaml:"executable"`
-	Permissions struct {
+	APIVersion        string   `yaml:"apiVersion"`
+	Kind              string   `yaml:"kind"` // provider | runtime | simulator
+	ID                string   `yaml:"id"`
+	Name              string   `yaml:"name"`
+	Description       string   `yaml:"description"`
+	Version           string   `yaml:"version"`
+	PluginVer         any      `yaml:"pluginVersion"`
+	Executable        string   `yaml:"executable"`
+	Capabilities      []string `yaml:"capabilities"`
+	SupportsRuntime   []string `yaml:"supportsRuntime"`
+	SupportsTriggers  []string `yaml:"supportsTriggers"`
+	SupportsResources []string `yaml:"supportsResources"`
+	Permissions       struct {
 		FS      bool `yaml:"fs"`
 		Env     bool `yaml:"env"`
 		Network bool `yaml:"network"`
@@ -274,7 +278,11 @@ func discoverKind(kindRoot string, kind manifests.PluginKind, opts DiscoverOptio
 		m, err := readPluginYAML(bestPath)
 		if err != nil || m == nil {
 			if opts.IncludeInvalid {
-				invalid = append(invalid, InvalidPlugin{Kind: kind, ID: id, Version: bestVer, Path: bestPath, Reason: "failed to read/parse plugin.yaml"})
+				reason := "failed to read/parse plugin.yaml"
+				if err != nil {
+					reason = err.Error()
+				}
+				invalid = append(invalid, InvalidPlugin{Kind: kind, ID: id, Version: bestVer, Path: bestPath, Reason: reason})
 			}
 			continue
 		}
@@ -318,15 +326,19 @@ func discoverKind(kindRoot string, kind manifests.PluginKind, opts DiscoverOptio
 		}
 
 		out = append(out, &manifests.PluginManifest{
-			ID:          m.ID,
-			Kind:        kind,
-			Name:        m.Name,
-			Description: m.Description,
-			Permissions: manifests.Permissions{FS: m.Permissions.FS, Env: m.Permissions.Env, Network: m.Permissions.Network, Cloud: m.Permissions.Cloud},
-			Source:      "external",
-			Version:     m.Version,
-			Path:        bestPath,
-			Executable:  execPath,
+			ID:                m.ID,
+			Kind:              kind,
+			Name:              m.Name,
+			Description:       m.Description,
+			Permissions:       manifests.Permissions{FS: m.Permissions.FS, Env: m.Permissions.Env, Network: m.Permissions.Network, Cloud: m.Permissions.Cloud},
+			Capabilities:      append([]string(nil), m.Capabilities...),
+			SupportsRuntime:   append([]string(nil), m.SupportsRuntime...),
+			SupportsTriggers:  append([]string(nil), m.SupportsTriggers...),
+			SupportsResources: append([]string(nil), m.SupportsResources...),
+			Source:            "external",
+			Version:           m.Version,
+			Path:              bestPath,
+			Executable:        execPath,
 		})
 	}
 	return out, invalid, nil
@@ -425,5 +437,44 @@ func readPluginYAML(dir string) (*pluginYAML, error) {
 	m.Kind = string(manifests.NormalizePluginKind(m.Kind))
 	m.ID = strings.TrimSpace(m.ID)
 	m.Version = strings.TrimSpace(m.Version)
+	if err := validatePluginMetadata(&m); err != nil {
+		return nil, err
+	}
 	return &m, nil
+}
+
+func validatePluginMetadata(m *pluginYAML) error {
+	if m == nil {
+		return fmt.Errorf("plugin metadata is required")
+	}
+	if manifests.NormalizePluginKind(m.Kind) != manifests.KindProvider {
+		return nil
+	}
+	if len(normalizedNonEmpty(m.Capabilities)) == 0 {
+		return fmt.Errorf("provider plugin.yaml must declare capabilities")
+	}
+	if len(normalizedNonEmpty(m.SupportsTriggers)) == 0 {
+		return fmt.Errorf("provider plugin.yaml must declare supportsTriggers")
+	}
+	if len(normalizedNonEmpty(m.SupportsRuntime)) == 0 {
+		return fmt.Errorf("provider plugin.yaml must declare supportsRuntime")
+	}
+	return nil
+}
+
+func normalizedNonEmpty(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, raw := range values {
+		value := strings.ToLower(strings.TrimSpace(raw))
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
