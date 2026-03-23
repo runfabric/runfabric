@@ -3,10 +3,8 @@ package app
 import (
 	"context"
 
+	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
-	awsprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/aws"
-	azureprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/azure"
-	gcpprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/gcp"
 )
 
 // Metrics returns metrics for the deployed service (from receipt/metadata or provider).
@@ -19,9 +17,13 @@ func Metrics(configPath, stage, providerOverride string, all bool, service strin
 	if err := validateServiceScope(ctx.Config.Service, service); err != nil {
 		return nil, err
 	}
+	provider, err := resolveProvider(ctx)
+	if err != nil {
+		return nil, err
+	}
 	receipt, _ := ctx.Backends.Receipts.Load(ctx.Stage)
 	out := map[string]any{
-		"provider": ctx.Config.Provider.Name,
+		"provider": provider.name,
 		"stage":    ctx.Stage,
 		"service":  ctx.Config.Service,
 		"metrics":  map[string]any{"invocations": nil, "errors": nil, "duration": nil},
@@ -39,34 +41,18 @@ func Metrics(configPath, stage, providerOverride string, all bool, service strin
 			out["workflowCost"] = state.WorkflowCostFromRuns(runs)
 		}
 	}
-	// Provider-specific metrics.
-	switch ctx.Config.Provider.Name {
-	case "aws-lambda":
-		cloudMetrics, err := awsprovider.FetchLambdaMetrics(context.Background(), ctx.Config, ctx.Stage)
-		if err == nil && len(cloudMetrics) > 0 {
-			out["perFunction"] = cloudMetrics
-			out["message"] = "CloudWatch metrics (last 1h); use provider console for more."
-		} else {
-			out["message"] = "Metrics: use provider console (e.g. CloudWatch) when not deployed or region unavailable."
+	if obs, ok := provider.provider.(providers.ObservabilityCapable); ok {
+		res, obsErr := obs.FetchMetrics(context.Background(), providers.MetricsRequest{Config: ctx.Config, Stage: ctx.Stage})
+		if obsErr == nil && res != nil {
+			if len(res.PerFunction) > 0 {
+				out["perFunction"] = res.PerFunction
+			}
+			if res.Message != "" {
+				out["message"] = res.Message
+				return out, nil
+			}
 		}
-	case "gcp-functions":
-		perFn, err := gcpprovider.FetchMetrics(context.Background(), ctx.Config, ctx.Stage)
-		if err == nil && len(perFn) > 0 {
-			out["perFunction"] = perFn
-			out["message"] = "GCP Cloud Monitoring metrics; use Cloud Console for more."
-		} else {
-			out["message"] = "GCP: use Cloud Console / Cloud Monitoring for function metrics."
-		}
-	case "azure-functions":
-		perFn, err := azureprovider.FetchMetrics(context.Background(), ctx.Config, ctx.Stage)
-		if err == nil && len(perFn) > 0 {
-			out["perFunction"] = perFn
-			out["message"] = "Azure Application Insights metrics; use Azure Portal for more."
-		} else {
-			out["message"] = "Azure: use Azure Portal / Application Insights for function metrics."
-		}
-	default:
-		out["message"] = "Metrics: use provider console (e.g. CloudWatch) for now; metrics export coming soon."
 	}
+	out["message"] = "Metrics: use provider console for now; metrics export coming soon."
 	return out, nil
 }

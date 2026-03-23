@@ -6,6 +6,7 @@ import (
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )
 
 // APIDispatchProvider marks providers that should be executed through internal/deploy/api
@@ -70,11 +71,10 @@ func (p *apiProviderAdapter) Logs(ctx context.Context, req providers.LogsRequest
 
 // RegisterAPIProviders registers provider adapters for API-dispatched providers.
 func RegisterAPIProviders(reg *providers.Registry) {
-	for _, name := range deployapi.APIProviderNames() {
-		// Keep built-in/internal providers authoritative.
-		if name == "aws-lambda" || name == "gcp-functions" {
+	for _, d := range providerpolicy.All() {
+		if d.ExcludeFromAPIDispatch {
 			continue
 		}
-		_ = reg.Register(&apiProviderAdapter{name: name})
+		_ = reg.Register(&apiProviderAdapter{name: d.ID})
 	}
 }

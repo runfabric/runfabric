@@ -25,5 +25,5 @@ func (p *Provider) ValidateConfig(ctx context.Context, req providers.ValidateCon
 }
 
 func (p *Provider) Name() string {
-	return "aws-lambda"
+	return ProviderID
 }

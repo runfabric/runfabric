@@ -29,5 +29,5 @@ func (p *Provider) ValidateConfig(ctx context.Context, req providers.ValidateCon
 
 // Name returns the provider identifier (gcp-functions for config compatibility).
 func (p *Provider) Name() string {
-	return "gcp-functions"
+	return ProviderID
 }

@@ -157,9 +157,29 @@ func invokeNodeHandler(ctx context.Context, req Request) (*Response, error) {
 	}, nil
 }
 
+type simulatorFactory struct {
+	id     string
+	create func() Simulator
+}
+
+func builtinSimulatorFactories() []simulatorFactory {
+	return []simulatorFactory{
+		{id: "local", create: func() Simulator { return localSimulator{} }},
+	}
+}
+
+// BuiltinSimulatorManifests returns simulator metadata entries used by extension manifest catalogs.
+func BuiltinSimulatorManifests() []Meta {
+	return []Meta{
+		{ID: "local", Name: "Local Simulator", Description: "Built-in local simulator for call-local/dev"},
+	}
+}
+
 // NewBuiltinRegistry returns a simulator registry populated with built-in simulators.
 func NewBuiltinRegistry() *Registry {
 	reg := NewRegistry()
-	_ = reg.Register(localSimulator{})
+	for _, f := range builtinSimulatorFactories() {
+		_ = reg.Register(f.create())
+	}
 	return reg
 }

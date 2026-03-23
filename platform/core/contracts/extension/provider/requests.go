@@ -1,5 +1,7 @@
 package provider
 
+import "context"
+
 // ProviderMeta is the plugin metadata returned by ProviderPlugin.Meta().
 type ProviderMeta struct {
 	Name              string   // e.g. aws, cloudflare, vercel, gcp-functions
@@ -92,4 +94,84 @@ type OrchestrationInspectRequest struct {
 	Config *Config
 	Stage  string
 	Root   string
+}
+
+// MetricsRequest is the input to FetchMetrics.
+type MetricsRequest struct {
+	Config *Config
+	Stage  string
+}
+
+// MetricsResult contains provider metrics payload for app/workflow callers.
+type MetricsResult struct {
+	PerFunction map[string]any `json:"perFunction,omitempty"`
+	Message     string         `json:"message,omitempty"`
+}
+
+// TracesRequest is the input to FetchTraces.
+type TracesRequest struct {
+	Config *Config
+	Stage  string
+}
+
+// TracesResult contains provider trace payload for app/workflow callers.
+type TracesResult struct {
+	Traces  []any  `json:"traces,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+// DevStreamRequest is the input to PrepareDevStream.
+type DevStreamRequest struct {
+	Config    *Config
+	Stage     string
+	TunnelURL string
+	Region    string
+}
+
+// DevStreamSession captures a reversible provider-side tunnel redirect.
+type DevStreamSession struct {
+	EffectiveMode  string   `json:"effectiveMode,omitempty"`
+	MissingPrereqs []string `json:"missingPrereqs,omitempty"`
+	StatusMessage  string   `json:"statusMessage,omitempty"`
+	restore        func(context.Context) error
+}
+
+// NewDevStreamSession builds a session with an optional restore callback.
+func NewDevStreamSession(mode string, missing []string, message string, restore func(context.Context) error) *DevStreamSession {
+	return &DevStreamSession{
+		EffectiveMode:  mode,
+		MissingPrereqs: append([]string(nil), missing...),
+		StatusMessage:  message,
+		restore:        restore,
+	}
+}
+
+// Restore reverts provider-side tunnel redirect when supported.
+func (s *DevStreamSession) Restore(ctx context.Context) error {
+	if s == nil || s.restore == nil {
+		return nil
+	}
+	return s.restore(ctx)
+}
+
+// RecoveryRequest is the input to Recover.
+type RecoveryRequest struct {
+	Config  *Config
+	Root    string
+	Service string
+	Stage   string
+	Region  string
+	Mode    string
+	Journal any
+}
+
+// RecoveryResult contains provider recovery outcome.
+type RecoveryResult struct {
+	Recovered  bool              `json:"recovered"`
+	Mode       string            `json:"mode"`
+	Status     string            `json:"status"`
+	Message    string            `json:"message,omitempty"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+	Errors     []string          `json:"errors,omitempty"`
+	ResumeData map[string]any    `json:"resumeData,omitempty"`
 }

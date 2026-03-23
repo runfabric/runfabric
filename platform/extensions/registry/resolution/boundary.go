@@ -45,10 +45,8 @@ func New(opts Options) (*Boundary, error) {
 			PreferExternal: opts.PreferExternal,
 			PinnedVersions: opts.PinnedVersions,
 		},
-		internalProviderID: map[string]struct{}{
-			"aws-lambda": {},
-		},
-		apiProviderID: map[string]struct{}{},
+		internalProviderID: map[string]struct{}{},
+		apiProviderID:      map[string]struct{}{},
 	}
 	for _, name := range deployapi.APIProviderNames() {
 		b.apiProviderID[name] = struct{}{}
@@ -146,7 +144,13 @@ func (b *Boundary) RefreshExternal() error {
 		if _, ok := b.providers.Get(m.ID); ok && !b.discoverOptions.PreferExternal {
 			continue
 		}
-		_ = b.providers.Register(external.NewExternalProviderAdapter(m.ID, m.Executable))
+		_ = b.providers.Register(external.NewExternalProviderAdapter(m.ID, m.Executable, providers.ProviderMeta{
+			Name:              m.ID,
+			Capabilities:      append([]string(nil), m.Capabilities...),
+			SupportsRuntime:   append([]string(nil), m.SupportsRuntime...),
+			SupportsTriggers:  append([]string(nil), m.SupportsTriggers...),
+			SupportsResources: append([]string(nil), m.SupportsResources...),
+		}))
 	}
 	return nil
 }

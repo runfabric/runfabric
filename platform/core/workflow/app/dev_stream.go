@@ -3,18 +3,8 @@ package app
 import (
 	"context"
 
+	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	coredevstream "github.com/runfabric/runfabric/platform/core/model/devstream"
-	alibabaprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/alibaba"
-	awsprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/aws"
-	azureprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/azure"
-	cfprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/cloudflare"
-	digitaloceanprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/digitalocean"
-	flyprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/fly"
-	gcpprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/gcp"
-	ibmprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/ibm"
-	kubernetesprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/kubernetes"
-	netlifyprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/netlify"
-	vercelprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/vercel"
 )
 
 // PrepareDevStreamTunnel redirects the provider's invocation target (e.g. API Gateway) to tunnelURL
@@ -38,182 +28,39 @@ func PrepareDevStreamTunnelWithReport(configPath, stage, tunnelURL string) (rest
 	p := ctx.Config.Provider.Name
 	status := coredevstream.EvaluateProvider(p)
 	report = reportFromStatus(status)
-
-	switch p {
-	case "aws-lambda":
-		state, err := awsprovider.RedirectToTunnel(context.Background(), ctx.Config, stage, tunnelURL)
-		if err != nil {
-			return nil, report, err
-		}
-		report.EffectiveMode = string(coredevstream.ModeRouteRewrite)
-		report.Message = "full route rewrite configured; provider state will be restored on exit"
-		region := ctx.Config.Provider.Region
-		return func() {
-			_ = state.Restore(context.Background(), region)
-		}, report, nil
-
-	case "gcp-functions":
-		state, err := gcpprovider.RedirectToTunnel(context.Background(), ctx.Config, stage, tunnelURL)
-		if err != nil {
-			return nil, report, err
-		}
-		if state != nil {
-			report.EffectiveMode = string(state.EffectiveMode)
-			report.MissingPrereqs = append([]string(nil), state.MissingPrereqs...)
-			report.Message = state.StatusMessage
-		}
-		return func() {
-			if state != nil {
-				_ = state.Restore(context.Background(), ctx.Config.Provider.Region)
-			}
-		}, report, nil
-
-	case "cloudflare-workers":
-		state, err := cfprovider.RedirectToTunnel(context.Background(), ctx.Config, stage, tunnelURL)
-		if err != nil {
-			return nil, report, err
-		}
-		if state != nil {
-			report.EffectiveMode = string(state.EffectiveMode)
-			report.MissingPrereqs = append([]string(nil), state.MissingPrereqs...)
-			report.Message = state.StatusMessage
-		}
-		return func() {
-			if state != nil {
-				_ = state.Restore(context.Background(), "")
-			}
-		}, report, nil
-
-	case "azure-functions":
-		state, err := azureprovider.RedirectToTunnel(context.Background(), ctx.Config, stage, tunnelURL)
-		if err != nil {
-			return nil, report, err
-		}
-		if state != nil {
-			report.EffectiveMode = state.Mode
-			report.MissingPrereqs = append([]string(nil), state.MissingPrereqs...)
-			report.Message = state.StatusMessage
-		}
-		return func() {
-			if state != nil {
-				_ = state.Restore(context.Background())
-			}
-		}, report, nil
-
-	case "digitalocean-functions":
-		state, err := digitaloceanprovider.RedirectToTunnel(context.Background(), ctx.Config, stage, tunnelURL)
-		if err != nil {
-			return nil, report, err
-		}
-		if state != nil {
-			report.EffectiveMode = state.Mode
-			report.MissingPrereqs = append([]string(nil), state.MissingPrereqs...)
-			report.Message = state.StatusMessage
-		}
-		return func() {
-			if state != nil {
-				_ = state.Restore(context.Background())
-			}
-		}, report, nil
-
-	case "fly-machines":
-		state, err := flyprovider.RedirectToTunnel(context.Background(), ctx.Config, stage, tunnelURL)
-		if err != nil {
-			return nil, report, err
-		}
-		if state != nil {
-			report.EffectiveMode = state.Mode
-			report.MissingPrereqs = append([]string(nil), state.MissingPrereqs...)
-			report.Message = state.StatusMessage
-		}
-		return func() {
-			if state != nil {
-				_ = state.Restore(context.Background())
-			}
-		}, report, nil
-
-	case "kubernetes":
-		state, err := kubernetesprovider.RedirectToTunnel(context.Background(), ctx.Config, stage, tunnelURL)
-		if err != nil {
-			return nil, report, err
-		}
-		if state != nil {
-			report.EffectiveMode = state.Mode
-			report.MissingPrereqs = append([]string(nil), state.MissingPrereqs...)
-			report.Message = state.StatusMessage
-		}
-		return func() {
-			if state != nil {
-				_ = state.Restore(context.Background())
-			}
-		}, report, nil
-
-	case "netlify":
-		state, err := netlifyprovider.RedirectToTunnel(context.Background(), ctx.Config, stage, tunnelURL)
-		if err != nil {
-			return nil, report, err
-		}
-		if state != nil {
-			report.EffectiveMode = state.Mode
-			report.MissingPrereqs = append([]string(nil), state.MissingPrereqs...)
-			report.Message = state.StatusMessage
-		}
-		return func() {
-			if state != nil {
-				_ = state.Restore(context.Background())
-			}
-		}, report, nil
-
-	case "vercel":
-		state, err := vercelprovider.RedirectToTunnel(context.Background(), ctx.Config, stage, tunnelURL)
-		if err != nil {
-			return nil, report, err
-		}
-		if state != nil {
-			report.EffectiveMode = state.Mode
-			report.MissingPrereqs = append([]string(nil), state.MissingPrereqs...)
-			report.Message = state.StatusMessage
-		}
-		return func() {
-			if state != nil {
-				_ = state.Restore(context.Background())
-			}
-		}, report, nil
-
-	case "alibaba-fc":
-		state, err := alibabaprovider.RedirectToTunnel(context.Background(), ctx.Config, stage, tunnelURL)
-		if err != nil {
-			return nil, report, err
-		}
-		if state != nil {
-			report.EffectiveMode = state.Mode
-			report.MissingPrereqs = append([]string(nil), state.MissingPrereqs...)
-			report.Message = state.StatusMessage
-		}
-		return func() {
-			if state != nil {
-				_ = state.Restore(context.Background())
-			}
-		}, report, nil
-
-	case "ibm-openwhisk":
-		state, err := ibmprovider.RedirectToTunnel(context.Background(), ctx.Config, stage, tunnelURL)
-		if err != nil {
-			return nil, report, err
-		}
-		if state != nil {
-			report.EffectiveMode = state.Mode
-			report.MissingPrereqs = append([]string(nil), state.MissingPrereqs...)
-			report.Message = state.StatusMessage
-		}
-		return func() {
-			if state != nil {
-				_ = state.Restore(context.Background())
-			}
-		}, report, nil
-
-	default:
-		// Other providers: no auto-wire support
+	provider, err := resolveProvider(ctx)
+	if err != nil {
 		return nil, report, nil
 	}
+	p = provider.name
+	status = coredevstream.EvaluateProvider(p)
+	report = reportFromStatus(status)
+	devstreamCapable, ok := provider.provider.(providers.DevStreamCapable)
+	if !ok {
+		return nil, report, nil
+	}
+	session, err := devstreamCapable.PrepareDevStream(context.Background(), providers.DevStreamRequest{
+		Config:    ctx.Config,
+		Stage:     stage,
+		TunnelURL: tunnelURL,
+		Region:    ctx.Config.Provider.Region,
+	})
+	if err != nil {
+		return nil, report, err
+	}
+	if session == nil {
+		return nil, report, nil
+	}
+	if session.EffectiveMode != "" {
+		report.EffectiveMode = session.EffectiveMode
+	}
+	if len(session.MissingPrereqs) > 0 {
+		report.MissingPrereqs = append([]string(nil), session.MissingPrereqs...)
+	}
+	if session.StatusMessage != "" {
+		report.Message = session.StatusMessage
+	}
+	return func() {
+		_ = session.Restore(context.Background())
+	}, report, nil
 }

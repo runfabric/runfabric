@@ -22,12 +22,6 @@ func Validate(cfg *Config) error {
 		if source != "external" && strings.TrimSpace(cfg.Provider.Version) != "" {
 			return fmt.Errorf("provider.version requires provider.source to be external")
 		}
-		if source == "external" {
-			name := strings.TrimSpace(cfg.Provider.Name)
-			if name == "aws-lambda" {
-				return fmt.Errorf("provider.source external is not supported for %q while AWS remains internal", name)
-			}
-		}
 	default:
 		return fmt.Errorf("provider.source must be builtin or external (got %q)", cfg.Provider.Source)
 	}

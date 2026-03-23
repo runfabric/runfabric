@@ -2,6 +2,8 @@ package manifests
 
 import (
 	"testing"
+
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )
 
 func TestPluginRegistry_List(t *testing.T) {
@@ -25,12 +27,15 @@ func TestPluginRegistry_Get(t *testing.T) {
 	if reg.Get("aws") != nil {
 		t.Fatal("Get(aws) expected nil after alias removal")
 	}
-	m := reg.Get("aws-lambda")
-	if m == nil {
-		t.Fatal("Get(aws-lambda) expected non-nil")
-	}
-	if m.Kind != KindProvider {
-		t.Errorf("aws-lambda kind: got %s", m.Kind)
+	for _, d := range providerpolicy.BuiltinManifestProviders() {
+		m := reg.Get(d.ID)
+		if m == nil {
+			t.Errorf("Get(%q) expected non-nil (defined in BuiltinManifestProviders)", d.ID)
+			continue
+		}
+		if m.Kind != KindProvider {
+			t.Errorf("Get(%q) kind: got %s, want %s", d.ID, m.Kind, KindProvider)
+		}
 	}
 	if reg.Get("nonexistent") != nil {
 		t.Error("Get(nonexistent) expected nil")
@@ -43,9 +48,13 @@ func TestPluginRegistry_Search(t *testing.T) {
 	if len(empty) == 0 {
 		t.Error("Search(\"\") should return all plugins")
 	}
-	aws := reg.Search("aws")
-	if len(aws) < 1 {
-		t.Error("Search(aws) should return at least one plugin")
+	manifestProviders := providerpolicy.BuiltinManifestProviders()
+	if len(manifestProviders) > 0 {
+		term := manifestProviders[0].ID
+		found := reg.Search(term)
+		if len(found) < 1 {
+			t.Errorf("Search(%q) should return at least one plugin (first builtin manifest provider)", term)
+		}
 	}
 	node := reg.Search("node")
 	if len(node) < 1 {

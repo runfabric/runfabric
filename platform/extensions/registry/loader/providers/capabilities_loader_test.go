@@ -27,7 +27,7 @@ func TestLoadRegistryAndResolveProvider(t *testing.T) {
 	if reg == nil {
 		t.Fatal("expected non-nil registry")
 	}
-	p, err := ResolveProvider("aws-lambda", opts)
+	p, err := ResolveProvider("gcp-functions", opts)
 	if err != nil {
 		t.Fatalf("resolve provider: %v", err)
 	}

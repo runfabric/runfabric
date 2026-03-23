@@ -110,3 +110,19 @@ type OrchestrationCapable interface {
 	InvokeOrchestration(ctx context.Context, req OrchestrationInvokeRequest) (*InvokeResult, error)
 	InspectOrchestrations(ctx context.Context, req OrchestrationInspectRequest) (map[string]any, error)
 }
+
+// ObservabilityCapable is an optional capability for provider-native metrics and traces.
+type ObservabilityCapable interface {
+	FetchMetrics(ctx context.Context, req MetricsRequest) (*MetricsResult, error)
+	FetchTraces(ctx context.Context, req TracesRequest) (*TracesResult, error)
+}
+
+// DevStreamCapable is an optional capability for provider-side tunnel redirect/restore.
+type DevStreamCapable interface {
+	PrepareDevStream(ctx context.Context, req DevStreamRequest) (*DevStreamSession, error)
+}
+
+// RecoveryCapable is an optional capability for provider-specific recovery flows.
+type RecoveryCapable interface {
+	Recover(ctx context.Context, req RecoveryRequest) (*RecoveryResult, error)
+}

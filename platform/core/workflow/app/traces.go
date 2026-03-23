@@ -3,10 +3,8 @@ package app
 import (
 	"context"
 
+	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
-	awsprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/aws"
-	azureprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/azure"
-	gcpprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/gcp"
 )
 
 // Traces returns trace data for the deployed service (from receipt/metadata or provider).
@@ -19,9 +17,13 @@ func Traces(configPath, stage, providerOverride string, all bool, service string
 	if err := validateServiceScope(ctx.Config.Service, service); err != nil {
 		return nil, err
 	}
+	provider, err := resolveProvider(ctx)
+	if err != nil {
+		return nil, err
+	}
 	receipt, _ := ctx.Backends.Receipts.Load(ctx.Stage)
 	out := map[string]any{
-		"provider": ctx.Config.Provider.Name,
+		"provider": provider.name,
 		"stage":    ctx.Stage,
 		"service":  ctx.Config.Service,
 		"traces":   []any{},
@@ -37,33 +39,18 @@ func Traces(configPath, stage, providerOverride string, all bool, service string
 			out["workflowRuns"] = runs
 		}
 	}
-	switch ctx.Config.Provider.Name {
-	case "aws-lambda":
-		summaries, err := awsprovider.FetchXRayTraces(context.Background(), ctx.Config, ctx.Stage)
-		if err == nil && len(summaries) > 0 {
-			out["traces"] = summaries
-			out["message"] = "X-Ray trace summaries (last 1h); use AWS console for full trace details."
-		} else {
-			out["message"] = "Traces: use provider console or runfabric logs when X-Ray is unavailable."
+	if obs, ok := provider.provider.(providers.ObservabilityCapable); ok {
+		res, obsErr := obs.FetchTraces(context.Background(), providers.TracesRequest{Config: ctx.Config, Stage: ctx.Stage})
+		if obsErr == nil && res != nil {
+			if len(res.Traces) > 0 {
+				out["traces"] = res.Traces
+			}
+			if res.Message != "" {
+				out["message"] = res.Message
+				return out, nil
+			}
 		}
-	case "gcp-functions":
-		summaries, err := gcpprovider.FetchTraces(context.Background(), ctx.Config, ctx.Stage)
-		if err == nil && len(summaries) > 0 {
-			out["traces"] = summaries
-			out["message"] = "GCP Cloud Trace summaries; use Cloud Console for full details."
-		} else {
-			out["message"] = "GCP: use Cloud Console / Cloud Trace for traces."
-		}
-	case "azure-functions":
-		summaries, err := azureprovider.FetchTraces(context.Background(), ctx.Config, ctx.Stage)
-		if err == nil && len(summaries) > 0 {
-			out["traces"] = summaries
-			out["message"] = "Azure Application Insights traces; use Azure Portal for full details."
-		} else {
-			out["message"] = "Azure: use Azure Portal / Application Insights for traces."
-		}
-	default:
-		out["message"] = "Traces: use provider console or runfabric logs for now; trace export coming soon."
 	}
+	out["message"] = "Traces: use provider console or runfabric logs for now; trace export coming soon."
 	return out, nil
 }

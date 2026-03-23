@@ -8,6 +8,7 @@ import (
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )
 
 // APIDispatchProvider marks providers that should be executed through internal/deploy/api
@@ -70,7 +71,39 @@ func (p *apiProviderAdapter) Logs(ctx context.Context, req providers.LogsRequest
 	return deployapi.Logs(ctx, p.name, req.Config, req.Stage, req.Function, "", nil)
 }
 
+func (p *apiProviderAdapter) FetchMetrics(ctx context.Context, req providers.MetricsRequest) (*providers.MetricsResult, error) {
+	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.FetchMetrics != nil {
+		return h.FetchMetrics(ctx, req.Config, req.Stage)
+	}
+	return &providers.MetricsResult{Message: "Metrics: use provider console for now; metrics export coming soon."}, nil
+}
+
+func (p *apiProviderAdapter) FetchTraces(ctx context.Context, req providers.TracesRequest) (*providers.TracesResult, error) {
+	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.FetchTraces != nil {
+		return h.FetchTraces(ctx, req.Config, req.Stage)
+	}
+	return &providers.TracesResult{Message: "Traces: use provider console or runfabric logs for now; trace export coming soon."}, nil
+}
+
+func (p *apiProviderAdapter) PrepareDevStream(ctx context.Context, req providers.DevStreamRequest) (*providers.DevStreamSession, error) {
+	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.PrepareDevStream != nil {
+		return h.PrepareDevStream(ctx, req.Config, req.Stage, req.TunnelURL)
+	}
+	return nil, nil
+}
+
+func (p *apiProviderAdapter) Recover(ctx context.Context, req providers.RecoveryRequest) (*providers.RecoveryResult, error) {
+	h := providerpolicy.GetAPIHooks(p.name)
+	if h == nil || h.Recover == nil {
+		return nil, fmt.Errorf("provider %q does not support recovery", p.name)
+	}
+	return h.Recover(ctx, req)
+}
+
 func (p *apiProviderAdapter) SyncOrchestrations(ctx context.Context, req providers.OrchestrationSyncRequest) (*providers.OrchestrationSyncResult, error) {
+	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.SyncOrchestrations != nil {
+		return h.SyncOrchestrations(ctx, req)
+	}
 	if p.name != "azure-functions" {
 		return &providers.OrchestrationSyncResult{}, nil
 	}
@@ -78,6 +111,9 @@ func (p *apiProviderAdapter) SyncOrchestrations(ctx context.Context, req provide
 }
 
 func (p *apiProviderAdapter) RemoveOrchestrations(ctx context.Context, req providers.OrchestrationRemoveRequest) (*providers.OrchestrationSyncResult, error) {
+	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.RemoveOrchestrations != nil {
+		return h.RemoveOrchestrations(ctx, req)
+	}
 	if p.name != "azure-functions" {
 		return &providers.OrchestrationSyncResult{}, nil
 	}
@@ -85,6 +121,9 @@ func (p *apiProviderAdapter) RemoveOrchestrations(ctx context.Context, req provi
 }
 
 func (p *apiProviderAdapter) InvokeOrchestration(ctx context.Context, req providers.OrchestrationInvokeRequest) (*providers.InvokeResult, error) {
+	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.InvokeOrchestration != nil {
+		return h.InvokeOrchestration(ctx, req)
+	}
 	if p.name != "azure-functions" {
 		return nil, fmt.Errorf("provider %q does not support orchestration", p.name)
 	}
@@ -96,6 +135,9 @@ func (p *apiProviderAdapter) InvokeOrchestration(ctx context.Context, req provid
 }
 
 func (p *apiProviderAdapter) InspectOrchestrations(ctx context.Context, req providers.OrchestrationInspectRequest) (map[string]any, error) {
+	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.InspectOrchestrations != nil {
+		return h.InspectOrchestrations(ctx, req)
+	}
 	if p.name != "azure-functions" {
 		return map[string]any{}, nil
 	}
@@ -104,11 +146,10 @@ func (p *apiProviderAdapter) InspectOrchestrations(ctx context.Context, req prov
 
 // RegisterAPIProviders registers provider adapters for API-dispatched providers.
 func RegisterAPIProviders(reg *providers.Registry) {
-	for _, name := range deployapi.APIProviderNames() {
-		// Keep built-in/internal providers authoritative.
-		if name == "aws-lambda" || name == "gcp-functions" {
+	for _, d := range providerpolicy.All() {
+		if d.ExcludeFromAPIDispatch {
 			continue
 		}
-		_ = reg.Register(&apiProviderAdapter{name: name})
+		_ = reg.Register(&apiProviderAdapter{name: d.ID})
 	}
 }

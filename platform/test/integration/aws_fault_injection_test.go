@@ -8,7 +8,6 @@ import (
 
 	provider "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	awsprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/aws"
 )
 
 func TestAWSFaultInjectionAndResumeIfEnabled(t *testing.T) {
@@ -69,7 +68,7 @@ functions:
 		_ = os.Unsetenv("RUNFABRIC_FAIL_AFTER_PHASE")
 	}()
 
-	p := awsprovider.New()
+	p := resolveAWSProvider(t)
 	_, err = p.Deploy(context.Background(), provider.DeployRequest{Config: cfg, Stage: "dev", Root: tmp})
 	if err == nil {
 		t.Fatal("expected injected deploy failure")

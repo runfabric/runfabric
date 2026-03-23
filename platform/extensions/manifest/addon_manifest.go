@@ -1,5 +1,7 @@
 package manifests
 
+import extaddons "github.com/runfabric/runfabric/platform/extensions/addons"
+
 // AddonManifest describes the contract for a RunFabric Addon (JS/TS) for validation and catalog.
 type AddonManifest struct {
 	ID          string            `json:"id"`
@@ -26,11 +28,26 @@ func NewAddonManifestRegistry() *AddonManifestRegistry {
 }
 
 func builtinAddonManifests() []*AddonManifest {
-	return []*AddonManifest{
-		{ID: "sentry", Name: "Sentry", Description: "Error tracking and performance (SENTRY_DSN, etc.)", Permissions: Permissions{Env: true, Network: true}},
-		{ID: "datadog", Name: "Datadog", Description: "APM and metrics (DD_API_KEY, DD_APP_KEY, etc.)", Permissions: Permissions{Env: true, Network: true}},
-		{ID: "logdrain", Name: "Log drain", Description: "Log drain / external logging (endpoint, API key)", Permissions: Permissions{Env: true, Network: true}},
-		{ID: "custom", Name: "Custom", Description: "User-defined add-on (options + secrets)", Permissions: Permissions{Env: true}},
+	catalog := extaddons.NewBuiltinAddonsCatalog("")
+	out := make([]*AddonManifest, 0, len(catalog))
+	for _, e := range catalog {
+		out = append(out, &AddonManifest{
+			ID:          e.Name,
+			Name:        e.Name,
+			Description: e.Description,
+			Version:     e.Version,
+			Permissions: addonPermissions(e.Name),
+		})
+	}
+	return out
+}
+
+func addonPermissions(name string) Permissions {
+	switch name {
+	case "sentry", "datadog", "logdrain":
+		return Permissions{Env: true, Network: true}
+	default:
+		return Permissions{Env: true}
 	}
 }
 

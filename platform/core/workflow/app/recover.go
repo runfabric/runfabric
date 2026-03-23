@@ -7,13 +7,11 @@ import (
 	"strings"
 	"time"
 
+	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	appErrs "github.com/runfabric/runfabric/platform/core/model/errors"
 	"github.com/runfabric/runfabric/platform/core/state/locking"
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
 	"github.com/runfabric/runfabric/platform/core/workflow/recovery"
-	awsprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/aws"
-	azureprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/azure"
-	gcpprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/gcp"
 )
 
 func Recover(configPath, stage string, mode recovery.Mode) (any, error) {
@@ -58,58 +56,43 @@ func Recover(configPath, stage string, mode recovery.Mode) (any, error) {
 	}
 	defer func() { _ = lockHandle.Release() }()
 
-	reg := recovery.NewRegistry()
-	reg.Register("aws-lambda", func(j any) recovery.Handler { return awsprovider.NewRecoveryHandler(journal) })
-	reg.Register("gcp-functions", func(j any) recovery.Handler { return gcpprovider.NewRecoveryHandler(journal) })
-	reg.Register("azure-functions", func(j any) recovery.Handler { return azureprovider.NewRecoveryHandler(journal) })
-
-	handler, err := reg.Get(ctx.Config.Provider.Name, journal)
+	provider, err := resolveProvider(ctx)
 	if err != nil {
 		return nil, err
 	}
+	recoveryProvider, ok := provider.provider.(providers.RecoveryCapable)
+	if !ok {
+		return nil, appErrs.Wrap(appErrs.CodeDeployFailed, fmt.Sprintf("provider %q does not support recovery", provider.name), nil)
+	}
 
-	req := recovery.Request{
+	req := providers.RecoveryRequest{
+		Config:  ctx.Config,
 		Root:    ctx.RootDir,
 		Service: ctx.Config.Service,
 		Stage:   ctx.Stage,
 		Region:  ctx.Config.Provider.Region,
-		Mode:    mode,
+		Mode:    string(mode),
+		Journal: journal,
 	}
-
-	switch mode {
-	case recovery.ModeResume:
-		if ctx.Config.Provider.Name == "aws-lambda" {
-			return awsprovider.ResumeDeploy(context.Background(), ctx.Config, ctx.Stage, ctx.RootDir, journal)
-		}
-		res, runErr := handler.Resume(context.Background(), req)
-		if runErr != nil {
-			return nil, runErr
-		}
-		if err := validateRecoveryResult(mode, res); err != nil {
-			return nil, err
-		}
-		return res, nil
-	case recovery.ModeRollback:
-		res, runErr := handler.Rollback(context.Background(), req)
-		if runErr != nil {
-			return nil, runErr
-		}
-		if err := validateRecoveryResult(mode, res); err != nil {
-			return nil, err
-		}
-		return res, nil
-	case recovery.ModeInspect:
-		res, runErr := handler.Inspect(context.Background(), req)
-		if runErr != nil {
-			return nil, runErr
-		}
-		if err := validateRecoveryResult(mode, res); err != nil {
-			return nil, err
-		}
-		return res, nil
-	default:
-		return nil, appErrs.Wrap(appErrs.CodeDeployFailed, "unsupported recovery mode", nil)
+	res, runErr := recoveryProvider.Recover(context.Background(), req)
+	if runErr != nil {
+		return nil, runErr
 	}
+	if mode == recovery.ModeResume && len(res.ResumeData) > 0 {
+		return res.ResumeData, nil
+	}
+	out := &recovery.Result{
+		Recovered: res.Recovered,
+		Mode:      res.Mode,
+		Status:    res.Status,
+		Message:   res.Message,
+		Metadata:  res.Metadata,
+		Errors:    res.Errors,
+	}
+	if err := validateRecoveryResult(mode, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func validateRecoveryResult(mode recovery.Mode, res *recovery.Result) error {

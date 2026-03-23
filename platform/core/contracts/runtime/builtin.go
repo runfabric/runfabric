@@ -47,10 +47,34 @@ func (r pythonRuntime) Invoke(_ context.Context, req InvokeRequest) (*InvokeResu
 	return &InvokeResult{Output: out}, nil
 }
 
+type runtimeFactory struct {
+	id     string
+	create func() Runtime
+}
+
+func builtinRuntimeFactories() []runtimeFactory {
+	return []runtimeFactory{
+		{id: "nodejs", create: func() Runtime { return nodeRuntime{} }},
+		{id: "python", create: func() Runtime { return pythonRuntime{} }},
+	}
+}
+
+// BuiltinRuntimeManifests returns runtime metadata entries used by extension manifest catalogs.
+// It includes both canonical runtime IDs and compatibility aliases accepted by NormalizeRuntimeID.
+func BuiltinRuntimeManifests() []Meta {
+	return []Meta{
+		{ID: "nodejs", Name: "Node.js", Description: "Node.js runtime (build and invoke)"},
+		{ID: "runtime-node", Name: "Node.js", Description: "Node.js runtime (alias)"},
+		{ID: "python", Name: "Python", Description: "Python runtime (build and invoke)"},
+		{ID: "runtime-python", Name: "Python", Description: "Python runtime (alias)"},
+	}
+}
+
 // NewBuiltinRegistry returns a runtimes registry populated with built-in runtime plugins.
 func NewBuiltinRegistry() *Registry {
 	reg := NewRegistry()
-	_ = reg.Register(nodeRuntime{})
-	_ = reg.Register(pythonRuntime{})
+	for _, f := range builtinRuntimeFactories() {
+		_ = reg.Register(f.create())
+	}
 	return reg
 }

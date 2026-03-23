@@ -8,7 +8,6 @@ import (
 
 	provider "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	awsprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/aws"
 )
 
 func TestRealAWSDeployLockIfEnabled(t *testing.T) {
@@ -59,7 +58,7 @@ functions:
 		t.Fatal(err)
 	}
 
-	p := awsprovider.New()
+	p := resolveAWSProvider(t)
 
 	out, err := p.Deploy(context.Background(), provider.DeployRequest{Config: cfg, Stage: "dev", Root: tmp})
 	if err != nil {

@@ -8,7 +8,6 @@ import (
 
 	provider "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	awsprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/aws"
 )
 
 func TestRealAWSHTTPDeployIfEnabled(t *testing.T) {
@@ -69,7 +68,7 @@ functions:
 		t.Fatal(err)
 	}
 
-	p := awsprovider.New()
+	p := resolveAWSProvider(t)
 
 	planResult, err := p.Plan(context.Background(), provider.PlanRequest{Config: cfg, Stage: "dev", Root: cfgContent})
 	if err != nil {

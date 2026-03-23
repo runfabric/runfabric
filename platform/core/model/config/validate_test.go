@@ -82,7 +82,7 @@ func TestValidate_ProviderSourceRejectsInvalidValues(t *testing.T) {
 	}
 }
 
-func TestValidate_ProviderSourceExternalRejectsAWS(t *testing.T) {
+func TestValidate_ProviderSourceExternalAcceptsAWS(t *testing.T) {
 	cfg := &Config{
 		Service: "svc",
 		Provider: ProviderConfig{
@@ -92,8 +92,8 @@ func TestValidate_ProviderSourceExternalRejectsAWS(t *testing.T) {
 		},
 		Functions: map[string]FunctionConfig{"api": {Handler: "src/handler.default"}},
 	}
-	if err := Validate(cfg); err == nil {
-		t.Fatal("expected error for provider.source=external on aws-lambda")
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected provider.source=external to be accepted for aws-lambda: %v", err)
 	}
 }
 

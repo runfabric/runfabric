@@ -1,11 +1,9 @@
 package unit
 
 import (
-	"context"
 	"testing"
 
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
-	awsprovider "github.com/runfabric/runfabric/platform/extensions/interfaces/providers/aws"
 )
 
 func TestRecoveryDetectsUnfinishedJournal(t *testing.T) {
@@ -17,10 +15,6 @@ func TestRecoveryDetectsUnfinishedJournal(t *testing.T) {
 	if err := j.Save(); err != nil {
 		t.Fatalf("save journal failed: %v", err)
 	}
-
-	// We can't load real AWS clients here, so this is more of a backend sanity test.
-	_ = context.Background()
-	_ = awsprovider.New()
 
 	loaded, err := backend.Load("svc", "dev")
 	if err != nil {
