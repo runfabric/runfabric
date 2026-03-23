@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
+	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	"github.com/spf13/cobra"
 )
 
@@ -72,6 +73,27 @@ func NewPrimitivesCmd(opts *GlobalOptions) *cobra.Command {
 
 func primitivesTriggers(provider string) any {
 	provider = strings.TrimSpace(provider)
+	catalog, err := providerloader.NewDefaultProviderCapabilityCatalog()
+	if err == nil {
+		if provider != "" {
+			triggers, terr := catalog.SupportedTriggers(provider)
+			if terr == nil {
+				sort.Strings(triggers)
+				return triggers
+			}
+		}
+		items, lerr := catalog.ListProviders()
+		if lerr == nil && len(items) > 0 {
+			out := make(map[string][]string, len(items))
+			for _, item := range items {
+				triggers := append([]string(nil), item.SupportsTriggers...)
+				sort.Strings(triggers)
+				out[item.ID] = triggers
+			}
+			return out
+		}
+	}
+
 	if provider != "" {
 		out := planner.SupportedTriggers(provider)
 		sort.Strings(out)

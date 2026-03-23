@@ -19,6 +19,13 @@ func WatchProjectDir(configPath string, pollInterval time.Duration, done <-chan 
 		".yml": true, ".yaml": true,
 		".js": true, ".ts": true, ".mjs": true, ".cjs": true,
 	}
+	ignoredDirs := map[string]bool{
+		"node_modules": true,
+		"dist":         true,
+		"build":        true,
+		".git":         true,
+		".runfabric":   true,
+	}
 
 	var lastMod map[string]time.Time
 	var mu sync.Mutex
@@ -26,14 +33,17 @@ func WatchProjectDir(configPath string, pollInterval time.Duration, done <-chan 
 	collectModTimes := func() map[string]time.Time {
 		m := make(map[string]time.Time)
 		_ = filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() {
+			if err != nil {
+				return nil
+			}
+			if info.IsDir() {
+				if ignoredDirs[info.Name()] {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			rel, _ := filepath.Rel(projectDir, path)
 			if rel == ".." || len(rel) > 2 && rel[:3] == ".."+string(filepath.Separator) {
-				return filepath.SkipDir
-			}
-			if filepath.Base(path) == "node_modules" {
 				return filepath.SkipDir
 			}
 			if exts[filepath.Ext(path)] || filepath.Base(path) == "runfabric.yml" || filepath.Base(path) == "runfabric.yaml" {

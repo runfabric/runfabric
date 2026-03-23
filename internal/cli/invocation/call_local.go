@@ -2,10 +2,12 @@ package invocation
 
 import (
 	"fmt"
-	"github.com/runfabric/runfabric/internal/cli/common"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
+
+	"github.com/runfabric/runfabric/internal/cli/common"
 
 	"github.com/runfabric/runfabric/internal/app"
 	"github.com/spf13/cobra"
@@ -25,7 +27,8 @@ func newCallLocalCmd(opts *GlobalOptions) *cobra.Command {
 			// Watch mode: same as dev --watch — CallLocalServe + WatchProjectDir, restart on change or SIGINT
 			if serve && watch {
 				sigCh := make(chan os.Signal, 1)
-				signal.Notify(sigCh, os.Interrupt)
+				signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+				defer signal.Stop(sigCh)
 				watchDone := make(chan struct{})
 				watchChan := app.WatchProjectDir(opts.ConfigPath, 1*time.Second, watchDone)
 				for {

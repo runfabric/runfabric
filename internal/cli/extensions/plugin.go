@@ -50,15 +50,15 @@ func newPluginListCmd(opts *GlobalOptions) *cobra.Command {
 		Use:   "list",
 		Short: "List provider plugins",
 		RunE: func(c *cobra.Command, args []string) error {
-			reg := builtinProviderRegistry()
-			list := reg.List()
+			reg := manifests.NewPluginRegistry()
+			list := reg.List(manifests.KindProvider)
 			if opts.JSONOutput {
 				enc := json.NewEncoder(c.OutOrStdout())
 				enc.SetIndent("", "  ")
 				return enc.Encode(map[string]any{"plugins": list})
 			}
 			for _, m := range list {
-				fmt.Fprintf(c.OutOrStdout(), "%s\n", m.Name)
+				fmt.Fprintf(c.OutOrStdout(), "%s\n", m.ID)
 			}
 			return nil
 		},
@@ -74,11 +74,18 @@ func newPluginInfoCmd(opts *GlobalOptions) *cobra.Command {
 				return fmt.Errorf("usage: runfabric plugin info <name>")
 			}
 			name := args[0]
+			boundary, berr := resolution.NewCached(resolution.Options{IncludeExternal: true})
 			reg := manifests.NewPluginRegistry()
+			if berr == nil {
+				reg = boundary.PluginRegistry()
+			}
 			m := reg.Get(name)
 			if m == nil || m.Kind != manifests.KindProvider {
 				// fallback: might be registered under different id
 				reg2 := builtinProviderRegistry()
+				if berr == nil {
+					reg2 = boundary.ProviderRegistry()
+				}
 				if p, ok := reg2.Get(name); ok {
 					meta := p.Meta()
 					if opts.JSONOutput {
@@ -215,7 +222,29 @@ func newPluginCapabilitiesCmd(opts *GlobalOptions) *cobra.Command {
 				return fmt.Errorf("usage: runfabric plugin capabilities <name>")
 			}
 			name := args[0]
-			reg := builtinProviderRegistry()
+			boundary, err := resolution.NewCached(resolution.Options{IncludeExternal: true})
+			if err != nil {
+				// Fallback keeps current behavior for built-ins and API providers.
+				reg := builtinProviderRegistry()
+				p, ok := reg.Get(name)
+				if !ok {
+					return fmt.Errorf("plugin %q not found", name)
+				}
+				meta := p.Meta()
+				if opts.JSONOutput {
+					enc := json.NewEncoder(c.OutOrStdout())
+					enc.SetIndent("", "  ")
+					return enc.Encode(meta)
+				}
+				fmt.Fprintf(c.OutOrStdout(), "name:              %s\n", meta.Name)
+				fmt.Fprintf(c.OutOrStdout(), "version:           %s\n", meta.Version)
+				fmt.Fprintf(c.OutOrStdout(), "capabilities:      %v\n", meta.Capabilities)
+				fmt.Fprintf(c.OutOrStdout(), "supportsRuntime:   %v\n", meta.SupportsRuntime)
+				fmt.Fprintf(c.OutOrStdout(), "supportsTriggers:  %v\n", meta.SupportsTriggers)
+				fmt.Fprintf(c.OutOrStdout(), "supportsResources: %v\n", meta.SupportsResources)
+				return nil
+			}
+			reg := boundary.ProviderRegistry()
 			p, ok := reg.Get(name)
 			if !ok {
 				return fmt.Errorf("plugin %q not found", name)

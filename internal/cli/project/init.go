@@ -13,6 +13,7 @@ import (
 
 	"github.com/runfabric/runfabric/internal/cli/common"
 	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
+	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -182,7 +183,7 @@ func runInit(o *initOpts) error {
 	}
 
 	// Validate trigger for provider
-	if !planner.SupportsTrigger(o.Provider, o.Template) {
+	if !initProviderSupportsTrigger(o.Provider, o.Template) {
 		return fmt.Errorf("provider %q does not support trigger %q (see Trigger Capability Matrix)", o.Provider, o.Template)
 	}
 	switch o.Lang {
@@ -336,6 +337,21 @@ func printInitIntro() {
 }
 
 func promptProvider() string {
+	list, err := listProviderDescriptors()
+	if err == nil && len(list) > 0 {
+		providerIDs := make([]string, 0, len(list))
+		display := make([]string, 0, len(list))
+		for _, item := range list {
+			providerIDs = append(providerIDs, item.ID)
+			display = append(display, item.ID)
+		}
+		idx := promptSelect("Select provider", display, 0)
+		if idx < 0 {
+			return providerIDs[0]
+		}
+		return providerIDs[idx]
+	}
+
 	providers := make([]string, 0, len(planner.ProviderCapabilities))
 	for p := range planner.ProviderCapabilities {
 		providers = append(providers, p)
@@ -349,7 +365,7 @@ func promptProvider() string {
 }
 
 func promptTrigger(provider string) string {
-	triggers := planner.SupportedTriggers(provider)
+	triggers := initProviderSupportedTriggers(provider)
 	if len(triggers) == 0 {
 		return planner.TriggerHTTP
 	}
@@ -367,6 +383,34 @@ func promptTrigger(provider string) string {
 		return planner.TriggerHTTP
 	}
 	return triggers[idx]
+}
+
+func listProviderDescriptors() ([]providerloader.ProviderDescriptor, error) {
+	catalog, err := providerloader.NewDefaultProviderCapabilityCatalog()
+	if err != nil {
+		return nil, err
+	}
+	return catalog.ListProviders()
+}
+
+func initProviderSupportedTriggers(provider string) []string {
+	catalog, err := providerloader.NewDefaultProviderCapabilityCatalog()
+	if err == nil {
+		if triggers, terr := catalog.SupportedTriggers(provider); terr == nil && len(triggers) > 0 {
+			return triggers
+		}
+	}
+	return planner.SupportedTriggers(provider)
+}
+
+func initProviderSupportsTrigger(provider, trigger string) bool {
+	catalog, err := providerloader.NewDefaultProviderCapabilityCatalog()
+	if err == nil {
+		if ok, terr := catalog.SupportsTrigger(provider, trigger); terr == nil {
+			return ok
+		}
+	}
+	return planner.SupportsTrigger(provider, trigger)
 }
 
 func promptLang() string {
@@ -815,12 +859,17 @@ func generatePackageJSON(o *initOpts) string {
 		scripts["start"] = "node dist/handler.js"
 		if o.WithBuildScript {
 			scripts["build"] = "tsc"
+			scripts["build:watch"] = "tsc --watch --preserveWatchOutput"
 		}
 	} else {
 		scripts["start"] = "node src/handler.js"
 	}
 	if o.CallLocal {
-		scripts["call:local"] = "runfabric invoke local -c runfabric.yml --serve --watch"
+		if o.Lang == "ts" && o.WithBuildScript {
+			scripts["call:local"] = "concurrently npm:build:watch 'runfabric invoke local -c runfabric.yml --serve --watch'"
+		} else {
+			scripts["call:local"] = "runfabric invoke local -c runfabric.yml --serve --watch"
+		}
 	}
 
 	// Runtime dependencies are optional and loaded dynamically by RunFabric.
@@ -836,8 +885,9 @@ func generatePackageJSON(o *initOpts) string {
 	}
 	if o.Lang == "ts" && o.WithBuildScript {
 		pkg["devDependencies"] = map[string]string{
-			"typescript":  "^5.0.0",
-			"@types/node": "^20.0.0",
+			"concurrently": "^9.0.1",
+			"typescript":   "^5.0.0",
+			"@types/node":  "^20.0.0",
 		}
 	}
 

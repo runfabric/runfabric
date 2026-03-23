@@ -10,6 +10,7 @@ import (
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/core/model/configpatch"
 	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
+	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	scaffold "github.com/runfabric/runfabric/platform/generator/application"
 	"github.com/spf13/cobra"
 )
@@ -99,6 +100,19 @@ func promptOneOf(label, current string, allowed []string, fallback string) strin
 }
 
 func supportedProviders() []string {
+	catalog, err := providerloader.NewDefaultProviderCapabilityCatalog()
+	if err == nil {
+		items, lerr := catalog.ListProviders()
+		if lerr == nil && len(items) > 0 {
+			providers := make([]string, 0, len(items))
+			for _, item := range items {
+				providers = append(providers, item.ID)
+			}
+			sort.Strings(providers)
+			return providers
+		}
+	}
+
 	providers := make([]string, 0, len(planner.ProviderCapabilities))
 	for provider := range planner.ProviderCapabilities {
 		providers = append(providers, provider)
@@ -112,7 +126,7 @@ func summarizeUnsupportedTriggers(cfg *config.Config, provider string) []string 
 	var unsupported []string
 	for _, ft := range triggers {
 		for _, spec := range ft.Specs {
-			if planner.SupportsTrigger(provider, spec.Kind) {
+			if providerSupportsTrigger(provider, spec.Kind) {
 				continue
 			}
 			unsupported = append(unsupported, fmt.Sprintf("%s:%s", ft.Function, spec.Kind))
@@ -120,6 +134,16 @@ func summarizeUnsupportedTriggers(cfg *config.Config, provider string) []string 
 	}
 	sort.Strings(unsupported)
 	return unsupported
+}
+
+func providerSupportsTrigger(provider, trigger string) bool {
+	catalog, err := providerloader.NewDefaultProviderCapabilityCatalog()
+	if err == nil {
+		if ok, terr := catalog.SupportsTrigger(provider, trigger); terr == nil {
+			return ok
+		}
+	}
+	return planner.SupportsTrigger(provider, trigger)
 }
 
 func confirmGeneratePreview(interactive bool, lines ...string) error {
@@ -144,12 +168,13 @@ func newGenerateCmd(opts *GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "generate",
 		Short: "Scaffold artifacts in an existing project",
-		Long:  "Add new functions, resources, addons, or provider overrides without hand-editing runfabric.yml. Use 'runfabric generate function <name>', 'generate resource <name>', 'generate addon <name>', or 'generate provider-override <key>'.",
+		Long:  "Add new functions, resources, addons, provider overrides, or provider plugin boilerplate without hand-editing runfabric.yml. Use 'runfabric generate function <name>', 'generate resource <name>', 'generate addon <name>', 'generate provider-override <key>', or 'generate plugin <provider-id>'.",
 	}
 	cmd.AddCommand(newGenerateFunctionCmd(opts))
 	cmd.AddCommand(newGenerateResourceCmd(opts))
 	cmd.AddCommand(newGenerateAddonCmd(opts))
 	cmd.AddCommand(newGenerateProviderOverrideCmd(opts))
+	cmd.AddCommand(newGeneratePluginCmd(opts))
 	return cmd
 }
 
@@ -256,12 +281,12 @@ func runGenerateFunction(gopts *GlobalOptions, o *generateOpts, name string) err
 	if trigger != planner.TriggerHTTP && trigger != planner.TriggerCron && trigger != planner.TriggerQueue {
 		return fmt.Errorf("--trigger must be http, cron, or queue (got %q)", o.Trigger)
 	}
-	if !planner.SupportsTrigger(provider, trigger) {
+	if !providerSupportsTrigger(provider, trigger) {
 		if interactive {
 			for {
 				fmt.Fprintf(os.Stderr, "Provider %q does not support trigger %q.\n", provider, trigger)
 				trigger = promptOneOf("Trigger", "", []string{"http", "cron", "queue"}, "http")
-				if planner.SupportsTrigger(provider, trigger) {
+				if providerSupportsTrigger(provider, trigger) {
 					break
 				}
 			}

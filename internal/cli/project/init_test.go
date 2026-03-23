@@ -138,16 +138,22 @@ func TestGeneratePackageJSON_DepsAndScripts(t *testing.T) {
 	}
 
 	scripts, _ := pkg["scripts"].(map[string]any)
-	if got := scripts["call:local"]; got != "runfabric invoke local -c runfabric.yml --serve --watch" {
+	if got := scripts["call:local"]; got != "concurrently npm:build:watch 'runfabric invoke local -c runfabric.yml --serve --watch'" {
 		t.Fatalf("expected call:local script, got %v", got)
 	}
 	if got := scripts["build"]; got != "tsc" {
 		t.Fatalf("expected build script, got %v", got)
 	}
+	if got := scripts["build:watch"]; got != "tsc --watch --preserveWatchOutput" {
+		t.Fatalf("expected build:watch script, got %v", got)
+	}
 
 	devDeps, _ := pkg["devDependencies"].(map[string]any)
 	if devDeps["typescript"] != "^5.0.0" {
 		t.Fatalf("expected typescript devDependency, got %v", devDeps)
+	}
+	if devDeps["concurrently"] != "^9.0.1" {
+		t.Fatalf("expected concurrently devDependency, got %v", devDeps)
 	}
 }
 
@@ -166,6 +172,9 @@ func TestGeneratePackageJSON_TSBuildOptional(t *testing.T) {
 		if _, hasBuild := scripts["build"]; hasBuild {
 			t.Fatalf("did not expect build script when --with-build is false")
 		}
+		if _, hasBuildWatch := scripts["build:watch"]; hasBuildWatch {
+			t.Fatalf("did not expect build:watch script when --with-build is false")
+		}
 	}
 
 	var pkgWith map[string]any
@@ -179,6 +188,27 @@ func TestGeneratePackageJSON_TSBuildOptional(t *testing.T) {
 		if _, hasBuild := scripts["build"]; !hasBuild {
 			t.Fatalf("expected build script when --with-build is true")
 		}
+		if _, hasBuildWatch := scripts["build:watch"]; !hasBuildWatch {
+			t.Fatalf("expected build:watch script when --with-build is true")
+		}
+	}
+	if devDeps, ok := pkgWith["devDependencies"].(map[string]any); ok {
+		if _, hasConcurrently := devDeps["concurrently"]; !hasConcurrently {
+			t.Fatalf("expected concurrently devDependency when --with-build is true")
+		}
+	}
+}
+
+func TestGeneratePackageJSON_JSCallLocalScriptUnchanged(t *testing.T) {
+	o := &initOpts{Lang: "js", Service: "js-svc", CallLocal: true}
+
+	var pkg map[string]any
+	if err := json.Unmarshal([]byte(generatePackageJSON(o)), &pkg); err != nil {
+		t.Fatalf("unmarshal js package json: %v", err)
+	}
+	scripts, _ := pkg["scripts"].(map[string]any)
+	if got := scripts["call:local"]; got != "runfabric invoke local -c runfabric.yml --serve --watch" {
+		t.Fatalf("expected js call:local script unchanged, got %v", got)
 	}
 }
 

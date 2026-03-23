@@ -462,6 +462,132 @@ func TestInitThenGenerateFunction(t *testing.T) {
 	}
 }
 
+func TestGeneratePlugin_RequiresID(t *testing.T) {
+	dir := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldwd) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := &GlobalOptions{}
+	cmd := newGeneratePluginCmd(opts)
+	cmd.SetArgs([]string{"--no-interactive"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	err = cmd.Execute()
+	if err == nil {
+		t.Fatal("generate plugin without id should fail")
+	}
+	if !strings.Contains(err.Error(), "provider plugin id is required") {
+		t.Fatalf("expected id required error, got: %v", err)
+	}
+}
+
+func TestGeneratePlugin_Success(t *testing.T) {
+	dir := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldwd) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := &GlobalOptions{}
+	cmd := newGeneratePluginCmd(opts)
+	cmd.SetArgs([]string{"acme-provider", "--no-interactive"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("generate plugin should succeed: %v", err)
+	}
+
+	root := filepath.Join(dir, "acme-provider-provider-plugin")
+	for _, p := range []string{"plugin.yaml", "go.mod", "main.go", "README.md"} {
+		if _, err := os.Stat(filepath.Join(root, p)); err != nil {
+			t.Fatalf("expected scaffold file %s: %v", p, err)
+		}
+	}
+	mainData, _ := os.ReadFile(filepath.Join(root, "main.go"))
+	if !strings.Contains(string(mainData), `sdkprovider.NewServer(`) || !strings.Contains(string(mainData), `type plugin struct`) || !strings.Contains(string(mainData), `defaultProviderCLICommand`) {
+		t.Fatalf("expected generated main.go to use typed provider SDK server, got: %s", string(mainData))
+	}
+	if !strings.Contains(string(mainData), `RUNFABRIC_ARTIFACT_PATH`) || !strings.Contains(string(mainData), `resolveCommand`) {
+		t.Fatalf("expected generated main.go to include command-resolution and artifact scaffold, got: %s", string(mainData))
+	}
+	readmeData, _ := os.ReadFile(filepath.Join(root, "README.md"))
+	if !strings.Contains(string(readmeData), `ACME_PROVIDER_DEPLOY_CMD`) || !strings.Contains(string(readmeData), `defaultProviderCLICommand`) {
+		t.Fatalf("expected generated README to describe scaffold conventions, got: %s", string(readmeData))
+	}
+}
+
+func TestGeneratePlugin_DryRun(t *testing.T) {
+	dir := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldwd) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := &GlobalOptions{}
+	cmd := newGeneratePluginCmd(opts)
+	cmd.SetArgs([]string{"acme-provider", "--dry-run", "--no-interactive"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("generate plugin --dry-run should succeed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "acme-provider-provider-plugin")); err == nil {
+		t.Fatal("dry-run should not create plugin scaffold directory")
+	}
+}
+
+func TestGeneratePlugin_WithObservability(t *testing.T) {
+	dir := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldwd) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := &GlobalOptions{}
+	cmd := newGeneratePluginCmd(opts)
+	cmd.SetArgs([]string{"acme-provider", "--with-observability", "--no-interactive"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("generate plugin --with-observability should succeed: %v", err)
+	}
+
+	root := filepath.Join(dir, "acme-provider-provider-plugin")
+	mainData, _ := os.ReadFile(filepath.Join(root, "main.go"))
+	if !strings.Contains(string(mainData), `func (p *plugin) FetchMetrics`) || !strings.Contains(string(mainData), `func (p *plugin) FetchTraces`) {
+		t.Fatalf("expected observability stubs in generated main.go, got: %s", string(mainData))
+	}
+	yamlData, _ := os.ReadFile(filepath.Join(root, "plugin.yaml"))
+	if !strings.Contains(string(yamlData), "observability") {
+		t.Fatalf("expected observability capability in plugin.yaml, got: %s", string(yamlData))
+	}
+}
+
+func TestGeneratePluginGoMod_UsesRelativeSDKReplacePath(t *testing.T) {
+	content := generatePluginGoMod("github.com/example/acme", filepath.Join("extension", "acme-provider-plugin"))
+	if !strings.Contains(content, `replace github.com/runfabric/runfabric/plugin-sdk/go => ../../packages/go/plugin-sdk`) {
+		t.Fatalf("expected relative replace path for nested scaffold, got: %s", content)
+	}
+}
+
 func writeMinimalConfig(t *testing.T, path string) {
 	t.Helper()
 	writeGenerateConfig(t, path, `service: test
