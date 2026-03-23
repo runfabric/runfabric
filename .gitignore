@@ -10,7 +10,7 @@
 
 # Output of go build / go install
 *.out
-
+.venv/
 # Go workspace file
 go.work
 *.tar.zstd.bz2
@@ -85,3 +85,5 @@ node_modules/
 .corepack-cache
 .runfabric
 .coverage*
+
+my-service
