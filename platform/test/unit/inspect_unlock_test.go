@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/runfabric/runfabric/platform/core/state/locking"
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
+	"github.com/runfabric/runfabric/platform/state/locking"
 )
 
 func TestInspectableArtifactsExist(t *testing.T) {

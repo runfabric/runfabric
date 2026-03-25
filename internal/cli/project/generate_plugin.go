@@ -629,6 +629,9 @@ Make sure ` + "`plugin.yaml`" + ` executable points to ` + "`./bin/%s-plugin`" +
 
 This scaffold implements methods expected by the external provider adapter:
 
+- Import SDK contracts only (` + "`github.com/runfabric/runfabric/plugin-sdk/go/provider`" + `)
+- Do not import ` + "`github.com/runfabric/runfabric/platform/...`" + ` from extension/provider/runtime/simulator plugins
+
 - SDK-managed ` + "`Handshake`" + ` metadata via ` + "`server.HandshakeMetadata`" + `
 - ` + "`Doctor`" + `
 - ` + "`Plan`" + `

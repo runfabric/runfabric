@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func TestRedirectToTunnel_RewritesAndRestoresRoutes(t *testing.T) {
@@ -74,10 +74,10 @@ func TestRedirectToTunnel_RewritesAndRestoresRoutes(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "account-123")
 	t.Setenv("CLOUDFLARE_ZONE_ID", zoneID)
 
-	cfg := &config.Config{
-		Service: "demo",
-		Provider: config.ProviderConfig{
-			Name: "cloudflare-workers",
+	cfg := sdkprovider.Config{
+		"service": "demo",
+		"provider": map[string]any{
+			"name": "cloudflare-workers",
 		},
 	}
 
@@ -174,10 +174,10 @@ func TestRedirectToTunnel_CreatesFallbackRouteWhenNoMatchingRoutes(t *testing.T)
 	t.Setenv("CLOUDFLARE_ZONE_ID", zoneID)
 	t.Setenv("CLOUDFLARE_DEV_ROUTE_PATTERN", "dev.example.com/*")
 
-	cfg := &config.Config{
-		Service: "demo",
-		Provider: config.ProviderConfig{
-			Name: "cloudflare-workers",
+	cfg := sdkprovider.Config{
+		"service": "demo",
+		"provider": map[string]any{
+			"name": "cloudflare-workers",
 		},
 	}
 
@@ -240,10 +240,10 @@ func TestRedirectToTunnel_NoRouteAndNoPatternFallsBack(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ZONE_ID", zoneID)
 	t.Setenv("CLOUDFLARE_DEV_ROUTE_PATTERN", "")
 
-	cfg := &config.Config{
-		Service: "demo",
-		Provider: config.ProviderConfig{
-			Name: "cloudflare-workers",
+	cfg := sdkprovider.Config{
+		"service": "demo",
+		"provider": map[string]any{
+			"name": "cloudflare-workers",
 		},
 	}
 

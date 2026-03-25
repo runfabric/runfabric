@@ -4,19 +4,24 @@ import (
 	"context"
 	"fmt"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Remover deletes the site via Netlify API (DELETE /sites/{id}).
 type Remover struct{}
 
-func (Remover) Remove(ctx context.Context, cfg *config.Config, stage, root string, receipt *state.Receipt) (*providers.RemoveResult, error) {
-	siteID := receipt.Outputs["site_id"]
+func (Remover) Remove(ctx context.Context, cfg sdkprovider.Config, stage, root string, receipt any) (*sdkprovider.RemoveResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
+	rv := apiutil.DecodeReceipt(receipt)
+	siteID := rv.Outputs["site_id"]
 	if siteID == "" {
-		siteID = receipt.Metadata["site_id"]
+		siteID = rv.Metadata["site_id"]
 	}
 	if siteID == "" {
 		return nil, fmt.Errorf("receipt missing site_id; cannot remove Netlify site")
@@ -25,5 +30,5 @@ func (Remover) Remove(ctx context.Context, cfg *config.Config, stage, root strin
 	if err := apiutil.DoDelete(ctx, url, "NETLIFY_AUTH_TOKEN"); err != nil {
 		return nil, fmt.Errorf("netlify delete site: %w", err)
 	}
-	return &providers.RemoveResult{Provider: "netlify", Removed: true}, nil
+	return &sdkprovider.RemoveResult{Provider: "netlify", Removed: true}, nil
 }

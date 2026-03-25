@@ -3,9 +3,9 @@ package triggers
 import (
 	"context"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
-func EnsureCron(ctx context.Context, cfg *config.Config, stage, functionName, expression string) error {
+func EnsureCron(ctx context.Context, cfg sdkprovider.Config, stage, functionName, expression string) error {
 	return nil
 }

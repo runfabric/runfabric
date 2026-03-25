@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 type cloudWorkflowDecl struct {
@@ -17,11 +17,19 @@ type cloudWorkflowDecl struct {
 	Bindings       map[string]string
 }
 
-func cloudWorkflowsFromConfig(cfg *config.Config, root string) ([]cloudWorkflowDecl, error) {
-	if cfg == nil || cfg.Extensions == nil {
+func cloudWorkflowsFromConfig(cfg sdkprovider.Config, root string) ([]cloudWorkflowDecl, error) {
+	if cfg == nil {
 		return nil, nil
 	}
-	rawGCP, ok := cfg.Extensions["gcp-functions"]
+	rawExt, ok := cfg["extensions"]
+	if !ok || rawExt == nil {
+		return nil, nil
+	}
+	extMap, ok := rawExt.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("extensions must be an object")
+	}
+	rawGCP, ok := extMap["gcp-functions"]
 	if !ok || rawGCP == nil {
 		return nil, nil
 	}

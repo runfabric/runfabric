@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func TestRedirectToTunnel_ConditionalMutationAndRestore(t *testing.T) {
@@ -67,14 +67,14 @@ func TestRedirectToTunnel_ConditionalMutationAndRestore(t *testing.T) {
 	t.Setenv("GCP_DEV_STREAM_GATEWAY_SET_URL", "")
 	t.Setenv("GCP_DEV_STREAM_GATEWAY_RESTORE_URL", "")
 
-	cfg := &config.Config{
-		Service: service,
-		Provider: config.ProviderConfig{
-			Name:   "gcp-functions",
-			Region: region,
+	cfg := sdkprovider.Config{
+		"service": service,
+		"provider": map[string]any{
+			"name":   "gcp-functions",
+			"region": region,
 		},
-		Functions: map[string]config.FunctionConfig{
-			"api": {Handler: "index.handler"},
+		"functions": map[string]any{
+			"api": map[string]any{"handler": "index.handler"},
 		},
 	}
 
@@ -148,14 +148,14 @@ func TestRedirectToTunnel_GatewayHookRouteRewrite(t *testing.T) {
 	t.Setenv("GCP_DEV_STREAM_GATEWAY_SET_URL", gateway.URL+"/set")
 	t.Setenv("GCP_DEV_STREAM_GATEWAY_RESTORE_URL", gateway.URL+"/restore")
 
-	cfg := &config.Config{
-		Service: service,
-		Provider: config.ProviderConfig{
-			Name:   "gcp-functions",
-			Region: region,
+	cfg := sdkprovider.Config{
+		"service": service,
+		"provider": map[string]any{
+			"name":   "gcp-functions",
+			"region": region,
 		},
-		Functions: map[string]config.FunctionConfig{
-			"api": {Handler: "index.handler"},
+		"functions": map[string]any{
+			"api": map[string]any{"handler": "index.handler"},
 		},
 	}
 
@@ -216,14 +216,14 @@ func TestRedirectToTunnel_LookupFailureFallsBack(t *testing.T) {
 	t.Setenv("GCP_DEV_STREAM_GATEWAY_SET_URL", "")
 	t.Setenv("GCP_DEV_STREAM_GATEWAY_RESTORE_URL", "")
 
-	cfg := &config.Config{
-		Service: service,
-		Provider: config.ProviderConfig{
-			Name:   "gcp-functions",
-			Region: region,
+	cfg := sdkprovider.Config{
+		"service": service,
+		"provider": map[string]any{
+			"name":   "gcp-functions",
+			"region": region,
 		},
-		Functions: map[string]config.FunctionConfig{
-			"api": {Handler: "index.handler"},
+		"functions": map[string]any{
+			"api": map[string]any{"handler": "index.handler"},
 		},
 	}
 

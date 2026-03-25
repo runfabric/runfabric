@@ -9,9 +9,9 @@ import (
 
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	appErrs "github.com/runfabric/runfabric/platform/core/model/errors"
-	"github.com/runfabric/runfabric/platform/core/state/locking"
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
-	"github.com/runfabric/runfabric/platform/core/workflow/recovery"
+	"github.com/runfabric/runfabric/platform/state/locking"
+	"github.com/runfabric/runfabric/platform/workflow/recovery"
 )
 
 func Recover(configPath, stage string, mode recovery.Mode) (any, error) {

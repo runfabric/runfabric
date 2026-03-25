@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/runfabric/runfabric/platform/core/workflow/app"
-	"github.com/runfabric/runfabric/platform/core/workflow/recovery"
+	"github.com/runfabric/runfabric/platform/workflow/recovery"
 )
 
 func TestAppResumeE2EIfEnabled(t *testing.T) {

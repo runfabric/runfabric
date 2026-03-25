@@ -10,15 +10,20 @@ import (
 	"path/filepath"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Runner deploys to Alibaba FC via signed OpenAPI (CreateService, CreateFunction, CreateTrigger).
 type Runner struct{}
 
-func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
+func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root string) (*sdkprovider.DeployResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
 	accessKey := apiutil.Env("ALIBABA_ACCESS_KEY_ID")
 	secretKey := apiutil.Env("ALIBABA_ACCESS_KEY_SECRET")
 	if accessKey == "" || secretKey == "" {
@@ -28,7 +33,7 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 	if accountID == "" {
 		return nil, fmt.Errorf("ALIBABA_FC_ACCOUNT_ID is required (Alibaba Cloud account ID)")
 	}
-	region := cfg.Provider.Region
+	region := coreCfg.Provider.Region
 	if region == "" {
 		region = apiutil.Env("ALIBABA_FC_REGION")
 	}
@@ -36,7 +41,7 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 		region = "cn-hangzhou"
 	}
 	client := newFCClient(accountID, region, accessKey, secretKey)
-	serviceName := cfg.Service + "-" + stage
+	serviceName := coreCfg.Service + "-" + stage
 	// Ensure service exists (ignore if already exists)
 	if _, err := client.CreateService(ctx, serviceName); err != nil &&
 		!strings.Contains(err.Error(), "ServiceAlreadyExists") &&
@@ -45,15 +50,15 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 		return nil, fmt.Errorf("CreateService: %w", err)
 	}
 	// Deploy each function
-	result := apiutil.BuildDeployResult("alibaba-fc", cfg, stage)
+	result := apiutil.BuildSDKDeployResult("alibaba-fc", cfg, stage)
 	result.Outputs["region"] = region
 	result.Outputs["service_name"] = serviceName
 	result.Metadata["account_id"] = accountID
-	runtime := cfg.Provider.Runtime
+	runtime := coreCfg.Provider.Runtime
 	if runtime == "" {
 		runtime = "nodejs20"
 	}
-	for fnName, fn := range cfg.Functions {
+	for fnName, fn := range coreCfg.Functions {
 		handler := fn.Handler
 		if handler == "" {
 			handler = "index.handler"
@@ -66,7 +71,7 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 		if fn.Timeout > 0 {
 			timeout = fn.Timeout
 		}
-		funcName := fmt.Sprintf("%s-%s-%s", cfg.Service, stage, fnName)
+		funcName := fmt.Sprintf("%s-%s-%s", coreCfg.Service, stage, fnName)
 		zipBase64, err := zipRoot(root)
 		if err != nil {
 			return nil, fmt.Errorf("zip root for %s: %w", fnName, err)
@@ -83,7 +88,7 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 		})
 		url := fmt.Sprintf("%s/%s/proxy/%s/%s/", client.baseURL(), fcAPIVersion, serviceName, funcName)
 		result.Outputs["url_"+fnName] = url
-		if fnName == "" || len(cfg.Functions) == 1 {
+		if fnName == "" || len(coreCfg.Functions) == 1 {
 			result.Outputs["url"] = url
 		}
 		result.Metadata["function_"+fnName] = funcName

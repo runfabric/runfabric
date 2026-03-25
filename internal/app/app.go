@@ -6,8 +6,8 @@ import (
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	statecore "github.com/runfabric/runfabric/platform/core/state/core"
 	coreapp "github.com/runfabric/runfabric/platform/core/workflow/app"
-	"github.com/runfabric/runfabric/platform/core/workflow/recovery"
 	"github.com/runfabric/runfabric/platform/deploy/source"
+	"github.com/runfabric/runfabric/platform/workflow/recovery"
 )
 
 type AppContext = coreapp.AppContext

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/runfabric/runfabric/platform/core/state/locking"
+	"github.com/runfabric/runfabric/platform/state/locking"
 )
 
 func Unlock(configPath, stage string, force bool) (any, error) {

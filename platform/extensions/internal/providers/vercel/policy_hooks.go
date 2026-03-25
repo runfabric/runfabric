@@ -3,10 +3,10 @@ package vercel
 import (
 	"context"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
-func PrepareDevStreamPolicy(ctx context.Context, cfg *providers.Config, stage, tunnelURL string) (*providers.DevStreamSession, error) {
+func PrepareDevStreamPolicy(ctx context.Context, cfg sdkprovider.Config, stage, tunnelURL string) (*sdkprovider.DevStreamSession, error) {
 	state, err := RedirectToTunnel(ctx, cfg, stage, tunnelURL)
 	if err != nil {
 		return nil, err
@@ -14,7 +14,5 @@ func PrepareDevStreamPolicy(ctx context.Context, cfg *providers.Config, stage, t
 	if state == nil {
 		return nil, nil
 	}
-	return providers.NewDevStreamSession(state.Mode, state.MissingPrereqs, state.StatusMessage, func(restoreCtx context.Context) error {
-		return state.Restore(restoreCtx)
-	}), nil
+	return &sdkprovider.DevStreamSession{EffectiveMode: state.Mode, MissingPrereqs: append([]string(nil), state.MissingPrereqs...), StatusMessage: state.StatusMessage}, nil
 }

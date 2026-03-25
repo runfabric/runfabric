@@ -2,6 +2,7 @@ package providers
 
 import (
 	extproviders "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )
 
@@ -11,7 +12,7 @@ func NewBuiltinProvidersRegistry() *extproviders.Registry {
 	reg := extproviders.NewRegistry()
 	for _, id := range providerpolicy.BuiltinImplementationIDs() {
 		if create, ok := providerpolicy.BuiltinProviderFactory(id); ok {
-			_ = reg.Register(create())
+			_ = reg.Register(inprocess.New(create()))
 		}
 	}
 	return reg

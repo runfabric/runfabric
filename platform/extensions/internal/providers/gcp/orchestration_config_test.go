@@ -3,12 +3,12 @@ package gcp
 import (
 	"testing"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func TestCloudWorkflowsFromConfigAndBindings(t *testing.T) {
-	cfg := &config.Config{
-		Extensions: map[string]any{
+	cfg := sdkprovider.Config{
+		"extensions": map[string]any{
 			"gcp-functions": map[string]any{
 				"cloudWorkflows": []any{
 					map[string]any{
@@ -40,8 +40,8 @@ func TestCloudWorkflowsFromConfigAndBindings(t *testing.T) {
 }
 
 func TestCloudWorkflowsFromConfigValidation(t *testing.T) {
-	cfg := &config.Config{
-		Extensions: map[string]any{
+	cfg := sdkprovider.Config{
+		"extensions": map[string]any{
 			"gcp-functions": map[string]any{
 				"cloudWorkflows": []any{map[string]any{"name": "missing-definition"}},
 			},

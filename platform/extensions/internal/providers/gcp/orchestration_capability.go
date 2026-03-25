@@ -10,19 +10,19 @@ import (
 	"net/url"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 const gcpWorkflowsAPI = "https://workflowexecutions.googleapis.com/v1"
 
-func (p *Provider) SyncOrchestrations(ctx context.Context, req providers.OrchestrationSyncRequest) (*providers.OrchestrationSyncResult, error) {
+func (Runner) SyncOrchestrations(ctx context.Context, req sdkprovider.OrchestrationSyncRequest) (*sdkprovider.OrchestrationSyncResult, error) {
 	decls, err := cloudWorkflowsFromConfig(req.Config, req.Root)
 	if err != nil {
 		return nil, err
 	}
 	if len(decls) == 0 {
-		return &providers.OrchestrationSyncResult{}, nil
+		return &sdkprovider.OrchestrationSyncResult{}, nil
 	}
 	project := strings.TrimSpace(apiutil.Env("GCP_PROJECT"))
 	if project == "" {
@@ -31,7 +31,7 @@ func (p *Provider) SyncOrchestrations(ctx context.Context, req providers.Orchest
 	if project == "" {
 		return nil, fmt.Errorf("GCP_PROJECT or GCP_PROJECT_ID is required for cloud workflows")
 	}
-	region := strings.TrimSpace(req.Config.Provider.Region)
+	region := strings.TrimSpace(providerRegion(req.Config))
 	if region == "" {
 		region = "us-central1"
 	}
@@ -40,7 +40,7 @@ func (p *Provider) SyncOrchestrations(ctx context.Context, req providers.Orchest
 		return nil, fmt.Errorf("GCP_ACCESS_TOKEN is required for cloud workflows")
 	}
 
-	res := &providers.OrchestrationSyncResult{Metadata: map[string]string{}, Outputs: map[string]string{}}
+	res := &sdkprovider.OrchestrationSyncResult{Metadata: map[string]string{}, Outputs: map[string]string{}}
 	for _, decl := range decls {
 		source, err := cloudWorkflowDefinitionString(req.Root, decl)
 		if err != nil {
@@ -92,28 +92,28 @@ func (p *Provider) SyncOrchestrations(ctx context.Context, req providers.Orchest
 	return res, nil
 }
 
-func (p *Provider) RemoveOrchestrations(ctx context.Context, req providers.OrchestrationRemoveRequest) (*providers.OrchestrationSyncResult, error) {
+func (Runner) RemoveOrchestrations(ctx context.Context, req sdkprovider.OrchestrationRemoveRequest) (*sdkprovider.OrchestrationSyncResult, error) {
 	decls, err := cloudWorkflowsFromConfig(req.Config, req.Root)
 	if err != nil {
 		return nil, err
 	}
 	if len(decls) == 0 {
-		return &providers.OrchestrationSyncResult{}, nil
+		return &sdkprovider.OrchestrationSyncResult{}, nil
 	}
 	project := strings.TrimSpace(apiutil.Env("GCP_PROJECT"))
 	if project == "" {
 		project = strings.TrimSpace(apiutil.Env("GCP_PROJECT_ID"))
 	}
-	region := strings.TrimSpace(req.Config.Provider.Region)
+	region := strings.TrimSpace(providerRegion(req.Config))
 	if region == "" {
 		region = "us-central1"
 	}
 	token := strings.TrimSpace(apiutil.Env("GCP_ACCESS_TOKEN"))
 	if project == "" || token == "" {
-		return &providers.OrchestrationSyncResult{}, nil
+		return &sdkprovider.OrchestrationSyncResult{}, nil
 	}
 
-	res := &providers.OrchestrationSyncResult{Metadata: map[string]string{}, Outputs: map[string]string{}}
+	res := &sdkprovider.OrchestrationSyncResult{Metadata: map[string]string{}, Outputs: map[string]string{}}
 	for _, decl := range decls {
 		workflowURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows/%s", gcpWorkflowsAPI, project, region, decl.Name)
 		delReq, _ := http.NewRequestWithContext(ctx, http.MethodDelete, workflowURL, nil)
@@ -137,7 +137,7 @@ func (p *Provider) RemoveOrchestrations(ctx context.Context, req providers.Orche
 	return res, nil
 }
 
-func (p *Provider) InvokeOrchestration(ctx context.Context, req providers.OrchestrationInvokeRequest) (*providers.InvokeResult, error) {
+func (Runner) InvokeOrchestration(ctx context.Context, req sdkprovider.OrchestrationInvokeRequest) (*sdkprovider.InvokeResult, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		return nil, fmt.Errorf("orchestration name is required")
@@ -149,7 +149,7 @@ func (p *Provider) InvokeOrchestration(ctx context.Context, req providers.Orches
 	if project == "" {
 		return nil, fmt.Errorf("GCP_PROJECT or GCP_PROJECT_ID is required for cloud workflows")
 	}
-	region := strings.TrimSpace(req.Config.Provider.Region)
+	region := strings.TrimSpace(providerRegion(req.Config))
 	if region == "" {
 		region = "us-central1"
 	}
@@ -189,8 +189,8 @@ func (p *Provider) InvokeOrchestration(ctx context.Context, req providers.Orches
 	if out.Name != "" {
 		output += " " + cloudWorkflowExecutionConsoleLink(project, region, name, out.Name)
 	}
-	return &providers.InvokeResult{
-		Provider: p.Name(),
+	return &sdkprovider.InvokeResult{
+		Provider: ProviderID,
 		Function: "cwf:" + name,
 		Output:   output,
 		RunID:    out.Name,
@@ -198,7 +198,7 @@ func (p *Provider) InvokeOrchestration(ctx context.Context, req providers.Orches
 	}, nil
 }
 
-func (p *Provider) InspectOrchestrations(ctx context.Context, req providers.OrchestrationInspectRequest) (map[string]any, error) {
+func (Runner) InspectOrchestrations(ctx context.Context, req sdkprovider.OrchestrationInspectRequest) (map[string]any, error) {
 	decls, err := cloudWorkflowsFromConfig(req.Config, req.Root)
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func (p *Provider) InspectOrchestrations(ctx context.Context, req providers.Orch
 	if project == "" {
 		project = strings.TrimSpace(apiutil.Env("GCP_PROJECT_ID"))
 	}
-	region := strings.TrimSpace(req.Config.Provider.Region)
+	region := strings.TrimSpace(providerRegion(req.Config))
 	if region == "" {
 		region = "us-central1"
 	}

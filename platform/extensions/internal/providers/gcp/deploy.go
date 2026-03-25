@@ -16,13 +16,22 @@ import (
 	"time"
 
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Deploy delegates to Runner (Cloud Functions v2 API).
 func (p *Provider) Deploy(ctx context.Context, req providers.DeployRequest) (*providers.DeployResult, error) {
-	return (Runner{}).Deploy(ctx, req.Config, req.Stage, req.Root)
+	sdkCfg, err := sdkbridge.FromCoreConfig(req.Config)
+	if err != nil {
+		return nil, err
+	}
+	result, err := (Runner{}).DeploySDK(ctx, sdkCfg, req.Stage, req.Root)
+	if err != nil {
+		return nil, err
+	}
+	return coreDeployResultFromSDK(result), nil
 }
 
 const gcpAPI = "https://cloudfunctions.googleapis.com/v2"
@@ -32,7 +41,18 @@ const gcsUploadAPI = "https://storage.googleapis.com/upload/storage/v1/b"
 // or uploaded automatically: set GCP_UPLOAD_BUCKET to zip project root and upload before deploy.
 type Runner struct{}
 
-func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
+func (r Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root string) (*sdkprovider.DeployResult, error) {
+	return r.DeploySDK(ctx, cfg, stage, root)
+}
+
+func (Runner) DeploySDK(ctx context.Context, cfg sdkprovider.Config, stage, root string) (*sdkprovider.DeployResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if coreCfg == nil {
+		return nil, fmt.Errorf("invalid config")
+	}
 	if apiutil.Env("GCP_ACCESS_TOKEN") == "" {
 		return nil, fmt.Errorf("GCP_ACCESS_TOKEN is required (e.g. from gcloud auth print-access-token or a service account)")
 	}
@@ -43,7 +63,7 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 	if project == "" {
 		return nil, fmt.Errorf("GCP_PROJECT or GCP_PROJECT_ID is required")
 	}
-	region := cfg.Provider.Region
+	region := coreCfg.Provider.Region
 	if region == "" {
 		region = "us-central1"
 	}
@@ -52,7 +72,7 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 	object := apiutil.Env("GCP_SOURCE_OBJECT")
 	if bucket == "" && apiutil.Env("GCP_UPLOAD_BUCKET") != "" {
 		uploadBucket := apiutil.Env("GCP_UPLOAD_BUCKET")
-		objName := fmt.Sprintf("runfabric-%s-%s-%d.zip", cfg.Service, stage, time.Now().Unix())
+		objName := fmt.Sprintf("runfabric-%s-%s-%d.zip", coreCfg.Service, stage, time.Now().Unix())
 		if err := uploadZipToGCS(ctx, root, uploadBucket, objName); err != nil {
 			return nil, fmt.Errorf("upload source to GCS: %w", err)
 		}
@@ -63,14 +83,14 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 		return nil, fmt.Errorf("GCP Cloud Functions requires source in GCS: set GCP_SOURCE_BUCKET and GCP_SOURCE_OBJECT, or set GCP_UPLOAD_BUCKET to auto-upload from project root")
 	}
 
-	result := apiutil.BuildDeployResult("gcp-functions", cfg, stage)
+	result := apiutil.BuildSDKDeployResult(ProviderID, cfg, stage)
 	result.Outputs["region"] = region
-	for fnName, fn := range cfg.Functions {
+	for fnName, fn := range coreCfg.Functions {
 		entryPoint := "handler"
 		if fn.Handler != "" {
 			entryPoint = strings.Split(fn.Handler, ".")[0]
 		}
-		funcName := fmt.Sprintf("%s-%s-%s", cfg.Service, stage, fnName)
+		funcName := fmt.Sprintf("%s-%s-%s", coreCfg.Service, stage, fnName)
 		parent := fmt.Sprintf("projects/%s/locations/%s", project, region)
 		resourceName := parent + "/functions/" + funcName
 		url := gcpAPI + "/" + parent + "/functions?functionId=" + funcName
@@ -125,6 +145,43 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 		}
 	}
 	return result, nil
+}
+
+func coreDeployResultFromSDK(result *sdkprovider.DeployResult) *providers.DeployResult {
+	if result == nil {
+		return nil
+	}
+	out := &providers.DeployResult{
+		Provider:     result.Provider,
+		DeploymentID: result.DeploymentID,
+		Outputs:      result.Outputs,
+		Metadata:     result.Metadata,
+	}
+	if len(result.Artifacts) > 0 {
+		out.Artifacts = make([]providers.Artifact, len(result.Artifacts))
+		for i, art := range result.Artifacts {
+			out.Artifacts[i] = providers.Artifact{
+				Function:        art.Function,
+				Runtime:         art.Runtime,
+				SourcePath:      art.SourcePath,
+				OutputPath:      art.OutputPath,
+				SHA256:          art.SHA256,
+				SizeBytes:       art.SizeBytes,
+				ConfigSignature: art.ConfigSignature,
+			}
+		}
+	}
+	if len(result.Functions) > 0 {
+		out.Functions = make(map[string]providers.DeployedFunction, len(result.Functions))
+		for name, fn := range result.Functions {
+			out.Functions[name] = providers.DeployedFunction{
+				ResourceName:       fn.ResourceName,
+				ResourceIdentifier: fn.ResourceIdentifier,
+				Metadata:           fn.Metadata,
+			}
+		}
+	}
+	return out
 }
 
 // uploadZipToGCS zips root (excluding node_modules, .git) and uploads to GCS via REST.

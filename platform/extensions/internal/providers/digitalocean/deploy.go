@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 const doAPI = "https://api.digitalocean.com/v2/apps"
@@ -17,7 +17,12 @@ const doAPI = "https://api.digitalocean.com/v2/apps"
 // Runner deploys to DigitalOcean App Platform (POST /v2/apps).
 type Runner struct{}
 
-func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
+func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root string) (*sdkprovider.DeployResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
 	if apiutil.Env("DIGITALOCEAN_ACCESS_TOKEN") == "" {
 		return nil, fmt.Errorf("DIGITALOCEAN_ACCESS_TOKEN is required")
 	}
@@ -29,8 +34,8 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 	if region == "" {
 		region = "ams"
 	}
-	appName := cfg.Service + "-" + stage
-	runtime := cfg.Provider.Runtime
+	appName := coreCfg.Service + "-" + stage
+	runtime := coreCfg.Provider.Runtime
 	if runtime == "" {
 		runtime = "nodejs"
 	}
@@ -51,7 +56,7 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 		}},
 	}
 
-	triggers := planner.ExtractTriggers(cfg)
+	triggers := planner.ExtractTriggers(coreCfg)
 	var jobs []map[string]any
 	for _, ft := range triggers {
 		for _, s := range ft.Specs {
@@ -90,7 +95,7 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 	if err := apiutil.APIPost(ctx, doAPI, "DIGITALOCEAN_ACCESS_TOKEN", map[string]any{"spec": spec}, &out); err != nil {
 		return nil, fmt.Errorf("digitalocean apps: %w", err)
 	}
-	result := apiutil.BuildDeployResult("digitalocean-functions", cfg, stage)
+	result := apiutil.BuildSDKDeployResult("digitalocean-functions", cfg, stage)
 	result.Outputs["app_id"] = out.App.ID
 	result.Outputs["url"] = out.App.LiveURL
 	result.Metadata["app_id"] = out.App.ID

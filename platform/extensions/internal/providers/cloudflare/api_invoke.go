@@ -8,19 +8,18 @@ import (
 	"net/http"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Invoker invokes the Worker via HTTP POST to the deployed URL.
 type Invoker struct{}
 
-func (Invoker) Invoke(ctx context.Context, cfg *config.Config, stage, function string, payload []byte, receipt *state.Receipt) (*providers.InvokeResult, error) {
-	url := receipt.Outputs["url"]
+func (Invoker) Invoke(ctx context.Context, cfg sdkprovider.Config, stage, function string, payload []byte, receipt any) (*sdkprovider.InvokeResult, error) {
+	rv := apiutil.DecodeReceipt(receipt)
+	url := rv.Outputs["url"]
 	if url == "" {
-		url = receipt.Outputs["url_"+function]
+		url = rv.Outputs["url_"+function]
 	}
 	if url == "" {
 		return nil, fmt.Errorf("no URL in receipt for function %q; redeploy first", function)
@@ -38,7 +37,7 @@ func (Invoker) Invoke(ctx context.Context, cfg *config.Config, stage, function s
 	body, _ := io.ReadAll(resp.Body)
 	out := string(body)
 	if resp.StatusCode >= 400 {
-		return &providers.InvokeResult{Provider: "cloudflare-workers", Function: function, Output: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, out)}, nil
+		return &sdkprovider.InvokeResult{Provider: "cloudflare-workers", Function: function, Output: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, out)}, nil
 	}
-	return &providers.InvokeResult{Provider: "cloudflare-workers", Function: function, Output: out}, nil
+	return &sdkprovider.InvokeResult{Provider: "cloudflare-workers", Function: function, Output: out}, nil
 }

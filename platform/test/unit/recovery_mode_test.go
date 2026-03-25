@@ -3,7 +3,7 @@ package unit
 import (
 	"testing"
 
-	"github.com/runfabric/runfabric/platform/core/workflow/recovery"
+	"github.com/runfabric/runfabric/platform/workflow/recovery"
 )
 
 func TestRecoveryModes(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func TestRedirectToTunnel_GatewayHooksApplyAndRestore(t *testing.T) {
@@ -37,7 +37,7 @@ func TestRedirectToTunnel_GatewayHooksApplyAndRestore(t *testing.T) {
 	t.Setenv("RUNFABRIC_DEV_STREAM_AZURE_FUNCTIONS_RESTORE_URL", gateway.URL+"/restore")
 	t.Setenv("RUNFABRIC_DEV_STREAM_AZURE_FUNCTIONS_TOKEN", "")
 
-	cfg := &config.Config{Service: "svc"}
+	cfg := sdkprovider.Config{"service": "svc"}
 	state, err := RedirectToTunnel("azure-functions", cfg, "dev", "https://abc.ngrok.io")
 	if err != nil {
 		t.Fatalf("redirect failed: %v", err)
@@ -67,7 +67,7 @@ func TestRedirectToTunnel_MissingGatewayHooksFallsBack(t *testing.T) {
 	t.Setenv("RUNFABRIC_DEV_STREAM_AZURE_FUNCTIONS_SET_URL", "")
 	t.Setenv("RUNFABRIC_DEV_STREAM_AZURE_FUNCTIONS_RESTORE_URL", "")
 
-	cfg := &config.Config{Service: "svc"}
+	cfg := sdkprovider.Config{"service": "svc"}
 	state, err := RedirectToTunnel("azure-functions", cfg, "dev", "https://abc.ngrok.io")
 	if err != nil {
 		t.Fatalf("redirect failed: %v", err)

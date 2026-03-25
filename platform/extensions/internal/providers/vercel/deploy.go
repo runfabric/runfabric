@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 const vercelAPI = "https://api.vercel.com"
@@ -22,11 +22,16 @@ const vercelAPI = "https://api.vercel.com"
 // Runner deploys via Vercel API (POST /v13/deployments with files).
 type Runner struct{}
 
-func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
+func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root string) (*sdkprovider.DeployResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
 	if apiutil.Env("VERCEL_TOKEN") == "" {
 		return nil, fmt.Errorf("VERCEL_TOKEN is required")
 	}
-	projectName := cfg.Service
+	projectName := coreCfg.Service
 	teamID := apiutil.Env("VERCEL_TEAM_ID")
 	type vercelFile struct {
 		File     string `json:"file"`
@@ -80,7 +85,7 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 		ID  string `json:"id"`
 	}
 	_ = json.Unmarshal(b, &out)
-	result := apiutil.BuildDeployResult("vercel", cfg, stage)
+	result := apiutil.BuildSDKDeployResult("vercel", cfg, stage)
 	if out.URL != "" {
 		if !strings.HasPrefix(out.URL, "http") {
 			out.URL = "https://" + out.URL

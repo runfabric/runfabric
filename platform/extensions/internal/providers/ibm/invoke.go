@@ -10,16 +10,20 @@ import (
 	"net/http"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Invoker invokes via OpenWhisk REST API (POST .../actions/...?blocking=true).
 type Invoker struct{}
 
-func (Invoker) Invoke(ctx context.Context, cfg *config.Config, stage, function string, payload []byte, receipt *state.Receipt) (*providers.InvokeResult, error) {
+func (Invoker) Invoke(ctx context.Context, cfg sdkprovider.Config, stage, function string, payload []byte, receipt any) (*sdkprovider.InvokeResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
 	auth := apiutil.Env("IBM_OPENWHISK_AUTH")
 	apihost := apiutil.Env("IBM_OPENWHISK_API_HOST")
 	if apihost == "" {
@@ -32,7 +36,7 @@ func (Invoker) Invoke(ctx context.Context, cfg *config.Config, stage, function s
 	if namespace == "" {
 		namespace = "_"
 	}
-	actionName := fmt.Sprintf("%s_%s_%s", cfg.Service, stage, function)
+	actionName := fmt.Sprintf("%s_%s_%s", coreCfg.Service, stage, function)
 	url := strings.TrimSuffix(apihost, "/") + "/api/v1/namespaces/" + namespace + "/actions/" + actionName + "?blocking=true"
 	var input map[string]any
 	if len(payload) > 0 {
@@ -53,7 +57,7 @@ func (Invoker) Invoke(ctx context.Context, cfg *config.Config, stage, function s
 	b, _ := io.ReadAll(resp.Body)
 	out := string(b)
 	if resp.StatusCode >= 400 {
-		return &providers.InvokeResult{Provider: "ibm-openwhisk", Function: function, Output: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, out)}, nil
+		return &sdkprovider.InvokeResult{Provider: "ibm-openwhisk", Function: function, Output: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, out)}, nil
 	}
-	return &providers.InvokeResult{Provider: "ibm-openwhisk", Function: function, Output: out}, nil
+	return &sdkprovider.InvokeResult{Provider: "ibm-openwhisk", Function: function, Output: out}, nil
 }

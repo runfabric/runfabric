@@ -1,5 +1,7 @@
 package alibaba
 
+import "github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
+
 const (
 	ProviderID                     = "alibaba-fc"
 	ProviderName                   = "Alibaba FC"
@@ -8,3 +10,14 @@ const (
 	ProviderExcludeFromAPIDispatch = false
 	ProviderIncludeBuiltinManifest = true
 )
+
+func Descriptor() catalog.ProviderDescriptor {
+	return catalog.ProviderDescriptor{
+		ID:                     ProviderID,
+		Name:                   ProviderName,
+		Description:            ProviderDescription,
+		BuiltinImplementation:  ProviderBuiltinImplementation,
+		ExcludeFromAPIDispatch: ProviderExcludeFromAPIDispatch,
+		IncludeBuiltinManifest: ProviderIncludeBuiltinManifest,
+	}
+}

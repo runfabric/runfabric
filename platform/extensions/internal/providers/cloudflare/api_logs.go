@@ -12,10 +12,9 @@ import (
 	"strings"
 	"time"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Logger fetches Worker logs (tail API or dashboard link).
@@ -23,15 +22,20 @@ type Logger struct{}
 
 var wranglerTailProvider = fetchWranglerTailLines
 
-func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function string, receipt *state.Receipt) (*providers.LogsResult, error) {
+func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function string, receipt any) (*sdkprovider.LogsResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	rv := apiutil.DecodeReceipt(receipt)
 	accountID := apiutil.Env("CLOUDFLARE_ACCOUNT_ID")
-	workerName := receipt.Metadata["worker"]
+	workerName := rv.Metadata["worker"]
 	if workerName == "" {
-		workerName = fmt.Sprintf("%s-%s", cfg.Service, stage)
+		workerName = fmt.Sprintf("%s-%s", coreCfg.Service, stage)
 	}
 	if strings.TrimSpace(os.Getenv("RUNFABRIC_CLOUDFLARE_DISABLE_WRANGLER_TAIL")) != "1" {
 		if lines, err := wranglerTailProvider(ctx, workerName); err == nil && len(lines) > 0 {
-			return &providers.LogsResult{Provider: "cloudflare-workers", Function: function, Lines: lines}, nil
+			return &sdkprovider.LogsResult{Provider: "cloudflare-workers", Function: function, Lines: lines}, nil
 		}
 	}
 	url := cfAPI + "/accounts/" + accountID + "/workers/scripts/" + workerName + "/tail"
@@ -39,7 +43,7 @@ func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function stri
 	req.Header.Set("Authorization", "Bearer "+apiutil.Env("CLOUDFLARE_API_TOKEN"))
 	resp, err := apiutil.DefaultClient.Do(req)
 	if err != nil {
-		return &providers.LogsResult{
+		return &sdkprovider.LogsResult{
 			Provider: "cloudflare-workers",
 			Function: function,
 			Lines:    []string{fmt.Sprintf("Logs: %v. Dashboard: https://dash.cloudflare.com/ (Workers)", err)},
@@ -48,7 +52,7 @@ func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function stri
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return &providers.LogsResult{
+		return &sdkprovider.LogsResult{
 			Provider: "cloudflare-workers",
 			Function: function,
 			Lines:    []string{fmt.Sprintf("Logs API: %s. Dashboard: https://dash.cloudflare.com/ (Workers)", string(b))},
@@ -58,7 +62,7 @@ func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function stri
 	if len(lines) == 1 && lines[0] == "" {
 		lines = []string{"No tail output. Use dashboard for Real-time Logs."}
 	}
-	return &providers.LogsResult{Provider: "cloudflare-workers", Function: function, Lines: lines}, nil
+	return &sdkprovider.LogsResult{Provider: "cloudflare-workers", Function: function, Lines: lines}, nil
 }
 
 func fetchWranglerTailLines(ctx context.Context, workerName string) ([]string, error) {

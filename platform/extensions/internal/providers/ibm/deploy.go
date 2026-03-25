@@ -13,15 +13,20 @@ import (
 	"path/filepath"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Runner deploys actions via OpenWhisk REST API (PUT /api/v1/namespaces/.../actions/...).
 type Runner struct{}
 
-func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
+func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root string) (*sdkprovider.DeployResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
 	if apiutil.Env("IBM_OPENWHISK_AUTH") == "" {
 		return nil, fmt.Errorf("IBM_OPENWHISK_AUTH is required (e.g. user:password or API key)")
 	}
@@ -37,10 +42,10 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 		namespace = "_"
 	}
 	auth := apiutil.Env("IBM_OPENWHISK_AUTH")
-	result := apiutil.BuildDeployResult("ibm-openwhisk", cfg, stage)
+	result := apiutil.BuildSDKDeployResult("ibm-openwhisk", cfg, stage)
 	result.Metadata["namespace"] = namespace
 	baseURL := strings.TrimSuffix(apihost, "/") + "/api/v1/namespaces/" + namespace + "/actions/"
-	for fnName, fn := range cfg.Functions {
+	for fnName, fn := range coreCfg.Functions {
 		handlerPath := fn.Handler
 		if handlerPath == "" {
 			handlerPath = "index.handler"
@@ -53,7 +58,7 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 		if err != nil {
 			return nil, fmt.Errorf("read action code %s: %w", mainJS, err)
 		}
-		actionName := fmt.Sprintf("%s_%s_%s", cfg.Service, stage, fnName)
+		actionName := fmt.Sprintf("%s_%s_%s", coreCfg.Service, stage, fnName)
 		url := baseURL + actionName + "?overwrite=true"
 		body := map[string]any{"exec": map[string]any{"kind": "nodejs:20", "code": string(code)}}
 		bodyBytes, _ := json.Marshal(body)

@@ -7,8 +7,8 @@ import (
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/model/protocol"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
-	"github.com/runfabric/runfabric/platform/core/state/locking"
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
+	"github.com/runfabric/runfabric/platform/state/locking"
 )
 
 func Inspect(configPath, stage string) (any, error) {

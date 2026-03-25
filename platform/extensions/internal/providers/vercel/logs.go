@@ -7,19 +7,24 @@ import (
 	"io"
 	"net/http"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Logger fetches deployment events via Vercel API (GET /v3/deployments/{id}/events).
 type Logger struct{}
 
-func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function string, receipt *state.Receipt) (*providers.LogsResult, error) {
-	deployID := receipt.Outputs["deployment_id"]
+func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function string, receipt any) (*sdkprovider.LogsResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
+	rv := apiutil.DecodeReceipt(receipt)
+	deployID := rv.Outputs["deployment_id"]
 	if deployID == "" {
-		return &providers.LogsResult{
+		return &sdkprovider.LogsResult{
 			Provider: "vercel",
 			Function: function,
 			Lines:    []string{"No deployment_id in receipt; redeploy to capture logs."},
@@ -30,7 +35,7 @@ func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function stri
 	req.Header.Set("Authorization", "Bearer "+apiutil.Env("VERCEL_TOKEN"))
 	resp, err := apiutil.DefaultClient.Do(req)
 	if err != nil {
-		return &providers.LogsResult{Provider: "vercel", Function: function, Lines: []string{err.Error()}}, nil
+		return &sdkprovider.LogsResult{Provider: "vercel", Function: function, Lines: []string{err.Error()}}, nil
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
@@ -43,7 +48,7 @@ func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function stri
 		if len(lines[0]) > 500 {
 			lines[0] = lines[0][:500] + "..."
 		}
-		return &providers.LogsResult{Provider: "vercel", Function: function, Lines: lines}, nil
+		return &sdkprovider.LogsResult{Provider: "vercel", Function: function, Lines: lines}, nil
 	}
 	var lines []string
 	for _, e := range events {
@@ -52,5 +57,5 @@ func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function stri
 	if len(lines) == 0 {
 		lines = []string{"No deployment events."}
 	}
-	return &providers.LogsResult{Provider: "vercel", Function: function, Lines: lines}, nil
+	return &sdkprovider.LogsResult{Provider: "vercel", Function: function, Lines: lines}, nil
 }

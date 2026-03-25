@@ -5,7 +5,7 @@ import (
 
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
 )
 
 // Plan returns a deployment plan for GCP Cloud Functions using the shared planner.

@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func TestLoggerLogs_UsesWranglerTailWhenAvailable(t *testing.T) {
@@ -24,7 +24,8 @@ func TestLoggerLogs_UsesWranglerTailWhenAvailable(t *testing.T) {
 	defer func() { wranglerTailProvider = oldTail }()
 
 	logger := Logger{}
-	result, err := logger.Logs(context.Background(), &config.Config{Service: "demo"}, "dev", "api", &state.Receipt{Metadata: map[string]string{"worker": "demo-dev"}})
+	cfg := sdkprovider.Config{"service": "demo"}
+	result, err := logger.Logs(context.Background(), cfg, "dev", "api", &state.Receipt{Metadata: map[string]string{"worker": "demo-dev"}})
 	if err != nil {
 		t.Fatalf("logs failed: %v", err)
 	}
@@ -64,7 +65,8 @@ func TestLoggerLogs_FallsBackToAPITailWhenWranglerUnavailable(t *testing.T) {
 	t.Setenv("CLOUDFLARE_API_TOKEN", "token")
 
 	logger := Logger{}
-	result, err := logger.Logs(context.Background(), &config.Config{Service: "demo"}, "dev", "api", &state.Receipt{Metadata: map[string]string{"worker": "demo-dev"}})
+	cfg := sdkprovider.Config{"service": "demo"}
+	result, err := logger.Logs(context.Background(), cfg, "dev", "api", &state.Receipt{Metadata: map[string]string{"worker": "demo-dev"}})
 	if err != nil {
 		t.Fatalf("logs failed: %v", err)
 	}
@@ -102,7 +104,8 @@ func TestLoggerLogs_DisableWranglerTailEnv(t *testing.T) {
 	t.Setenv("CLOUDFLARE_API_TOKEN", "token")
 
 	logger := Logger{}
-	result, err := logger.Logs(context.Background(), &config.Config{Service: "demo"}, "dev", "api", &state.Receipt{Metadata: map[string]string{"worker": "demo-dev"}})
+	cfg := sdkprovider.Config{"service": "demo"}
+	result, err := logger.Logs(context.Background(), cfg, "dev", "api", &state.Receipt{Metadata: map[string]string{"worker": "demo-dev"}})
 	if err != nil {
 		t.Fatalf("logs failed: %v", err)
 	}

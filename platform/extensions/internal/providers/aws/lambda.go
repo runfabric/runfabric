@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
@@ -47,7 +47,7 @@ func upsertLambdaFunction(
 	stage string,
 	fnName string,
 	fn config.FunctionConfig,
-	artifact providers.Artifact,
+	artifact sdkprovider.Artifact,
 	roleARN string,
 	changeSet functionChangeSet,
 ) (*deployedLambda, error) {

@@ -12,7 +12,7 @@ import (
 	sfnv2 "github.com/aws/aws-sdk-go-v2/service/sfn"
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	appErrs "github.com/runfabric/runfabric/platform/core/model/errors"
-	"github.com/runfabric/runfabric/platform/core/state/locking"
+	"github.com/runfabric/runfabric/platform/state/locking"
 )
 
 func (p *Provider) Remove(ctx context.Context, req providers.RemoveRequest) (*providers.RemoveResult, error) {

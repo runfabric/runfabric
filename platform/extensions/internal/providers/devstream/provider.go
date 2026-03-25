@@ -6,9 +6,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	coredevstream "github.com/runfabric/runfabric/platform/core/model/devstream"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	coredevstream "github.com/runfabric/runfabric/platform/model/devstream"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // LifecycleState captures provider-neutral dev-stream lifecycle hook state.
@@ -31,9 +32,13 @@ type LifecycleState struct {
 }
 
 // RedirectToTunnel validates the lifecycle-hook request and returns a stable restore handle.
-func RedirectToTunnel(providerName string, cfg *config.Config, stage, tunnelURL string) (*LifecycleState, error) {
+func RedirectToTunnel(providerName string, cfg sdkprovider.Config, stage, tunnelURL string) (*LifecycleState, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config required")
+	}
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(providerName) == "" {
 		return nil, fmt.Errorf("provider name required")
@@ -46,7 +51,7 @@ func RedirectToTunnel(providerName string, cfg *config.Config, stage, tunnelURL 
 	}
 	state := &LifecycleState{
 		ProviderName:    providerName,
-		Service:         cfg.Service,
+		Service:         coreCfg.Service,
 		Stage:           stage,
 		TunnelURL:       tunnelURL,
 		Mode:            string(coredevstream.ModeLifecycleOnly),
@@ -69,7 +74,7 @@ func RedirectToTunnel(providerName string, cfg *config.Config, stage, tunnelURL 
 
 	payload := map[string]string{
 		"provider":  providerName,
-		"service":   cfg.Service,
+		"service":   coreCfg.Service,
 		"stage":     stage,
 		"tunnelUrl": tunnelURL,
 	}

@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
-	"github.com/runfabric/runfabric/platform/core/workflow/recovery"
+	"github.com/runfabric/runfabric/platform/workflow/recovery"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
-func PrepareDevStreamPolicy(ctx context.Context, cfg *providers.Config, stage, tunnelURL string) (*providers.DevStreamSession, error) {
+func PrepareDevStreamPolicy(ctx context.Context, cfg sdkprovider.Config, stage, tunnelURL string) (*sdkprovider.DevStreamSession, error) {
 	state, err := RedirectToTunnel(ctx, cfg, stage, tunnelURL)
 	if err != nil {
 		return nil, err
@@ -18,12 +18,10 @@ func PrepareDevStreamPolicy(ctx context.Context, cfg *providers.Config, stage, t
 	if state == nil {
 		return nil, nil
 	}
-	return providers.NewDevStreamSession(state.Mode, state.MissingPrereqs, state.StatusMessage, func(restoreCtx context.Context) error {
-		return state.Restore(restoreCtx)
-	}), nil
+	return &sdkprovider.DevStreamSession{EffectiveMode: state.Mode, MissingPrereqs: append([]string(nil), state.MissingPrereqs...), StatusMessage: state.StatusMessage}, nil
 }
 
-func FetchMetricsPolicy(ctx context.Context, cfg *providers.Config, stage string) (*providers.MetricsResult, error) {
+func FetchMetricsPolicy(ctx context.Context, cfg sdkprovider.Config, stage string) (*sdkprovider.MetricsResult, error) {
 	perFn, err := FetchMetrics(ctx, cfg, stage)
 	if err != nil {
 		return nil, err
@@ -33,12 +31,12 @@ func FetchMetricsPolicy(ctx context.Context, cfg *providers.Config, stage string
 		out[fn] = m
 	}
 	if len(out) == 0 {
-		return &providers.MetricsResult{Message: "Azure: use Azure Portal / Application Insights for function metrics."}, nil
+		return &sdkprovider.MetricsResult{Message: "Azure: use Azure Portal / Application Insights for function metrics."}, nil
 	}
-	return &providers.MetricsResult{PerFunction: out, Message: "Azure Application Insights metrics; use Azure Portal for more."}, nil
+	return &sdkprovider.MetricsResult{PerFunction: out, Message: "Azure Application Insights metrics; use Azure Portal for more."}, nil
 }
 
-func FetchTracesPolicy(ctx context.Context, cfg *providers.Config, stage string) (*providers.TracesResult, error) {
+func FetchTracesPolicy(ctx context.Context, cfg sdkprovider.Config, stage string) (*sdkprovider.TracesResult, error) {
 	summaries, err := FetchTraces(ctx, cfg, stage)
 	if err != nil {
 		return nil, err
@@ -48,12 +46,12 @@ func FetchTracesPolicy(ctx context.Context, cfg *providers.Config, stage string)
 		traces = append(traces, s)
 	}
 	if len(traces) == 0 {
-		return &providers.TracesResult{Message: "Azure: use Azure Portal / Application Insights for traces."}, nil
+		return &sdkprovider.TracesResult{Message: "Azure: use Azure Portal / Application Insights for traces."}, nil
 	}
-	return &providers.TracesResult{Traces: traces, Message: "Azure Application Insights traces; use Azure Portal for full details."}, nil
+	return &sdkprovider.TracesResult{Traces: traces, Message: "Azure Application Insights traces; use Azure Portal for full details."}, nil
 }
 
-func RecoverPolicy(ctx context.Context, req providers.RecoveryRequest) (*providers.RecoveryResult, error) {
+func RecoverPolicy(ctx context.Context, req sdkprovider.RecoveryRequest) (*sdkprovider.RecoveryResult, error) {
 	journal, _ := req.Journal.(*transactions.JournalFile)
 	handler := NewRecoveryHandler(journal)
 	recoveryReq := recovery.Request{
@@ -83,7 +81,7 @@ func RecoverPolicy(ctx context.Context, req providers.RecoveryRequest) (*provide
 	if out == nil {
 		return nil, fmt.Errorf("azure recovery %q returned no result", mode)
 	}
-	return &providers.RecoveryResult{
+	return &sdkprovider.RecoveryResult{
 		Recovered: out.Recovered,
 		Mode:      out.Mode,
 		Status:    out.Status,
@@ -93,18 +91,18 @@ func RecoverPolicy(ctx context.Context, req providers.RecoveryRequest) (*provide
 	}, nil
 }
 
-func SyncOrchestrationsPolicy(ctx context.Context, req providers.OrchestrationSyncRequest) (*providers.OrchestrationSyncResult, error) {
+func SyncOrchestrationsPolicy(ctx context.Context, req sdkprovider.OrchestrationSyncRequest) (*sdkprovider.OrchestrationSyncResult, error) {
 	return (Runner{}).SyncOrchestrations(ctx, req)
 }
 
-func RemoveOrchestrationsPolicy(ctx context.Context, req providers.OrchestrationRemoveRequest) (*providers.OrchestrationSyncResult, error) {
+func RemoveOrchestrationsPolicy(ctx context.Context, req sdkprovider.OrchestrationRemoveRequest) (*sdkprovider.OrchestrationSyncResult, error) {
 	return (Runner{}).RemoveOrchestrations(ctx, req)
 }
 
-func InvokeOrchestrationPolicy(ctx context.Context, req providers.OrchestrationInvokeRequest) (*providers.InvokeResult, error) {
+func InvokeOrchestrationPolicy(ctx context.Context, req sdkprovider.OrchestrationInvokeRequest) (*sdkprovider.InvokeResult, error) {
 	return (Runner{}).InvokeOrchestration(ctx, req)
 }
 
-func InspectOrchestrationsPolicy(ctx context.Context, req providers.OrchestrationInspectRequest) (map[string]any, error) {
+func InspectOrchestrationsPolicy(ctx context.Context, req sdkprovider.OrchestrationInspectRequest) (map[string]any, error) {
 	return (Runner{}).InspectOrchestrations(ctx, req)
 }

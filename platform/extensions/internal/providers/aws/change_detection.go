@@ -7,10 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 type functionChangeSet struct {
@@ -65,7 +65,7 @@ func localHexToAWSBase64(hexHash string) (string, error) {
 
 func detectFunctionChange(
 	functionName string,
-	artifact providers.Artifact,
+	artifact sdkprovider.Artifact,
 	desired planner.DesiredFunction,
 	actual *planner.ActualFunction,
 	receiptMap map[string]state.FunctionDeployment,

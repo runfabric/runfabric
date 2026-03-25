@@ -4,9 +4,9 @@ import (
 	"context"
 
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
 )
 
 // APIDispatchProvider marks providers that should be executed through internal/deploy/api

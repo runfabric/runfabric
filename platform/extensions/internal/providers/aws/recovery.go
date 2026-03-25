@@ -6,7 +6,7 @@ import (
 
 	appErrs "github.com/runfabric/runfabric/platform/core/model/errors"
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
-	"github.com/runfabric/runfabric/platform/core/workflow/recovery"
+	"github.com/runfabric/runfabric/platform/workflow/recovery"
 )
 
 type RecoveryHandler struct {

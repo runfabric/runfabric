@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/apigatewayv2"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
 )
 
 func deleteStaleRoutes(ctx context.Context, clients *AWSClients, apiID string, desired *planner.DesiredState, actual *planner.ActualState) error {

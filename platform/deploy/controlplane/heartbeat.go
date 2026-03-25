@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/runfabric/runfabric/platform/core/state/locking"
+	"github.com/runfabric/runfabric/platform/state/locking"
 )
 
 func StartHeartbeat(ctx context.Context, handle *locking.Handle, leaseFor, interval time.Duration) <-chan error {

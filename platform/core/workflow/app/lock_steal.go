@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/runfabric/runfabric/platform/core/state/locking"
+	"github.com/runfabric/runfabric/platform/state/locking"
 )
 
 func LockSteal(configPath, stage string) (any, error) {

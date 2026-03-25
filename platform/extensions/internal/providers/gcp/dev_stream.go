@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	coredevstream "github.com/runfabric/runfabric/platform/core/model/devstream"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	coredevstream "github.com/runfabric/runfabric/platform/model/devstream"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 var gcpFunctionsAPI = "https://cloudfunctions.googleapis.com/v2"
@@ -37,7 +37,7 @@ type DevStreamState struct {
 // 1. Cloud Load Balancer with custom routing rules
 // 2. Cloud Run Traffic Manager
 // 3. API Gateway integration
-func RedirectToTunnel(ctx context.Context, cfg *config.Config, stage, tunnelURL string) (*DevStreamState, error) {
+func RedirectToTunnel(ctx context.Context, cfg sdkprovider.Config, stage, tunnelURL string) (*DevStreamState, error) {
 	if cfg == nil || stage == "" || tunnelURL == "" {
 		return nil, fmt.Errorf("config, stage, and tunnel URL required")
 	}
@@ -46,7 +46,7 @@ func RedirectToTunnel(ctx context.Context, cfg *config.Config, stage, tunnelURL 
 	if project == "" {
 		project = apiutil.Env("GCP_PROJECT_ID")
 	}
-	region := cfg.Provider.Region
+	region := providerRegion(cfg)
 	if region == "" {
 		region = "us-central1"
 	}
@@ -68,7 +68,7 @@ func RedirectToTunnel(ctx context.Context, cfg *config.Config, stage, tunnelURL 
 
 	if state.GatewaySetURL != "" && state.GatewayRestoreURL != "" {
 		payload := map[string]string{
-			"service":          cfg.Service,
+			"service":          configService(cfg),
 			"stage":            stage,
 			"project":          project,
 			"region":           region,
@@ -229,17 +229,57 @@ func (s *DevStreamState) Restore(ctx context.Context, region string) error {
 	return nil
 }
 
-func primaryFunctionName(cfg *config.Config, stage string) string {
-	if cfg != nil && len(cfg.Functions) > 0 {
-		names := make([]string, 0, len(cfg.Functions))
-		for n := range cfg.Functions {
-			names = append(names, n)
-		}
-		sort.Strings(names)
-		return fmt.Sprintf("%s-%s-%s", cfg.Service, stage, names[0])
+func primaryFunctionName(cfg sdkprovider.Config, stage string) string {
+	fnNames := configFunctionNames(cfg)
+	if len(fnNames) > 0 {
+		sort.Strings(fnNames)
+		return fmt.Sprintf("%s-%s-%s", configService(cfg), stage, fnNames[0])
 	}
 	if cfg != nil {
-		return fmt.Sprintf("%s-%s", cfg.Service, stage)
+		return fmt.Sprintf("%s-%s", configService(cfg), stage)
 	}
 	return stage
+}
+
+func configService(cfg sdkprovider.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	service, _ := cfg["service"].(string)
+	return strings.TrimSpace(service)
+}
+
+func providerRegion(cfg sdkprovider.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	providerValue, ok := cfg["provider"]
+	if !ok || providerValue == nil {
+		return ""
+	}
+	providerMap, ok := providerValue.(map[string]any)
+	if !ok {
+		return ""
+	}
+	region, _ := providerMap["region"].(string)
+	return strings.TrimSpace(region)
+}
+
+func configFunctionNames(cfg sdkprovider.Config) []string {
+	if cfg == nil {
+		return nil
+	}
+	functionsValue, ok := cfg["functions"]
+	if !ok || functionsValue == nil {
+		return nil
+	}
+	functionsMap, ok := functionsValue.(map[string]any)
+	if !ok {
+		return nil
+	}
+	names := make([]string, 0, len(functionsMap))
+	for name := range functionsMap {
+		names = append(names, name)
+	}
+	return names
 }

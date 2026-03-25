@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/runfabric/runfabric/platform/core/state/locking"
+	"github.com/runfabric/runfabric/platform/state/locking"
 )
 
 func TestLockBackendAcquireRelease(t *testing.T) {

@@ -8,17 +8,22 @@ import (
 	"net/http"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Invoker invokes via HTTP POST to the deploy URL.
 type Invoker struct{}
 
-func (Invoker) Invoke(ctx context.Context, cfg *config.Config, stage, function string, payload []byte, receipt *state.Receipt) (*providers.InvokeResult, error) {
-	url := receipt.Outputs["url"]
+func (Invoker) Invoke(ctx context.Context, cfg sdkprovider.Config, stage, function string, payload []byte, receipt any) (*sdkprovider.InvokeResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
+	rv := apiutil.DecodeReceipt(receipt)
+	url := rv.Outputs["url"]
 	if url == "" {
 		return nil, fmt.Errorf("no URL in receipt; redeploy first")
 	}
@@ -35,7 +40,7 @@ func (Invoker) Invoke(ctx context.Context, cfg *config.Config, stage, function s
 	body, _ := io.ReadAll(resp.Body)
 	out := string(body)
 	if resp.StatusCode >= 400 {
-		return &providers.InvokeResult{Provider: "netlify", Function: function, Output: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, out)}, nil
+		return &sdkprovider.InvokeResult{Provider: "netlify", Function: function, Output: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, out)}, nil
 	}
-	return &providers.InvokeResult{Provider: "netlify", Function: function, Output: out}, nil
+	return &sdkprovider.InvokeResult{Provider: "netlify", Function: function, Output: out}, nil
 }

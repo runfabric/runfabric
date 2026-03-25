@@ -8,9 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func TestSyncOrchestrations_ManagesDurableAppSettings(t *testing.T) {
@@ -41,18 +40,21 @@ func TestSyncOrchestrations_ManagesDurableAppSettings(t *testing.T) {
 	t.Setenv("AZURE_SUBSCRIPTION_ID", "sub-1")
 	t.Setenv("AZURE_RESOURCE_GROUP", "rg-1")
 
-	cfg := &providers.Config{Service: "svc", Provider: config.ProviderConfig{Name: "azure-functions"}}
-	req := providers.OrchestrationSyncRequest{
+	cfg := sdkprovider.Config{
+		"service":  "svc",
+		"provider": map[string]any{"name": "azure-functions"},
+		"extensions": map[string]any{
+			"azure-functions": map[string]any{
+				"durableFunctions": []any{
+					map[string]any{"name": "order-flow", "orchestrator": "OrderFlow", "taskHub": "orders-hub"},
+				},
+			},
+		},
+	}
+	req := sdkprovider.OrchestrationSyncRequest{
 		Config: cfg,
 		Stage:  "dev",
 		Root:   ".",
-	}
-	cfg.Extensions = map[string]any{
-		"azure-functions": map[string]any{
-			"durableFunctions": []any{
-				map[string]any{"name": "order-flow", "orchestrator": "OrderFlow", "taskHub": "orders-hub"},
-			},
-		},
 	}
 
 	runner := Runner{}
@@ -108,17 +110,20 @@ func TestRemoveOrchestrations_RemovesDurableAppSettings(t *testing.T) {
 	t.Setenv("AZURE_SUBSCRIPTION_ID", "sub-1")
 	t.Setenv("AZURE_RESOURCE_GROUP", "rg-1")
 
-	cfg := &providers.Config{Service: "svc", Provider: config.ProviderConfig{Name: "azure-functions"}}
-	cfg.Extensions = map[string]any{
-		"azure-functions": map[string]any{
-			"durableFunctions": []any{
-				map[string]any{"name": "order-flow", "orchestrator": "OrderFlow"},
+	cfg := sdkprovider.Config{
+		"service":  "svc",
+		"provider": map[string]any{"name": "azure-functions"},
+		"extensions": map[string]any{
+			"azure-functions": map[string]any{
+				"durableFunctions": []any{
+					map[string]any{"name": "order-flow", "orchestrator": "OrderFlow"},
+				},
 			},
 		},
 	}
 
 	runner := Runner{}
-	res, err := runner.RemoveOrchestrations(context.Background(), providers.OrchestrationRemoveRequest{Config: cfg, Stage: "dev", Root: "."})
+	res, err := runner.RemoveOrchestrations(context.Background(), sdkprovider.OrchestrationRemoveRequest{Config: cfg, Stage: "dev", Root: "."})
 	if err != nil {
 		t.Fatalf("remove orchestrations error: %v", err)
 	}

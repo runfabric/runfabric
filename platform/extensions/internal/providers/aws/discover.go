@@ -7,9 +7,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/apigatewayv2"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func discoverActualState(ctx context.Context, clients *AWSClients, cfg *config.Config, stage string) (*planner.ActualState, error) {
@@ -133,7 +133,7 @@ func discoverActualState(ctx context.Context, clients *AWSClients, cfg *config.C
 	return state, nil
 }
 
-func desiredStateFromConfig(cfg *config.Config, stage string, artifacts map[string]providers.Artifact) *planner.DesiredState {
+func desiredStateFromConfig(cfg *config.Config, stage string, artifacts map[string]sdkprovider.Artifact) *planner.DesiredState {
 	desired := &planner.DesiredState{
 		Functions: []planner.DesiredFunction{},
 		Routes:    []planner.DesiredRoute{},

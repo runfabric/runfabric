@@ -7,28 +7,33 @@ import (
 	"net/http"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Logger fetches app logs via DigitalOcean API.
 type Logger struct{}
 
-func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function string, receipt *state.Receipt) (*providers.LogsResult, error) {
-	appID := receipt.Outputs["app_id"]
+func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function string, receipt any) (*sdkprovider.LogsResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
+	rv := apiutil.DecodeReceipt(receipt)
+	appID := rv.Outputs["app_id"]
 	if appID == "" {
-		return &providers.LogsResult{
+		return &sdkprovider.LogsResult{
 			Provider: "digitalocean-functions",
 			Function: function,
-			Lines:    []string{"No app_id in receipt. Redeploy then run logs again."},
+			Lines:    []string{"No app_id in rv. Redeploy then run logs again."},
 		}, nil
 	}
 	url := doAPI + "/" + appID + "/logs?type=run"
 	lines, err := getLines(ctx, url, "DIGITALOCEAN_ACCESS_TOKEN")
 	if err != nil {
-		return &providers.LogsResult{
+		return &sdkprovider.LogsResult{
 			Provider: "digitalocean-functions",
 			Function: function,
 			Lines:    []string{fmt.Sprintf("Fetch logs: %v. Or open https://cloud.digitalocean.com/apps/%s", err, appID)},
@@ -37,7 +42,7 @@ func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function stri
 	if len(lines) == 0 {
 		lines = []string{"No run logs (check Build/Deploy logs in console)."}
 	}
-	return &providers.LogsResult{Provider: "digitalocean-functions", Function: function, Lines: lines}, nil
+	return &sdkprovider.LogsResult{Provider: "digitalocean-functions", Function: function, Lines: lines}, nil
 }
 
 func getLines(ctx context.Context, url, authEnv string) ([]string, error) {

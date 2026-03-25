@@ -4,10 +4,10 @@ package triggers
 import (
 	"context"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // EnsureHTTP ensures HTTP trigger. No-op: HTTP is in the app spec at deploy time (functions component).
-func EnsureHTTP(ctx context.Context, cfg *config.Config, stage, functionName string) error {
+func EnsureHTTP(ctx context.Context, cfg sdkprovider.Config, stage, functionName string) error {
 	return nil
 }

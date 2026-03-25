@@ -9,25 +9,43 @@ import (
 	"strings"
 
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Invoke loads the receipt and delegates to Invoker.
 // Receipt is loaded from "." (current directory); run from project root so .runfabric/<stage>.json is found.
 func (p *Provider) Invoke(ctx context.Context, req providers.InvokeRequest) (*providers.InvokeResult, error) {
 	receipt, _ := state.Load(".", req.Stage)
-	return (Invoker{}).Invoke(ctx, req.Config, req.Stage, req.Function, req.Payload, receipt)
+	sdkCfg, err := sdkbridge.FromCoreConfig(req.Config)
+	if err != nil {
+		return nil, err
+	}
+	r, err := (Invoker{}).Invoke(ctx, sdkCfg, req.Stage, req.Function, req.Payload, receipt)
+	if err != nil {
+		return nil, err
+	}
+	return &providers.InvokeResult{
+		Provider: r.Provider, Function: r.Function, Output: r.Output,
+		RunID: r.RunID, Workflow: r.Workflow,
+	}, nil
 }
 
 // Invoker invokes via HTTP POST to the function URL from receipt.
 type Invoker struct{}
 
-func (Invoker) Invoke(ctx context.Context, cfg *config.Config, stage, function string, payload []byte, receipt *state.Receipt) (*providers.InvokeResult, error) {
-	url := receipt.Outputs["url"]
+func (Invoker) Invoke(ctx context.Context, cfg sdkprovider.Config, stage, function string, payload []byte, receipt any) (*sdkprovider.InvokeResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
+	rv := apiutil.DecodeReceipt(receipt)
+	url := rv.Outputs["url"]
 	if url == "" {
-		url = receipt.Outputs["url_"+function]
+		url = rv.Outputs["url_"+function]
 	}
 	if url == "" {
 		return nil, fmt.Errorf("no URL in receipt; redeploy first")
@@ -45,7 +63,7 @@ func (Invoker) Invoke(ctx context.Context, cfg *config.Config, stage, function s
 	body, _ := io.ReadAll(resp.Body)
 	out := string(body)
 	if resp.StatusCode >= 400 {
-		return &providers.InvokeResult{Provider: "gcp-functions", Function: function, Output: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, out)}, nil
+		return &sdkprovider.InvokeResult{Provider: "gcp-functions", Function: function, Output: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, out)}, nil
 	}
-	return &providers.InvokeResult{Provider: "gcp-functions", Function: function, Output: out}, nil
+	return &sdkprovider.InvokeResult{Provider: "gcp-functions", Function: function, Output: out}, nil
 }

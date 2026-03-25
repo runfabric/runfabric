@@ -9,15 +9,23 @@ import (
 	"io"
 	"net/http"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Runner deploys by creating resource group and function app via Azure Management REST API.
 type Runner struct{}
 
-func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
+func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root string) (*sdkprovider.DeployResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	serviceName := "service"
+	if coreCfg != nil && coreCfg.Service != "" {
+		serviceName = coreCfg.Service
+	}
 	if apiutil.Env("AZURE_ACCESS_TOKEN") == "" {
 		return nil, fmt.Errorf("AZURE_ACCESS_TOKEN is required (e.g. from az account get-access-token --resource https://management.azure.com)")
 	}
@@ -26,9 +34,9 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 	}
 	rg := apiutil.Env("AZURE_RESOURCE_GROUP")
 	if rg == "" {
-		rg = cfg.Service + "-" + stage
+		rg = serviceName + "-" + stage
 	}
-	appName := fmt.Sprintf("%s-%s", cfg.Service, stage)
+	appName := fmt.Sprintf("%s-%s", serviceName, stage)
 	subID := apiutil.Env("AZURE_SUBSCRIPTION_ID")
 	base := "https://management.azure.com/subscriptions/" + subID
 	rgURL := base + "/resourcegroups/" + rg + "?api-version=2021-04-01"
@@ -68,13 +76,16 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("azure function app: %s: %s", resp.Status, string(body))
 	}
-	result := apiutil.BuildDeployResult("azure-functions", cfg, stage)
+	result := apiutil.BuildSDKDeployResult("azure-functions", cfg, stage)
 	appResourceID := "/subscriptions/" + subID + "/resourceGroups/" + rg + "/providers/Microsoft.Web/sites/" + appName
 	result.Outputs["resource_group"] = rg
 	result.Outputs["app_name"] = appName
 	result.Outputs["url"] = "https://" + appName + ".azurewebsites.net"
 	result.Metadata["app"] = appName
-	for fnName := range cfg.Functions {
+	if coreCfg == nil {
+		return result, nil
+	}
+	for fnName := range coreCfg.Functions {
 		deployed := result.Functions[fnName]
 		deployed.ResourceName = appName + "/" + fnName
 		deployed.ResourceIdentifier = appResourceID

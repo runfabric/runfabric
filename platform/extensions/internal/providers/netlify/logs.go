@@ -7,29 +7,34 @@ import (
 	"net/http"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Logger fetches site logs via Netlify API (GET /sites/{id}/log).
 type Logger struct{}
 
-func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function string, receipt *state.Receipt) (*providers.LogsResult, error) {
-	siteID := receipt.Outputs["site_id"]
+func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function string, receipt any) (*sdkprovider.LogsResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
+	rv := apiutil.DecodeReceipt(receipt)
+	siteID := rv.Outputs["site_id"]
 	if siteID == "" {
-		siteID = receipt.Metadata["site_id"]
+		siteID = rv.Metadata["site_id"]
 	}
 	if siteID == "" {
-		return &providers.LogsResult{Provider: "netlify", Function: function, Lines: []string{"No site_id in receipt."}}, nil
+		return &sdkprovider.LogsResult{Provider: "netlify", Function: function, Lines: []string{"No site_id in rv."}}, nil
 	}
 	url := netlifyAPI + "/sites/" + siteID + "/log"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("Authorization", "Bearer "+apiutil.Env("NETLIFY_AUTH_TOKEN"))
 	resp, err := apiutil.DefaultClient.Do(req)
 	if err != nil {
-		return &providers.LogsResult{
+		return &sdkprovider.LogsResult{
 			Provider: "netlify",
 			Function: function,
 			Lines:    []string{fmt.Sprintf("Logs: %v. Dashboard: https://app.netlify.com/sites/%s/logs", err, siteID)},
@@ -44,5 +49,5 @@ func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function stri
 	if len(lines) == 0 {
 		lines = []string{"No log entries."}
 	}
-	return &providers.LogsResult{Provider: "netlify", Function: function, Lines: lines}, nil
+	return &sdkprovider.LogsResult{Provider: "netlify", Function: function, Lines: lines}, nil
 }

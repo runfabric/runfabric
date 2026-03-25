@@ -8,43 +8,51 @@ import (
 	"net/http"
 	"net/url"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Logger fetches recent logs from Azure (Log Analytics if workspace set, else portal link).
 type Logger struct{}
 
-func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function string, receipt *state.Receipt) (*providers.LogsResult, error) {
-	appName := receipt.Outputs["app_name"]
+func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function string, receipt any) (*sdkprovider.LogsResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	rv := apiutil.DecodeReceipt(receipt)
+	appName := rv.Outputs["app_name"]
 	if appName == "" {
-		appName = fmt.Sprintf("%s-%s", cfg.Service, stage)
+		serviceName := "service"
+		if coreCfg != nil && coreCfg.Service != "" {
+			serviceName = coreCfg.Service
+		}
+		appName = fmt.Sprintf("%s-%s", serviceName, stage)
 	}
 	workspaceID := apiutil.Env("AZURE_LOG_ANALYTICS_WORKSPACE_ID")
 	if workspaceID != "" && apiutil.Env("AZURE_ACCESS_TOKEN") != "" {
 		lines, err := queryLogAnalytics(ctx, receipt, appName, workspaceID)
 		if err == nil && len(lines) > 0 {
-			return &providers.LogsResult{Provider: "azure-functions", Function: function, Lines: lines}, nil
+			return &sdkprovider.LogsResult{Provider: "azure-functions", Function: function, Lines: lines}, nil
 		}
 	}
 	subID := apiutil.Env("AZURE_SUBSCRIPTION_ID")
-	rg := receipt.Outputs["resource_group"]
+	rg := rv.Outputs["resource_group"]
 	var portalLink string
 	if subID != "" && rg != "" {
 		portalLink = fmt.Sprintf("https://portal.azure.com/#@/resource/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Web/sites/%s/logStream", subID, rg, appName)
 	} else {
 		portalLink = fmt.Sprintf("https://portal.azure.com (Function App: %s → Log stream)", appName)
 	}
-	return &providers.LogsResult{
+	return &sdkprovider.LogsResult{
 		Provider: "azure-functions",
 		Function: function,
 		Lines:    []string{"View logs: " + portalLink, "Or set AZURE_LOG_ANALYTICS_WORKSPACE_ID for CLI log fetch."},
 	}, nil
 }
 
-func queryLogAnalytics(ctx context.Context, receipt *state.Receipt, appName, workspaceID string) ([]string, error) {
+func queryLogAnalytics(ctx context.Context, receipt any, appName, workspaceID string) ([]string, error) {
 	token := apiutil.Env("AZURE_ACCESS_TOKEN")
 	if token == "" {
 		return nil, fmt.Errorf("AZURE_ACCESS_TOKEN required")

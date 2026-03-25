@@ -1,7 +1,7 @@
 package local
 
 import (
-	"github.com/runfabric/runfabric/platform/core/state/locking"
+	"github.com/runfabric/runfabric/platform/state/locking"
 )
 
 type LockBackend struct {

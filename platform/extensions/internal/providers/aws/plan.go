@@ -9,9 +9,10 @@ import (
 	extruntimes "github.com/runfabric/runfabric/platform/core/contracts/runtime"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	appErrs "github.com/runfabric/runfabric/platform/core/model/errors"
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/extensions/internal/runtimes"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func (p *Provider) Plan(ctx context.Context, req providers.PlanRequest) (*providers.PlanResult, error) {
@@ -26,7 +27,7 @@ func (p *Provider) Plan(ctx context.Context, req providers.PlanRequest) (*provid
 		return nil, appErrs.Wrap(appErrs.CodeDeployFailed, "load aws config failed during plan", err)
 	}
 
-	artifactMap := map[string]providers.Artifact{}
+	artifactMap := map[string]sdkprovider.Artifact{}
 	runtimeRegistry := runtimes.NewBuiltinRegistry()
 	for fnName, fn := range cfg.Functions {
 		configSig, err := buildConfigSignature(fn)
@@ -46,7 +47,7 @@ func (p *Provider) Plan(ctx context.Context, req providers.PlanRequest) (*provid
 		if err != nil {
 			return nil, appErrs.Wrap(appErrs.CodeDeployFailed, "package function during plan failed: "+fnName, err)
 		}
-		artifactMap[fnName] = *artifact
+		artifactMap[fnName] = sdkArtifactFromCore(*artifact)
 	}
 
 	actual, err := discoverActualState(ctx, clients, cfg, stage)

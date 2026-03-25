@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/runfabric/runfabric/platform/core/state/backends"
-	"github.com/runfabric/runfabric/platform/core/state/locking"
+	"github.com/runfabric/runfabric/platform/state/locking"
 )
 
 type LockManager struct {

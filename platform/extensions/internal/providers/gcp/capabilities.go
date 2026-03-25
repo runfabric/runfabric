@@ -7,6 +7,8 @@ import (
 
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func (p *Provider) FetchMetrics(ctx context.Context, req providers.MetricsRequest) (*providers.MetricsResult, error) {
@@ -52,7 +54,11 @@ func (p *Provider) FetchTraces(ctx context.Context, req providers.TracesRequest)
 }
 
 func (p *Provider) PrepareDevStream(ctx context.Context, req providers.DevStreamRequest) (*providers.DevStreamSession, error) {
-	state, err := RedirectToTunnel(ctx, req.Config, req.Stage, req.TunnelURL)
+	sdkCfg, err := sdkbridge.FromCoreConfig(req.Config)
+	if err != nil {
+		return nil, err
+	}
+	state, err := RedirectToTunnel(ctx, sdkCfg, req.Stage, req.TunnelURL)
 	if err != nil {
 		return nil, err
 	}
@@ -60,8 +66,8 @@ func (p *Provider) PrepareDevStream(ctx context.Context, req providers.DevStream
 		return nil, nil
 	}
 	region := strings.TrimSpace(req.Region)
-	if region == "" && req.Config != nil {
-		region = strings.TrimSpace(req.Config.Provider.Region)
+	if region == "" {
+		region = strings.TrimSpace(providerRegion(sdkCfg))
 	}
 	return providers.NewDevStreamSession(
 		string(state.EffectiveMode),
@@ -71,6 +77,75 @@ func (p *Provider) PrepareDevStream(ctx context.Context, req providers.DevStream
 			return state.Restore(restoreCtx, region)
 		},
 	), nil
+}
+
+func (p *Provider) SyncOrchestrations(ctx context.Context, req providers.OrchestrationSyncRequest) (*providers.OrchestrationSyncResult, error) {
+	sdkCfg, err := sdkbridge.FromCoreConfig(req.Config)
+	if err != nil {
+		return nil, err
+	}
+	res, err := (Runner{}).SyncOrchestrations(ctx, sdkprovider.OrchestrationSyncRequest{
+		Config:                 sdkCfg,
+		Stage:                  req.Stage,
+		Root:                   req.Root,
+		FunctionResourceByName: req.FunctionResourceByName,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &providers.OrchestrationSyncResult{Metadata: res.Metadata, Outputs: res.Outputs}, nil
+}
+
+func (p *Provider) RemoveOrchestrations(ctx context.Context, req providers.OrchestrationRemoveRequest) (*providers.OrchestrationSyncResult, error) {
+	sdkCfg, err := sdkbridge.FromCoreConfig(req.Config)
+	if err != nil {
+		return nil, err
+	}
+	res, err := (Runner{}).RemoveOrchestrations(ctx, sdkprovider.OrchestrationRemoveRequest{
+		Config: sdkCfg,
+		Stage:  req.Stage,
+		Root:   req.Root,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &providers.OrchestrationSyncResult{Metadata: res.Metadata, Outputs: res.Outputs}, nil
+}
+
+func (p *Provider) InvokeOrchestration(ctx context.Context, req providers.OrchestrationInvokeRequest) (*providers.InvokeResult, error) {
+	sdkCfg, err := sdkbridge.FromCoreConfig(req.Config)
+	if err != nil {
+		return nil, err
+	}
+	res, err := (Runner{}).InvokeOrchestration(ctx, sdkprovider.OrchestrationInvokeRequest{
+		Config:  sdkCfg,
+		Stage:   req.Stage,
+		Root:    req.Root,
+		Name:    req.Name,
+		Payload: req.Payload,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &providers.InvokeResult{
+		Provider: res.Provider,
+		Function: res.Function,
+		Output:   res.Output,
+		RunID:    res.RunID,
+		Workflow: res.Workflow,
+	}, nil
+}
+
+func (p *Provider) InspectOrchestrations(ctx context.Context, req providers.OrchestrationInspectRequest) (map[string]any, error) {
+	sdkCfg, err := sdkbridge.FromCoreConfig(req.Config)
+	if err != nil {
+		return nil, err
+	}
+	return (Runner{}).InspectOrchestrations(ctx, sdkprovider.OrchestrationInspectRequest{
+		Config: sdkCfg,
+		Stage:  req.Stage,
+		Root:   req.Root,
+	})
 }
 
 func (p *Provider) Recover(ctx context.Context, req providers.RecoveryRequest) (*providers.RecoveryResult, error) {

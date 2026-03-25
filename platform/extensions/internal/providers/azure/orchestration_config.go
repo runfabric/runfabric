@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 type durableFunctionDecl struct {
@@ -14,11 +15,15 @@ type durableFunctionDecl struct {
 	StorageConnectionSetting string
 }
 
-func durableFunctionsFromConfig(cfg *config.Config) ([]durableFunctionDecl, error) {
-	if cfg == nil || cfg.Extensions == nil {
+func durableFunctionsFromConfig(cfg sdkprovider.Config) ([]durableFunctionDecl, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if coreCfg == nil || coreCfg.Extensions == nil {
 		return nil, nil
 	}
-	rawAzure, ok := cfg.Extensions["azure-functions"]
+	rawAzure, ok := coreCfg.Extensions["azure-functions"]
 	if !ok || rawAzure == nil {
 		return nil, nil
 	}

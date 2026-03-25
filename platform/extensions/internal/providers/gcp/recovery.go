@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
-	"github.com/runfabric/runfabric/platform/core/workflow/recovery"
+	"github.com/runfabric/runfabric/platform/workflow/recovery"
 )
 
 type RecoveryHandler struct {

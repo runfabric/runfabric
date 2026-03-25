@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	extruntimes "github.com/runfabric/runfabric/platform/core/contracts/runtime"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	appErrs "github.com/runfabric/runfabric/platform/core/model/errors"
@@ -13,9 +12,10 @@ import (
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
 	deployexec "github.com/runfabric/runfabric/platform/deploy/exec"
 	"github.com/runfabric/runfabric/platform/extensions/internal/runtimes"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
 	awstriggers "github.com/runfabric/runfabric/platform/extensions/internal/providers/aws/triggers"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
 )
 
 func ResumeDeploy(
@@ -46,7 +46,7 @@ func ResumeDeploy(
 		Root:      root,
 		Config:    cfg,
 		Stage:     stage,
-		Artifacts: map[string]providers.Artifact{},
+		Artifacts: map[string]sdkprovider.Artifact{},
 		Receipt:   deps.Receipt,
 		Outputs:   map[string]string{},
 		Metadata:  map[string]string{},
@@ -148,7 +148,7 @@ func newDeployEngine(
 						return err
 					}
 
-					ectx.Artifacts[fnName] = *artifact
+					ectx.Artifacts[fnName] = sdkArtifactFromCore(*artifact)
 				}
 				return nil
 			},

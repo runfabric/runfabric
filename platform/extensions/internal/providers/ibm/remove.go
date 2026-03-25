@@ -7,19 +7,23 @@ import (
 	"net/http"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Remover deletes OpenWhisk actions via DELETE /api/v1/namespaces/.../actions/...
 type Remover struct{}
 
-func (Remover) Remove(ctx context.Context, cfg *config.Config, stage, root string, receipt *state.Receipt) (*providers.RemoveResult, error) {
+func (Remover) Remove(ctx context.Context, cfg sdkprovider.Config, stage, root string, receipt any) (*sdkprovider.RemoveResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
 	auth := apiutil.Env("IBM_OPENWHISK_AUTH")
 	if auth == "" {
-		return &providers.RemoveResult{Provider: "ibm-openwhisk", Removed: true}, nil
+		return &sdkprovider.RemoveResult{Provider: "ibm-openwhisk", Removed: true}, nil
 	}
 	apihost := apiutil.Env("IBM_OPENWHISK_API_HOST")
 	if apihost == "" {
@@ -33,11 +37,11 @@ func (Remover) Remove(ctx context.Context, cfg *config.Config, stage, root strin
 		namespace = "_"
 	}
 	baseURL := strings.TrimSuffix(apihost, "/") + "/api/v1/namespaces/" + namespace + "/actions/"
-	for fnName := range cfg.Functions {
-		actionName := fmt.Sprintf("%s_%s_%s", cfg.Service, stage, fnName)
+	for fnName := range coreCfg.Functions {
+		actionName := fmt.Sprintf("%s_%s_%s", coreCfg.Service, stage, fnName)
 		req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, baseURL+actionName, nil)
 		req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
 		apiutil.DefaultClient.Do(req)
 	}
-	return &providers.RemoveResult{Provider: "ibm-openwhisk", Removed: true}, nil
+	return &sdkprovider.RemoveResult{Provider: "ibm-openwhisk", Removed: true}, nil
 }

@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	coredevstream "github.com/runfabric/runfabric/platform/core/model/devstream"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	coredevstream "github.com/runfabric/runfabric/platform/model/devstream"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // DevStreamState holds state for redirecting Cloudflare Workers to a tunnel and restoring on exit.
@@ -47,7 +48,11 @@ type cfRouteResponse struct {
 // Instead, this returns a state that developers can use to configure environment variables
 // or deploy a routing worker that proxies to the tunnel.
 // Call Restore to revert.
-func RedirectToTunnel(ctx context.Context, cfg *config.Config, stage, tunnelURL string) (*DevStreamState, error) {
+func RedirectToTunnel(ctx context.Context, cfg sdkprovider.Config, stage, tunnelURL string) (*DevStreamState, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
 	if cfg == nil || stage == "" || tunnelURL == "" {
 		return nil, fmt.Errorf("config, stage, and tunnel URL required")
 	}
@@ -55,7 +60,7 @@ func RedirectToTunnel(ctx context.Context, cfg *config.Config, stage, tunnelURL 
 	zoneID := apiutil.Env("CLOUDFLARE_ZONE_ID")
 	token := apiutil.Env("CLOUDFLARE_API_TOKEN")
 
-	workerName := fmt.Sprintf("%s-%s", cfg.Service, stage)
+	workerName := fmt.Sprintf("%s-%s", coreCfg.Service, stage)
 	proxyWorker := fmt.Sprintf("%s-devstream-proxy", workerName)
 
 	state := &DevStreamState{
@@ -206,18 +211,33 @@ func (s *DevStreamState) Restore(ctx context.Context, accountID string) error {
 	return nil
 }
 
-func resolveDevRoutePattern(cfg *config.Config, stage string) string {
+func resolveDevRoutePattern(cfg sdkprovider.Config, stage string) string {
 	if v := strings.TrimSpace(apiutil.Env("CLOUDFLARE_DEV_ROUTE_PATTERN")); v != "" {
 		return v
 	}
 	if cfg == nil {
 		return ""
 	}
-	if sc, ok := cfg.Stages[stage]; ok && sc.HTTP != nil && sc.HTTP.Domain != nil {
-		domain := strings.TrimSpace(sc.HTTP.Domain.Name)
-		if domain != "" {
-			return domain + "/*"
-		}
+	stagesAny, ok := cfg["stages"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	stageAny, ok := stagesAny[stage].(map[string]any)
+	if !ok {
+		return ""
+	}
+	httpAny, ok := stageAny["http"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	domainAny, ok := httpAny["domain"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	domain, _ := domainAny["name"].(string)
+	domain = strings.TrimSpace(domain)
+	if domain != "" {
+		return domain + "/*"
 	}
 	return ""
 }

@@ -11,9 +11,10 @@ import (
 	"time"
 
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 const loggingAPI = "https://logging.googleapis.com/v2/entries:list"
@@ -22,32 +23,49 @@ const loggingAPI = "https://logging.googleapis.com/v2/entries:list"
 // Receipt is loaded from "." (current directory); run from project root so .runfabric/<stage>.json is found.
 func (p *Provider) Logs(ctx context.Context, req providers.LogsRequest) (*providers.LogsResult, error) {
 	receipt, _ := state.Load(".", req.Stage)
-	return (Logger{}).Logs(ctx, req.Config, req.Stage, req.Function, receipt)
+	sdkCfg, err := sdkbridge.FromCoreConfig(req.Config)
+	if err != nil {
+		return nil, err
+	}
+	r, err := (Logger{}).Logs(ctx, sdkCfg, req.Stage, req.Function, receipt)
+	if err != nil {
+		return nil, err
+	}
+	return &providers.LogsResult{
+		Provider: r.Provider, Function: r.Function, Lines: r.Lines, Workflow: r.Workflow,
+	}, nil
 }
 
 // Logger fetches recent log entries from Cloud Logging for the deployed function(s).
 type Logger struct{}
 
-func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function string, receipt *state.Receipt) (*providers.LogsResult, error) {
+func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function string, receipt any) (*sdkprovider.LogsResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
 	project := apiutil.Env("GCP_PROJECT")
 	if project == "" {
 		project = apiutil.Env("GCP_PROJECT_ID")
 	}
 	if project == "" || apiutil.Env("GCP_ACCESS_TOKEN") == "" {
-		return &providers.LogsResult{
+		return &sdkprovider.LogsResult{
 			Provider: "gcp-functions",
 			Function: function,
 			Lines:    []string{"Set GCP_PROJECT and GCP_ACCESS_TOKEN for live logs; see Cloud Console: https://console.cloud.google.com/functions/list"},
 		}, nil
 	}
+	if coreCfg == nil {
+		return &sdkprovider.LogsResult{Provider: "gcp-functions", Function: function, Lines: []string{"No config available"}}, nil
+	}
 
 	// Collect function IDs to query: either the requested function or all deployed.
 	var funcIDs []string
 	if function != "" {
-		funcIDs = append(funcIDs, fmt.Sprintf("%s-%s-%s", cfg.Service, stage, function))
+		funcIDs = append(funcIDs, fmt.Sprintf("%s-%s-%s", coreCfg.Service, stage, function))
 	} else {
-		for fnName := range cfg.Functions {
-			funcIDs = append(funcIDs, fmt.Sprintf("%s-%s-%s", cfg.Service, stage, fnName))
+		for fnName := range coreCfg.Functions {
+			funcIDs = append(funcIDs, fmt.Sprintf("%s-%s-%s", coreCfg.Service, stage, fnName))
 		}
 	}
 
@@ -74,7 +92,7 @@ func (Logger) Logs(ctx context.Context, cfg *config.Config, stage, function stri
 	if len(allLines) == 0 {
 		allLines = append(allLines, fmt.Sprintf("No recent logs for stage %s (last 1h). View: https://console.cloud.google.com/functions/list?project=%s", stage, project))
 	}
-	return &providers.LogsResult{Provider: "gcp-functions", Function: function, Lines: allLines}, nil
+	return &sdkprovider.LogsResult{Provider: "gcp-functions", Function: function, Lines: allLines}, nil
 }
 
 // listLogEntries POSTs to Cloud Logging API with retry/backoff and returns log lines.

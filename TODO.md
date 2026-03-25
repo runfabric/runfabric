@@ -2,22 +2,26 @@
 
 ## Deferred: Unified Internal + External Provider Interface
 
-- [ ] Extract a transport-safe shared provider type layer for request/result shapes.
-  - Goal: align core provider contracts and Go plugin SDK transport types where safe.
-  - Note: keep core-only semantics (for example in-memory restore callbacks) in core wrappers.
+- [x] Extract a transport-safe shared provider type layer for request/result shapes.
+  - Implemented: `platform/core/contracts/extension/provider/transport/wire.go`
+  - Uses `Config = map[string]any`; `PlanResult.Plan` typed as `any`; serialisable `DevStreamSession`.
 
-- [ ] Add an SDK-to-core in-process adapter.
-  - Goal: allow built-in providers to implement SDK-style plugin interfaces while running in-process.
-  - Scope: include optional capabilities (observability, dev-stream, recovery, orchestration).
+- [x] Add an SDK-to-core in-process adapter.
+  - Implemented: `platform/extensions/inprocess/adapter.go`
+  - Wraps `transport.Plugin` → `core.ProviderPlugin`; checks `localDevStreamCapable` to preserve restore callbacks.
 
-- [ ] Migrate one real built-in provider first (not API-dispatch).
-  - Candidate: `gcp-functions` (current built-in implementation flag is true).
-  - Constraint: do not change API-dispatch provider behavior in this first migration.
+- [x] Migrate built-in providers (not API-dispatch).
+  - Implemented: `platform/extensions/internal/providers/gcp/transport_plugin.go` and `platform/extensions/internal/providers/aws/transport_plugin.go`.
+  - GCP/AWS `TransportPlugin` implementations provide transport `Plugin` + optional capabilities + `PrepareDevStreamLocal`.
+  - `providerpolicy/providers.go` GCP/AWS factories now use `inprocess.New(<provider>.NewTransportPlugin())`.
+  - `deploy/registry.go` (`apiProviders` map) unchanged.
+  - Extended: all provider policy entries now expose a transport+inprocess factory path using `inprocess.NewAPIOpsTransportPlugin(...)` (or dedicated transport plugins for AWS/GCP).
 
-- [ ] After migration, run focused validation.
-  - `go test ./platform/extensions/internal/providers/gcp/...`
-  - `go test ./platform/extensions/providerpolicy/...`
-  - `go test ./platform/extensions/registry/resolution/...`
+- [x] After migration, run focused validation.
+  - `go test ./platform/extensions/internal/providers/aws/...` ✓
+  - `go test ./platform/extensions/internal/providers/gcp/...` ✓
+  - `go test ./platform/extensions/providerpolicy/...` ✓
+  - `go test ./platform/extensions/registry/resolution/...` ✓
 
 ## Deferred: Workflow Flow Alignment (Diagram to Implementation)
 

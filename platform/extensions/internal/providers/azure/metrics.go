@@ -6,8 +6,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // FunctionMetrics holds per-function metrics (compatible shape with AWS Lambda metrics for CLI output).
@@ -18,14 +19,22 @@ type FunctionMetrics struct {
 }
 
 // FetchMetrics returns per-function metrics from Azure Log Analytics/App Insights over the last hour.
-func FetchMetrics(ctx context.Context, cfg *config.Config, stage string) (map[string]FunctionMetrics, error) {
+func FetchMetrics(ctx context.Context, cfg sdkprovider.Config, stage string) (map[string]FunctionMetrics, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
 	workspaceID := strings.TrimSpace(apiutil.Env("AZURE_LOG_ANALYTICS_WORKSPACE_ID"))
 	token := strings.TrimSpace(apiutil.Env("AZURE_ACCESS_TOKEN"))
 	if workspaceID == "" || token == "" {
 		return map[string]FunctionMetrics{}, nil
 	}
 
-	appName := fmt.Sprintf("%s-%s", cfg.Service, stage)
+	serviceName := "service"
+	if coreCfg != nil && coreCfg.Service != "" {
+		serviceName = coreCfg.Service
+	}
+	appName := fmt.Sprintf("%s-%s", serviceName, stage)
 	query := fmt.Sprintf(`AppRequests
 | where TimeGenerated > ago(1h)
 | where cloud_RoleName =~ %q

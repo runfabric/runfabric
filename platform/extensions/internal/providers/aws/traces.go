@@ -60,7 +60,7 @@ func FetchXRayTraces(ctx context.Context, cfg *config.Config, stage string) ([]X
 		if s.Http != nil {
 			summary.HTTPStatus = s.Http.HttpStatus
 		}
-		if s.ServiceIds != nil && len(s.ServiceIds) > 0 {
+		if len(s.ServiceIds) > 0 {
 			n := len(s.ServiceIds)
 			summary.ServiceCount = &n
 		}

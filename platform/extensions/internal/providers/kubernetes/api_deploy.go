@@ -15,15 +15,20 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Runner deploys by creating namespace, Deployment, and Service via client-go.
 type Runner struct{}
 
-func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
+func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root string) (*sdkprovider.DeployResult, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	_ = coreCfg
 	restConfig, err := loadKubeconfig()
 	if err != nil {
 		return nil, fmt.Errorf("kubeconfig: %w", err)
@@ -32,8 +37,8 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 	if err != nil {
 		return nil, fmt.Errorf("kubernetes client: %w", err)
 	}
-	namespace := fmt.Sprintf("%s-%s", cfg.Service, stage)
-	appName := cfg.Service
+	namespace := fmt.Sprintf("%s-%s", coreCfg.Service, stage)
+	appName := coreCfg.Service
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 	_, err = clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
 	if err != nil && !isAlreadyExists(err) {
@@ -72,7 +77,7 @@ func (Runner) Deploy(ctx context.Context, cfg *config.Config, stage, root string
 	if err != nil && !isAlreadyExists(err) {
 		return nil, fmt.Errorf("create service: %w", err)
 	}
-	result := apiutil.BuildDeployResult("kubernetes", cfg, stage)
+	result := apiutil.BuildSDKDeployResult("kubernetes", cfg, stage)
 	result.Outputs["namespace"] = namespace
 	result.Outputs["context"] = restConfig.Host
 	result.Metadata["namespace"] = namespace

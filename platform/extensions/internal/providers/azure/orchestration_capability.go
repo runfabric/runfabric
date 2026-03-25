@@ -11,27 +11,27 @@ import (
 	"regexp"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 var azureManagementAPI = "https://management.azure.com"
 
-func (Runner) SyncOrchestrations(ctx context.Context, req providers.OrchestrationSyncRequest) (*providers.OrchestrationSyncResult, error) {
+func (Runner) SyncOrchestrations(ctx context.Context, req sdkprovider.OrchestrationSyncRequest) (*sdkprovider.OrchestrationSyncResult, error) {
 	decls, err := durableFunctionsFromConfig(req.Config)
 	if err != nil {
 		return nil, err
 	}
 	if len(decls) == 0 {
-		return &providers.OrchestrationSyncResult{}, nil
+		return &sdkprovider.OrchestrationSyncResult{}, nil
 	}
 	rg, appName := azureDeploymentContext(req.Config, req.Stage, req.Root)
 	settingsOutcome, err := azureSyncDurableAppSettings(ctx, req.Config, rg, appName, decls)
 	if err != nil {
 		return nil, err
 	}
-	res := &providers.OrchestrationSyncResult{Metadata: map[string]string{}, Outputs: map[string]string{}}
+	res := &sdkprovider.OrchestrationSyncResult{Metadata: map[string]string{}, Outputs: map[string]string{}}
 	for _, decl := range decls {
 		operation := settingsOutcome[decl.Name]
 		if operation == "" {
@@ -52,20 +52,20 @@ func (Runner) SyncOrchestrations(ctx context.Context, req providers.Orchestratio
 	return res, nil
 }
 
-func (Runner) RemoveOrchestrations(ctx context.Context, req providers.OrchestrationRemoveRequest) (*providers.OrchestrationSyncResult, error) {
+func (Runner) RemoveOrchestrations(ctx context.Context, req sdkprovider.OrchestrationRemoveRequest) (*sdkprovider.OrchestrationSyncResult, error) {
 	decls, err := durableFunctionsFromConfig(req.Config)
 	if err != nil {
 		return nil, err
 	}
 	if len(decls) == 0 {
-		return &providers.OrchestrationSyncResult{}, nil
+		return &sdkprovider.OrchestrationSyncResult{}, nil
 	}
 	rg, appName := azureDeploymentContext(req.Config, req.Stage, req.Root)
 	settingsOutcome, err := azureRemoveDurableAppSettings(ctx, req.Config, rg, appName, decls)
 	if err != nil {
 		return nil, err
 	}
-	res := &providers.OrchestrationSyncResult{Metadata: map[string]string{}, Outputs: map[string]string{}}
+	res := &sdkprovider.OrchestrationSyncResult{Metadata: map[string]string{}, Outputs: map[string]string{}}
 	for _, decl := range decls {
 		operation := settingsOutcome[decl.Name]
 		if operation == "" {
@@ -76,7 +76,7 @@ func (Runner) RemoveOrchestrations(ctx context.Context, req providers.Orchestrat
 	return res, nil
 }
 
-func (Runner) InvokeOrchestration(ctx context.Context, req providers.OrchestrationInvokeRequest) (*providers.InvokeResult, error) {
+func (Runner) InvokeOrchestration(ctx context.Context, req sdkprovider.OrchestrationInvokeRequest) (*sdkprovider.InvokeResult, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		return nil, fmt.Errorf("orchestration name is required")
@@ -131,7 +131,7 @@ func (Runner) InvokeOrchestration(ctx context.Context, req providers.Orchestrati
 	if strings.TrimSpace(out.StatusQueryGetURI) != "" {
 		output += " " + out.StatusQueryGetURI
 	}
-	return &providers.InvokeResult{
+	return &sdkprovider.InvokeResult{
 		Provider: "azure-functions",
 		Function: "durable:" + name,
 		Output:   output,
@@ -140,7 +140,7 @@ func (Runner) InvokeOrchestration(ctx context.Context, req providers.Orchestrati
 	}, nil
 }
 
-func (Runner) InspectOrchestrations(ctx context.Context, req providers.OrchestrationInspectRequest) (map[string]any, error) {
+func (Runner) InspectOrchestrations(ctx context.Context, req sdkprovider.OrchestrationInspectRequest) (map[string]any, error) {
 	decls, err := durableFunctionsFromConfig(req.Config)
 	if err != nil {
 		return nil, err
@@ -197,27 +197,25 @@ func (Runner) InspectOrchestrations(ctx context.Context, req providers.Orchestra
 	return map[string]any{"durableFunctions": items}, nil
 }
 
-func azureDeploymentContext(cfg *providers.Config, stage, root string) (string, string) {
+func azureDeploymentContext(cfg sdkprovider.Config, stage, root string) (string, string) {
+	coreCfg, _ := sdkbridge.ToCoreConfig(cfg)
+	service := "service"
+	if coreCfg != nil && strings.TrimSpace(coreCfg.Service) != "" {
+		service = coreCfg.Service
+	}
 	rg := strings.TrimSpace(apiutil.Env("AZURE_RESOURCE_GROUP"))
 	appName := ""
-	if receipt, err := state.Load(root, stage); err == nil {
-		if app := strings.TrimSpace(receipt.Outputs["app_name"]); app != "" {
-			appName = app
-		}
-		if group := strings.TrimSpace(receipt.Outputs["resource_group"]); group != "" {
-			rg = group
-		}
-	}
+	_ = root
 	if appName == "" {
-		appName = strings.TrimSpace(cfg.Service + "-" + stage)
+		appName = strings.TrimSpace(service + "-" + stage)
 	}
 	if rg == "" {
-		rg = strings.TrimSpace(cfg.Service + "-" + stage)
+		rg = strings.TrimSpace(service + "-" + stage)
 	}
 	return rg, appName
 }
 
-func azureHostDefaultKey(ctx context.Context, cfg *providers.Config, resourceGroup, appName string) (string, error) {
+func azureHostDefaultKey(ctx context.Context, cfg sdkprovider.Config, resourceGroup, appName string) (string, error) {
 	subID := strings.TrimSpace(apiutil.Env("AZURE_SUBSCRIPTION_ID"))
 	token := strings.TrimSpace(apiutil.Env("AZURE_ACCESS_TOKEN"))
 	if subID == "" || token == "" {
@@ -255,7 +253,7 @@ func azureHostDefaultKey(ctx context.Context, cfg *providers.Config, resourceGro
 	return "", fmt.Errorf("no host key returned for function app %s", appName)
 }
 
-func azureFunctionAppConsoleLink(cfg *providers.Config, resourceGroup, appName string) string {
+func azureFunctionAppConsoleLink(cfg sdkprovider.Config, resourceGroup, appName string) string {
 	if strings.TrimSpace(resourceGroup) == "" || strings.TrimSpace(appName) == "" {
 		return ""
 	}
@@ -267,7 +265,7 @@ func azureFunctionAppConsoleLink(cfg *providers.Config, resourceGroup, appName s
 	return "https://portal.azure.com/#@/resource/subscriptions/" + subID + "/resourceGroups/" + resourceGroup + "/providers/Microsoft.Web/sites/" + appName + "/overview"
 }
 
-func azureSyncDurableAppSettings(ctx context.Context, cfg *providers.Config, resourceGroup, appName string, decls []durableFunctionDecl) (map[string]string, error) {
+func azureSyncDurableAppSettings(ctx context.Context, cfg sdkprovider.Config, resourceGroup, appName string, decls []durableFunctionDecl) (map[string]string, error) {
 	settings, err := azureGetAppSettings(ctx, cfg, resourceGroup, appName)
 	if err != nil {
 		return nil, err
@@ -303,7 +301,7 @@ func azureSyncDurableAppSettings(ctx context.Context, cfg *providers.Config, res
 	return result, nil
 }
 
-func azureRemoveDurableAppSettings(ctx context.Context, cfg *providers.Config, resourceGroup, appName string, decls []durableFunctionDecl) (map[string]string, error) {
+func azureRemoveDurableAppSettings(ctx context.Context, cfg sdkprovider.Config, resourceGroup, appName string, decls []durableFunctionDecl) (map[string]string, error) {
 	settings, err := azureGetAppSettings(ctx, cfg, resourceGroup, appName)
 	if err != nil {
 		return nil, err
@@ -331,7 +329,7 @@ func azureRemoveDurableAppSettings(ctx context.Context, cfg *providers.Config, r
 	return result, nil
 }
 
-func azureGetAppSettings(ctx context.Context, cfg *providers.Config, resourceGroup, appName string) (map[string]string, error) {
+func azureGetAppSettings(ctx context.Context, cfg sdkprovider.Config, resourceGroup, appName string) (map[string]string, error) {
 	subID := strings.TrimSpace(apiutil.Env("AZURE_SUBSCRIPTION_ID"))
 	token := strings.TrimSpace(apiutil.Env("AZURE_ACCESS_TOKEN"))
 	if subID == "" || token == "" {
@@ -363,7 +361,7 @@ func azureGetAppSettings(ctx context.Context, cfg *providers.Config, resourceGro
 	return out.Properties, nil
 }
 
-func azurePutAppSettings(ctx context.Context, cfg *providers.Config, resourceGroup, appName string, settings map[string]string) error {
+func azurePutAppSettings(ctx context.Context, cfg sdkprovider.Config, resourceGroup, appName string, settings map[string]string) error {
 	subID := strings.TrimSpace(apiutil.Env("AZURE_SUBSCRIPTION_ID"))
 	token := strings.TrimSpace(apiutil.Env("AZURE_ACCESS_TOKEN"))
 	if subID == "" || token == "" {

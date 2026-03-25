@@ -3,12 +3,12 @@ package providerpolicy
 import (
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // BuiltinProviderFactory returns the constructor for a provider ID when the provider
 // has an in-repo builtin implementation.
-func BuiltinProviderFactory(id string) (func() providers.ProviderPlugin, bool) {
+func BuiltinProviderFactory(id string) (func() sdkprovider.Plugin, bool) {
 	lookupID := strings.TrimSpace(id)
 	for _, entry := range providerEntries {
 		if entry.Descriptor.ID != lookupID {

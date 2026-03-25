@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/apiutil"
+	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // TraceSummary is a simplified trace summary for CLI output (compatible shape with AWS X-Ray).
@@ -20,13 +21,21 @@ type TraceSummary struct {
 }
 
 // FetchTraces returns trace summaries from Azure Log Analytics/App Insights over the last hour.
-func FetchTraces(ctx context.Context, cfg *config.Config, stage string) ([]TraceSummary, error) {
+func FetchTraces(ctx context.Context, cfg sdkprovider.Config, stage string) ([]TraceSummary, error) {
+	coreCfg, err := sdkbridge.ToCoreConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
 	workspaceID := strings.TrimSpace(apiutil.Env("AZURE_LOG_ANALYTICS_WORKSPACE_ID"))
 	if workspaceID == "" || strings.TrimSpace(apiutil.Env("AZURE_ACCESS_TOKEN")) == "" {
 		return []TraceSummary{}, nil
 	}
 
-	appName := fmt.Sprintf("%s-%s", cfg.Service, stage)
+	serviceName := "service"
+	if coreCfg != nil && coreCfg.Service != "" {
+		serviceName = coreCfg.Service
+	}
+	appName := fmt.Sprintf("%s-%s", serviceName, stage)
 	query := fmt.Sprintf(`AppRequests
 | where TimeGenerated > ago(1h)
 | where cloud_RoleName =~ %q

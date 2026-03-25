@@ -9,9 +9,9 @@ import (
 
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/core/model/configpatch"
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
 	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	scaffold "github.com/runfabric/runfabric/platform/generator/application"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
 	"github.com/spf13/cobra"
 )
 

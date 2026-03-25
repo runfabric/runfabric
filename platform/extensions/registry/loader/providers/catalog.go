@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	providercontract "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
 	"github.com/runfabric/runfabric/platform/extensions/application/external"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
 )
 
 // ProviderDescriptor is the unified provider capability view used by CLI commands.
