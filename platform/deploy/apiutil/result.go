@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	sdkbridge "github.com/runfabric/runfabric/internal/provider/sdkbridge"
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 

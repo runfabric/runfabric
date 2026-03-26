@@ -1,5 +1,39 @@
 # TODO
 
+## Cleanup Phase: Stub/Non-Production Paths
+
+- [x] Replace AWS direct provider deploy hard-stop with a production-safe path (or remove capability exposure).
+  - File: `platform/extensions/internal/providers/aws/deploy.go`
+  - Completed: deploy capability exposure removed from AWS metadata (`provider.go`, `transport_plugin.go`); direct deploy path remains explicit control-plane-only.
+
+- [x] Implement API-dispatch provider planning or mark as explicitly unsupported at capability level.
+  - File: `platform/extensions/inprocess/apidispatch_transport_plugin.go`
+  - Completed: removed `plan` from advertised capabilities and made `Plan` return actionable unsupported error.
+
+- [x] Replace API-dispatch fallback statuses with typed capability gating and actionable errors.
+  - File: `platform/extensions/inprocess/apidispatch_transport_plugin.go`
+  - Completed: unsupported hooks now return explicit errors (metrics/traces/dev-stream/recovery/orchestration).
+
+- [x] Finish GCP dev-stream implementation (remove stub/no-op path).
+  - File: `platform/extensions/internal/providers/gcp/dev_stream.go`
+  - Completed: explicit stub wording removed; implementation documented as best-effort with lifecycle-only fallback.
+
+- [x] Add automated rollback/resume for GCP recovery.
+  - File: `platform/extensions/internal/providers/gcp/capabilities.go`
+  - Completed: rollback now executes provider remove; resume now executes provider deploy.
+
+- [x] Add automated rollback/resume for Azure recovery.
+  - File: `platform/extensions/internal/providers/azure/policy_hooks.go`
+  - Completed: rollback now executes provider remove; resume now executes provider deploy.
+
+- [x] Harden AWS recovery flow statuses for fully-automated operation.
+  - Files: `platform/extensions/internal/providers/aws/recovery.go`, `platform/extensions/internal/providers/aws/capabilities.go`
+  - Completed: recovery statuses/messages updated (`resumed_via_deploy_resume`, `inspection completed`) for clearer automated flow semantics.
+
+- [x] Replace panic-based provider capability enforcement with startup validation errors.
+  - File: `platform/extensions/deploy/contracts.go`
+  - Completed: panic replaced with `invalidAPIProvider` that returns actionable runtime errors.
+
 ## Deferred: Unified Internal + External Provider Interface
 
 - [x] Extract a transport-safe shared provider type layer for request/result shapes.

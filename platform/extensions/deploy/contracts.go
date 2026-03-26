@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	sdkbridge "github.com/runfabric/runfabric/internal/provider/sdkbridge"
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
-	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
+	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
@@ -50,6 +51,27 @@ type apiProvider struct {
 	invoker Invoker
 	logger  Logger
 	orch    OrchestrationCapable
+}
+
+type invalidAPIProvider struct {
+	name string
+	err  error
+}
+
+func (p *invalidAPIProvider) Deploy(ctx context.Context, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
+	return nil, p.err
+}
+
+func (p *invalidAPIProvider) Remove(ctx context.Context, cfg *config.Config, stage, root string, receipt *state.Receipt) (*providers.RemoveResult, error) {
+	return nil, p.err
+}
+
+func (p *invalidAPIProvider) Invoke(ctx context.Context, cfg *config.Config, stage, function string, payload []byte, receipt *state.Receipt) (*providers.InvokeResult, error) {
+	return nil, p.err
+}
+
+func (p *invalidAPIProvider) Logs(ctx context.Context, cfg *config.Config, stage, function string, receipt *state.Receipt) (*providers.LogsResult, error) {
+	return nil, p.err
 }
 
 func (p *apiProvider) Deploy(ctx context.Context, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
@@ -168,9 +190,86 @@ func (p *apiProvider) InspectOrchestrations(ctx context.Context, req providers.O
 	return p.orch.InspectOrchestrations(ctx, sdkprovider.OrchestrationInspectRequest{Config: tc, Stage: req.Stage, Root: req.Root})
 }
 
+// opsOrchCapable wraps inprocess.APIDispatchHooks as OrchestrationCapable.
+type opsOrchCapable struct{ h *inprocess.APIDispatchHooks }
+
+func (o *opsOrchCapable) SyncOrchestrations(ctx context.Context, req sdkprovider.OrchestrationSyncRequest) (*sdkprovider.OrchestrationSyncResult, error) {
+	return o.h.SyncOrchestrations(ctx, req)
+}
+func (o *opsOrchCapable) RemoveOrchestrations(ctx context.Context, req sdkprovider.OrchestrationRemoveRequest) (*sdkprovider.OrchestrationSyncResult, error) {
+	return o.h.RemoveOrchestrations(ctx, req)
+}
+func (o *opsOrchCapable) InvokeOrchestration(ctx context.Context, req sdkprovider.OrchestrationInvokeRequest) (*sdkprovider.InvokeResult, error) {
+	return o.h.InvokeOrchestration(ctx, req)
+}
+func (o *opsOrchCapable) InspectOrchestrations(ctx context.Context, req sdkprovider.OrchestrationInspectRequest) (map[string]any, error) {
+	return o.h.InspectOrchestrations(ctx, req)
+}
+
+// opsRunnerAdapter adapts an APIOps.Deploy func to the Runner interface.
+type opsRunnerAdapter struct {
+	fn func(context.Context, sdkprovider.Config, string, string) (*sdkprovider.DeployResult, error)
+}
+
+func (a opsRunnerAdapter) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root string) (*sdkprovider.DeployResult, error) {
+	return a.fn(ctx, cfg, stage, root)
+}
+
+// opsRemoverAdapter adapts an APIOps.Remove func to the Remover interface.
+type opsRemoverAdapter struct {
+	fn func(context.Context, sdkprovider.Config, string, string, any) (*sdkprovider.RemoveResult, error)
+}
+
+func (a opsRemoverAdapter) Remove(ctx context.Context, cfg sdkprovider.Config, stage, root string, receipt any) (*sdkprovider.RemoveResult, error) {
+	return a.fn(ctx, cfg, stage, root, receipt)
+}
+
+// opsInvokerAdapter adapts an APIOps.Invoke func to the Invoker interface.
+type opsInvokerAdapter struct {
+	fn func(context.Context, sdkprovider.Config, string, string, []byte, any) (*sdkprovider.InvokeResult, error)
+}
+
+func (a opsInvokerAdapter) Invoke(ctx context.Context, cfg sdkprovider.Config, stage, function string, payload []byte, receipt any) (*sdkprovider.InvokeResult, error) {
+	return a.fn(ctx, cfg, stage, function, payload, receipt)
+}
+
+// opsLoggerAdapter adapts an APIOps.Logs func to the Logger interface.
+type opsLoggerAdapter struct {
+	fn func(context.Context, sdkprovider.Config, string, string, any) (*sdkprovider.LogsResult, error)
+}
+
+func (a opsLoggerAdapter) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function string, receipt any) (*sdkprovider.LogsResult, error) {
+	return a.fn(ctx, cfg, stage, function, receipt)
+}
+
+// newAPIProviderFromOps builds a Provider from APIOps and optional hooks (used for orch capability).
+func newAPIProviderFromOps(name string, ops inprocess.APIOps, hooks *inprocess.APIDispatchHooks) Provider {
+	if ops.Deploy == nil || ops.Remove == nil || ops.Invoke == nil || ops.Logs == nil {
+		return &invalidAPIProvider{
+			name: name,
+			err:  fmt.Errorf("api provider %q missing required capability (deploy/remove/invoke/logs)", name),
+		}
+	}
+	var orch OrchestrationCapable
+	if hooks != nil && hooks.SyncOrchestrations != nil {
+		orch = &opsOrchCapable{h: hooks}
+	}
+	return &apiProvider{
+		name:    name,
+		runner:  opsRunnerAdapter{ops.Deploy},
+		remover: opsRemoverAdapter{ops.Remove},
+		invoker: opsInvokerAdapter{ops.Invoke},
+		logger:  opsLoggerAdapter{ops.Logs},
+		orch:    orch,
+	}
+}
+
 func newAPIProvider(name string, runner Runner, remover Remover, invoker Invoker, logger Logger, orchestration ...OrchestrationCapable) Provider {
 	if runner == nil || remover == nil || invoker == nil || logger == nil {
-		panic(fmt.Sprintf("api provider %q missing required capability (deploy/remove/invoke/logs)", name))
+		return &invalidAPIProvider{
+			name: name,
+			err:  fmt.Errorf("api provider %q missing required capability (deploy/remove/invoke/logs)", name),
+		}
 	}
 	var orch OrchestrationCapable
 	if len(orchestration) > 0 {

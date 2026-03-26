@@ -2,7 +2,7 @@ package deploy
 
 import (
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	extproviders "github.com/runfabric/runfabric/platform/extensions/internal/providers"
+	extproviders "github.com/runfabric/runfabric/platform/extensions"
 )
 
 // NewBuiltinProvidersRegistry returns a provider registry populated with all built-in providers.

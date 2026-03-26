@@ -22,4 +22,5 @@ type ProviderPolicyEntry struct {
 	Descriptor ProviderDescriptor
 	Factory    func() sdkprovider.Plugin
 	Hooks      *inprocess.APIDispatchHooks
+	Ops        inprocess.APIOps
 }

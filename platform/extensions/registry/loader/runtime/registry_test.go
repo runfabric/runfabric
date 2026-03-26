@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	builtinruntimes "github.com/runfabric/runfabric/internal/provider/runtimes"
+	coreruntime "github.com/runfabric/runfabric/platform/core/contracts/runtime"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 )
 
@@ -33,12 +35,12 @@ func TestBuiltinRegistry_NodeBuild(t *testing.T) {
 		t.Fatalf("write handler: %v", err)
 	}
 
-	reg := NewBuiltinRegistry()
+	reg := builtinruntimes.NewBuiltinRegistry()
 	rt, err := reg.Get("nodejs20.x")
 	if err != nil {
 		t.Fatalf("get runtime: %v", err)
 	}
-	artifact, err := rt.Build(context.Background(), BuildRequest{
+	artifact, err := rt.Build(context.Background(), coreruntime.BuildRequest{
 		Root:            root,
 		FunctionName:    "api",
 		FunctionConfig:  config.FunctionConfig{Handler: "src/handler.handler", Runtime: "nodejs20.x"},
@@ -64,12 +66,12 @@ func TestBuiltinRegistry_PythonBuild(t *testing.T) {
 		t.Fatalf("write handler: %v", err)
 	}
 
-	reg := NewBuiltinRegistry()
+	reg := builtinruntimes.NewBuiltinRegistry()
 	rt, err := reg.Get("python3.11")
 	if err != nil {
 		t.Fatalf("get runtime: %v", err)
 	}
-	artifact, err := rt.Build(context.Background(), BuildRequest{
+	artifact, err := rt.Build(context.Background(), coreruntime.BuildRequest{
 		Root:            root,
 		FunctionName:    "api",
 		FunctionConfig:  config.FunctionConfig{Handler: "src/handler.handler", Runtime: "python3.11"},

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	sdkbridge "github.com/runfabric/runfabric/internal/provider/sdkbridge"
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
-	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
 	planner "github.com/runfabric/runfabric/platform/planner/engine"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
@@ -113,7 +113,7 @@ func (p *apiProviderAdapter) PrepareDevStream(ctx context.Context, req providers
 		if err != nil || r == nil {
 			return nil, err
 		}
-		return providers.NewDevStreamSession(r.EffectiveMode, r.MissingPrereqs, r.StatusMessage, nil), nil
+		return providers.NewDevStreamSession(r.EffectiveMode, r.MissingPrereqs, r.StatusMessage, r.Restore), nil
 	}
 	return nil, nil
 }

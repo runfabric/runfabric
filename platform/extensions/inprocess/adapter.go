@@ -8,18 +8,19 @@ import (
 	"context"
 	"encoding/json"
 
+	sdkbridge "github.com/runfabric/runfabric/internal/provider/sdkbridge"
 	coreprovider "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	planner "github.com/runfabric/runfabric/platform/core/planner/api"
-	"github.com/runfabric/runfabric/platform/extensions/sdkbridge"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // localDevStreamCapable is satisfied by in-process sdkprovider.Plugin implementations
-// that hold a live restore callback and can return a core DevStreamSession directly.
+// that hold a live restore callback and can return an SDK DevStreamSession directly.
 // The Adapter checks for this interface before falling back to the serialisable
-// sdkprovider.DevStreamCapable path.
+// sdkprovider.DevStreamCapable path. The SDK DevStreamSession may carry an unexported
+// restore func set via sdkprovider.NewDevStreamSession for in-process use.
 type localDevStreamCapable interface {
-	PrepareDevStreamLocal(ctx context.Context, req sdkprovider.DevStreamRequest) (*coreprovider.DevStreamSession, error)
+	PrepareDevStreamLocal(ctx context.Context, req sdkprovider.DevStreamRequest) (*sdkprovider.DevStreamSession, error)
 }
 
 // Adapter wraps a sdkprovider.Plugin to satisfy the engine's core ProviderPlugin contract.
@@ -226,7 +227,12 @@ func (a *Adapter) PrepareDevStream(ctx context.Context, req coreprovider.DevStre
 		Config: tc, Stage: req.Stage, TunnelURL: req.TunnelURL, Region: req.Region,
 	}
 	if local, ok := a.plugin.(localDevStreamCapable); ok {
-		return local.PrepareDevStreamLocal(ctx, treq)
+		r, localErr := local.PrepareDevStreamLocal(ctx, treq)
+		if localErr != nil || r == nil {
+			return nil, localErr
+		}
+		// Wrap the SDK session into a core session, preserving the restore callback.
+		return coreprovider.NewDevStreamSession(r.EffectiveMode, r.MissingPrereqs, r.StatusMessage, r.Restore), nil
 	}
 	ds, ok := a.plugin.(sdkprovider.DevStreamCapable)
 	if !ok {
@@ -236,7 +242,7 @@ func (a *Adapter) PrepareDevStream(ctx context.Context, req coreprovider.DevStre
 	if err != nil || r == nil {
 		return nil, err
 	}
-	return coreprovider.NewDevStreamSession(r.EffectiveMode, r.MissingPrereqs, r.StatusMessage, nil), nil
+	return coreprovider.NewDevStreamSession(r.EffectiveMode, r.MissingPrereqs, r.StatusMessage, r.Restore), nil
 }
 
 // Recover satisfies core.RecoveryCapable when the underlying plugin supports it.

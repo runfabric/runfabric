@@ -2,6 +2,7 @@ package inprocess
 
 import (
 	"context"
+	"fmt"
 
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
@@ -44,7 +45,7 @@ func (p *APIDispatchTransportPlugin) Meta() sdkprovider.Meta {
 	return sdkprovider.Meta{
 		Name:          p.id,
 		PluginVersion: "1",
-		Capabilities:  []string{"deploy", "remove", "invoke", "logs", "doctor", "plan"},
+		Capabilities:  []string{"deploy", "remove", "invoke", "logs", "doctor"},
 	}
 }
 
@@ -64,7 +65,7 @@ func (p *APIDispatchTransportPlugin) Doctor(ctx context.Context, req sdkprovider
 }
 
 func (p *APIDispatchTransportPlugin) Plan(ctx context.Context, req sdkprovider.PlanRequest) (*sdkprovider.PlanResult, error) {
-	return &sdkprovider.PlanResult{Provider: p.id, Warnings: []string{"plan is not implemented for API-dispatch providers"}}, nil
+	return nil, fmt.Errorf("provider %q does not support plan", p.id)
 }
 
 func (p *APIDispatchTransportPlugin) Deploy(ctx context.Context, req sdkprovider.DeployRequest) (*sdkprovider.DeployResult, error) {
@@ -85,56 +86,56 @@ func (p *APIDispatchTransportPlugin) Logs(ctx context.Context, req sdkprovider.L
 
 func (p *APIDispatchTransportPlugin) FetchMetrics(ctx context.Context, req sdkprovider.MetricsRequest) (*sdkprovider.MetricsResult, error) {
 	if p.hooks.FetchMetrics == nil {
-		return &sdkprovider.MetricsResult{Message: "provider does not support metrics"}, nil
+		return nil, fmt.Errorf("provider %q does not support metrics", p.id)
 	}
 	return p.hooks.FetchMetrics(ctx, req.Config, req.Stage)
 }
 
 func (p *APIDispatchTransportPlugin) FetchTraces(ctx context.Context, req sdkprovider.TracesRequest) (*sdkprovider.TracesResult, error) {
 	if p.hooks.FetchTraces == nil {
-		return &sdkprovider.TracesResult{Message: "provider does not support traces"}, nil
+		return nil, fmt.Errorf("provider %q does not support traces", p.id)
 	}
 	return p.hooks.FetchTraces(ctx, req.Config, req.Stage)
 }
 
 func (p *APIDispatchTransportPlugin) PrepareDevStream(ctx context.Context, req sdkprovider.DevStreamRequest) (*sdkprovider.DevStreamSession, error) {
 	if p.hooks.PrepareDevStream == nil {
-		return nil, nil
+		return nil, fmt.Errorf("provider %q does not support dev stream", p.id)
 	}
 	return p.hooks.PrepareDevStream(ctx, req.Config, req.Stage, req.TunnelURL)
 }
 
 func (p *APIDispatchTransportPlugin) Recover(ctx context.Context, req sdkprovider.RecoveryRequest) (*sdkprovider.RecoveryResult, error) {
 	if p.hooks.Recover == nil {
-		return &sdkprovider.RecoveryResult{Recovered: false, Status: "unsupported"}, nil
+		return nil, fmt.Errorf("provider %q does not support recovery", p.id)
 	}
 	return p.hooks.Recover(ctx, req)
 }
 
 func (p *APIDispatchTransportPlugin) SyncOrchestrations(ctx context.Context, req sdkprovider.OrchestrationSyncRequest) (*sdkprovider.OrchestrationSyncResult, error) {
 	if p.hooks.SyncOrchestrations == nil {
-		return &sdkprovider.OrchestrationSyncResult{}, nil
+		return nil, fmt.Errorf("provider %q does not support orchestration sync", p.id)
 	}
 	return p.hooks.SyncOrchestrations(ctx, req)
 }
 
 func (p *APIDispatchTransportPlugin) RemoveOrchestrations(ctx context.Context, req sdkprovider.OrchestrationRemoveRequest) (*sdkprovider.OrchestrationSyncResult, error) {
 	if p.hooks.RemoveOrchestrations == nil {
-		return &sdkprovider.OrchestrationSyncResult{}, nil
+		return nil, fmt.Errorf("provider %q does not support orchestration remove", p.id)
 	}
 	return p.hooks.RemoveOrchestrations(ctx, req)
 }
 
 func (p *APIDispatchTransportPlugin) InvokeOrchestration(ctx context.Context, req sdkprovider.OrchestrationInvokeRequest) (*sdkprovider.InvokeResult, error) {
 	if p.hooks.InvokeOrchestration == nil {
-		return nil, nil
+		return nil, fmt.Errorf("provider %q does not support orchestration invoke", p.id)
 	}
 	return p.hooks.InvokeOrchestration(ctx, req)
 }
 
 func (p *APIDispatchTransportPlugin) InspectOrchestrations(ctx context.Context, req sdkprovider.OrchestrationInspectRequest) (map[string]any, error) {
 	if p.hooks.InspectOrchestrations == nil {
-		return map[string]any{}, nil
+		return nil, fmt.Errorf("provider %q does not support orchestration inspect", p.id)
 	}
 	return p.hooks.InspectOrchestrations(ctx, req)
 }

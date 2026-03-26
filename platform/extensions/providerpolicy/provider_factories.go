@@ -3,6 +3,7 @@ package providerpolicy
 import (
 	"strings"
 
+	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
@@ -20,4 +21,15 @@ func BuiltinProviderFactory(id string) (func() sdkprovider.Plugin, bool) {
 		return entry.Factory, true
 	}
 	return nil, false
+}
+
+// GetProviderAPIOps returns the APIOps for a provider by ID.
+func GetProviderAPIOps(id string) (inprocess.APIOps, bool) {
+	lookupID := strings.TrimSpace(id)
+	for _, e := range providerEntries {
+		if e.Descriptor.ID == lookupID {
+			return e.Ops, true
+		}
+	}
+	return inprocess.APIOps{}, false
 }

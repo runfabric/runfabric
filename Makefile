@@ -1,7 +1,7 @@
 APP=runfabric
 DAEMON_APP=runfabricd
 
-.PHONY: all help build build-daemon build-platform build-daemon-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
+.PHONY: all help build build-daemon build-platform build-daemon-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax check-boundary release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
 
 # UPX: compress binaries for smaller distribution. Override with e.g. make build-upx UPX="upx --best"
 # On macOS, UPX requires --force-macos; compressed binaries may need re-signing for notarization.
@@ -39,6 +39,7 @@ help:
 	@echo "  make lint         go vet / golangci-lint"
 	@echo "  make release-check  format + vet + build + test -race + build CLI + UPX (CI gate)"
 	@echo "  make check-syntax   go vet + go build + go test -count=1 (no -race); fast PR feedback"
+	@echo "  make check-boundary  verify extension/packages/testdata stubs have no platform/ imports"
 	@echo "  make check-docs-sync  verify doc links and no outdated refs (packages/planner, packages/core)"
 	@echo "  make pre-push       lint + validation (used by .githooks/pre-push)"
 	@echo "  make release-tag   create and push tag v\$$(cat VERSION) to trigger CI release"
@@ -123,8 +124,17 @@ build-all-platforms-upx: build-all-platforms
 	done
 	@echo "Compressed all platform binaries in bin/"
 
+# Enforce SDK-only boundary: extension/, packages/, and external plugin testdata
+# must never import from platform/.
+check-boundary:
+	@echo "Checking SDK boundary (no platform/ imports in extension/ or packages/)..."
+	@if grep -rn '"github.com/runfabric/runfabric/platform/' extension/ packages/ platform/extension/external/testdata/ 2>/dev/null | grep -v '_test.go'; then \
+		echo "ERROR: platform/ import found outside SDK boundary (see above)"; exit 1; \
+	fi
+	@echo "check-boundary OK"
+
 # Fast CI check: vet, build, test without -race. Use for quick PR feedback before full release-check.
-check-syntax:
+check-syntax: check-boundary
 	@echo "Running go vet..."
 	@go vet ./...
 	@echo "Building all packages..."
@@ -134,7 +144,7 @@ check-syntax:
 	@echo "check-syntax OK"
 
 # Pre-release validation: format, vet, build all, test with race, build CLI, then compress with UPX if available (matches CI; AGENTS.md default gate).
-release-check:
+release-check: check-boundary
 	@echo "Checking format (gofmt)..."
 	@test -z "$$(gofmt -l .)" || { echo "Go code is not formatted. Run: gofmt -w ."; gofmt -d .; exit 1; }
 	@echo "Running go vet..."

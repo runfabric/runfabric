@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	runtimes "github.com/runfabric/runfabric/platform/core/contracts/runtime"
-	simulators "github.com/runfabric/runfabric/platform/core/contracts/simulators"
+	builtinruntimes "github.com/runfabric/runfabric/internal/provider/runtimes"
+	builtinsimulators "github.com/runfabric/runfabric/internal/provider/simulators"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )
 
@@ -106,10 +106,10 @@ func builtinPluginManifests() []*PluginManifest {
 			Description: p.Description,
 		})
 	}
-	for _, rt := range runtimes.BuiltinRuntimeManifests() {
+	for _, rt := range builtinruntimes.BuiltinRuntimeManifests() {
 		list = append(list, &PluginManifest{ID: rt.ID, Kind: KindRuntime, Name: rt.Name, Description: rt.Description})
 	}
-	for _, sim := range simulators.BuiltinSimulatorManifests() {
+	for _, sim := range builtinsimulators.BuiltinSimulatorManifests() {
 		list = append(list, &PluginManifest{ID: sim.ID, Kind: KindSimulator, Name: sim.Name, Description: sim.Description})
 	}
 	return list

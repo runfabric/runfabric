@@ -7,11 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	builtinsimulators "github.com/runfabric/runfabric/internal/provider/simulators"
 	simulators "github.com/runfabric/runfabric/platform/core/contracts/simulators"
 )
 
 func TestBuiltinRegistry_LocalSimulator(t *testing.T) {
-	reg := simulators.NewBuiltinRegistry()
+	reg := builtinsimulators.NewBuiltinRegistry()
 	sim, err := reg.Get("local")
 	if err != nil {
 		t.Fatalf("get local simulator: %v", err)
@@ -51,7 +52,7 @@ func TestBuiltinRegistry_LocalSimulatorExecutesNodeHandler(t *testing.T) {
 		t.Fatalf("write handler: %v", err)
 	}
 
-	reg := simulators.NewBuiltinRegistry()
+	reg := builtinsimulators.NewBuiltinRegistry()
 	sim, err := reg.Get("local")
 	if err != nil {
 		t.Fatalf("get local simulator: %v", err)

@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	builtinruntimes "github.com/runfabric/runfabric/internal/provider/runtimes"
+	builtinsimulators "github.com/runfabric/runfabric/internal/provider/simulators"
 	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	runtimes "github.com/runfabric/runfabric/platform/core/contracts/runtime"
 	simulators "github.com/runfabric/runfabric/platform/core/contracts/simulators"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
+	extproviders "github.com/runfabric/runfabric/platform/extensions"
 	"github.com/runfabric/runfabric/platform/extensions/application/external"
-	extproviders "github.com/runfabric/runfabric/platform/extensions/internal/providers"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 )
 
@@ -38,8 +40,8 @@ type Options struct {
 func New(opts Options) (*Boundary, error) {
 	b := &Boundary{
 		providers:  extproviders.NewBuiltinProvidersRegistry(),
-		runtimes:   runtimes.NewBuiltinRegistry(),
-		simulators: simulators.NewBuiltinRegistry(),
+		runtimes:   builtinruntimes.NewBuiltinRegistry(),
+		simulators: builtinsimulators.NewBuiltinRegistry(),
 		plugins:    manifests.NewPluginRegistry(),
 		discoverOptions: external.DiscoverOptions{
 			PreferExternal: opts.PreferExternal,
