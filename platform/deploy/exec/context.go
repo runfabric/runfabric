@@ -1,7 +1,7 @@
 package exec
 
 import (
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	planner "github.com/runfabric/runfabric/platform/planner/engine"

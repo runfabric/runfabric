@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	appErrs "github.com/runfabric/runfabric/platform/core/model/errors"
 	"github.com/runfabric/runfabric/platform/core/state/backends"

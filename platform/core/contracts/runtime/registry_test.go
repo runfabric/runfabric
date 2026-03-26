@@ -1,14 +1,12 @@
 package runtimes_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
-	builtinruntimes "github.com/runfabric/runfabric/internal/provider/runtimes"
-	extruntimes "github.com/runfabric/runfabric/platform/core/contracts/runtime"
 	"github.com/runfabric/runfabric/platform/core/model/config"
+	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 )
 
 func TestNormalizeRuntimeID(t *testing.T) {
@@ -20,7 +18,15 @@ func TestNormalizeRuntimeID(t *testing.T) {
 		"runtime-python": "python",
 	}
 	for in, want := range cases {
-		if got := extruntimes.NormalizeRuntimeID(in); got != want {
+		b, err := resolution.NewCached(resolution.Options{IncludeExternal: false})
+		if err != nil {
+			t.Fatalf("new boundary: %v", err)
+		}
+		m, err := b.ResolveRuntime(in)
+		if err != nil {
+			t.Fatalf("resolve runtime %q: %v", in, err)
+		}
+		if got := m.ID; got != want {
 			t.Fatalf("NormalizeRuntimeID(%q)=%q want %q", in, got, want)
 		}
 	}
@@ -35,12 +41,12 @@ func TestBuiltinRegistry_NodeBuild(t *testing.T) {
 		t.Fatalf("write handler: %v", err)
 	}
 
-	reg := builtinruntimes.NewBuiltinRegistry()
-	rt, err := reg.Get("nodejs20.x")
+	b, err := resolution.NewCached(resolution.Options{IncludeExternal: false})
 	if err != nil {
-		t.Fatalf("get runtime: %v", err)
+		t.Fatalf("new boundary: %v", err)
 	}
-	artifact, err := rt.Build(context.Background(), extruntimes.BuildRequest{
+	artifact, err := b.BuildFunction(t.Context(), resolution.RuntimeBuildRequest{
+		Runtime:         "nodejs20.x",
 		Root:            root,
 		FunctionName:    "api",
 		FunctionConfig:  config.FunctionConfig{Handler: "src/handler.handler", Runtime: "nodejs20.x"},
@@ -66,12 +72,12 @@ func TestBuiltinRegistry_PythonBuild(t *testing.T) {
 		t.Fatalf("write handler: %v", err)
 	}
 
-	reg := builtinruntimes.NewBuiltinRegistry()
-	rt, err := reg.Get("python3.11")
+	b, err := resolution.NewCached(resolution.Options{IncludeExternal: false})
 	if err != nil {
-		t.Fatalf("get runtime: %v", err)
+		t.Fatalf("new boundary: %v", err)
 	}
-	artifact, err := rt.Build(context.Background(), extruntimes.BuildRequest{
+	artifact, err := b.BuildFunction(t.Context(), resolution.RuntimeBuildRequest{
+		Runtime:         "python3.11",
 		Root:            root,
 		FunctionName:    "api",
 		FunctionConfig:  config.FunctionConfig{Handler: "src/handler.handler", Runtime: "python3.11"},

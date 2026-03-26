@@ -1,6 +1,9 @@
 package providers
 
-import "github.com/runfabric/runfabric/platform/extensions/registry/resolution"
+import (
+	providercontract "github.com/runfabric/runfabric/internal/provider/contracts"
+	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
+)
 
 // LoadOptions controls provider/runtime boundary construction.
 type LoadOptions struct {
@@ -19,7 +22,7 @@ func LoadBoundary(opts LoadOptions) (*resolution.Boundary, error) {
 }
 
 // LoadRegistry returns the provider registry resolved through the extension boundary.
-func LoadRegistry(opts LoadOptions) (*Registry, error) {
+func LoadRegistry(opts LoadOptions) (*providercontract.Registry, error) {
 	boundary, err := LoadBoundary(opts)
 	if err != nil {
 		return nil, err
@@ -28,7 +31,7 @@ func LoadRegistry(opts LoadOptions) (*Registry, error) {
 }
 
 // ResolveProvider resolves a provider through the shared extension boundary.
-func ResolveProvider(name string, opts LoadOptions) (ProviderPlugin, error) {
+func ResolveProvider(name string, opts LoadOptions) (providercontract.ProviderPlugin, error) {
 	boundary, err := LoadBoundary(opts)
 	if err != nil {
 		return nil, err

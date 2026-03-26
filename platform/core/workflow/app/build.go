@@ -7,8 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	runtimes "github.com/runfabric/runfabric/platform/core/contracts/runtime"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/buildcache"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
@@ -116,12 +115,8 @@ func Build(configPath string, opts BuildOptions) (*BuildResult, error) {
 			errs = append(errs, fmt.Sprintf("%s: config signature: %v", name, err))
 			continue
 		}
-		runtimePlugin, err := extBoundary.ResolveRuntimePlugin(fn.Runtime)
-		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
-			continue
-		}
-		artifact, err := runtimePlugin.Build(context.Background(), runtimes.BuildRequest{
+		artifact, err := extBoundary.BuildFunction(context.Background(), resolution.RuntimeBuildRequest{
+			Runtime:         fn.Runtime,
 			Root:            projectRoot,
 			FunctionName:    name,
 			FunctionConfig:  fn,

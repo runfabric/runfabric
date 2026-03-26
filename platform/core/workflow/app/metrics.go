@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 )
 

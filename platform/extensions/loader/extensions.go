@@ -7,15 +7,10 @@ import (
 	"fmt"
 	"strings"
 
-	builtinruntimes "github.com/runfabric/runfabric/internal/provider/runtimes"
-	builtinsimulators "github.com/runfabric/runfabric/internal/provider/simulators"
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	runtimes "github.com/runfabric/runfabric/platform/core/contracts/runtime"
-	simulators "github.com/runfabric/runfabric/platform/core/contracts/simulators"
-	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
-	extproviders "github.com/runfabric/runfabric/platform/extensions"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/extensions/application/external"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
+	resolution "github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 )
 
 // ExtensionsLoader is the single consolidated entry point for loading all extensions.
@@ -27,8 +22,8 @@ import (
 // - External plugins from RUNFABRIC_HOME/plugins/{providers,runtimes,simulators}
 type ExtensionsLoader struct {
 	providers         *providers.Registry
-	runtimes          *runtimes.Registry
-	simulators        *simulators.Registry
+	runtimes          *resolution.RuntimeRegistry
+	simulators        *resolution.SimulatorRegistry
 	plugins           *manifests.PluginRegistry
 	internalProviders map[string]struct{}
 	apiProviders      map[string]struct{}
@@ -50,27 +45,20 @@ type LoaderOptions struct {
 // and simulators. If IncludeExternal is true, it also discovers plugins from
 // RUNFABRIC_HOME/plugins directories.
 func NewLoader(opts LoaderOptions) (*ExtensionsLoader, error) {
+	builtins := resolution.NewBuiltinSet()
 	loader := &ExtensionsLoader{
 		// Register all built-in registries
-		providers:         extproviders.NewBuiltinProvidersRegistry(),
-		runtimes:          builtinruntimes.NewBuiltinRegistry(),
-		simulators:        builtinsimulators.NewBuiltinRegistry(),
-		plugins:           manifests.NewPluginRegistry(),
+		providers:         builtins.Providers,
+		runtimes:          builtins.Runtimes,
+		simulators:        builtins.Simulators,
+		plugins:           builtins.Plugins,
 		internalProviders: map[string]struct{}{},
-		apiProviders:      map[string]struct{}{},
+		apiProviders:      builtins.APIProviderIDs,
 		discoverOptions: external.DiscoverOptions{
 			PreferExternal: opts.PreferExternal,
 			PinnedVersions: opts.PinnedVersions,
 		},
 	}
-
-	// Mark API providers (vercel, netlify, etc.) that dispatch through deploy/api
-	for _, name := range deployapi.APIProviderNames() {
-		loader.apiProviders[name] = struct{}{}
-	}
-
-	// Register API-backed providers to the provider registry
-	registerBuiltinAPIProviders(loader.providers)
 
 	// Load external plugins if requested
 	if opts.IncludeExternal {
@@ -88,12 +76,12 @@ func (l *ExtensionsLoader) Providers() *providers.Registry {
 }
 
 // Runtimes returns the runtimes registry containing all built-in runtime plugins.
-func (l *ExtensionsLoader) Runtimes() *runtimes.Registry {
+func (l *ExtensionsLoader) Runtimes() *resolution.RuntimeRegistry {
 	return l.runtimes
 }
 
 // Simulators returns the simulators registry containing all built-in simulators.
-func (l *ExtensionsLoader) Simulators() *simulators.Registry {
+func (l *ExtensionsLoader) Simulators() *resolution.SimulatorRegistry {
 	return l.simulators
 }
 
@@ -119,7 +107,7 @@ func (l *ExtensionsLoader) ResolveRuntime(runtime string) (*manifests.PluginMani
 	if raw == "" {
 		return nil, fmt.Errorf("runtime is required")
 	}
-	id := runtimes.NormalizeRuntimeID(raw)
+	id := resolution.NormalizeRuntimeID(raw)
 	m := l.plugins.Get(id)
 	if m == nil || m.Kind != manifests.KindRuntime {
 		return nil, fmt.Errorf("runtime plugin %q is not registered", raw)
@@ -128,12 +116,12 @@ func (l *ExtensionsLoader) ResolveRuntime(runtime string) (*manifests.PluginMani
 }
 
 // ResolveRuntimePlugin returns a runtime by ID/version string.
-func (l *ExtensionsLoader) ResolveRuntimePlugin(runtime string) (runtimes.Runtime, error) {
+func (l *ExtensionsLoader) ResolveRuntimePlugin(runtime string) (resolution.RuntimePlugin, error) {
 	return l.runtimes.Get(runtime)
 }
 
 // ResolveSimulator returns a simulator by ID.
-func (l *ExtensionsLoader) ResolveSimulator(simulatorID string) (simulators.Simulator, error) {
+func (l *ExtensionsLoader) ResolveSimulator(simulatorID string) (resolution.SimulatorPlugin, error) {
 	id := strings.TrimSpace(simulatorID)
 	if id == "" {
 		return nil, fmt.Errorf("simulator id is required")
@@ -208,16 +196,6 @@ func (l *ExtensionsLoader) refresh() error {
 	}
 
 	return nil
-}
-
-// registerBuiltinAPIProviders registers all API-backed providers (vercel, netlify, etc.)
-// to the provider registry. These providers dispatch through the API instead of
-// direct Go implementations.
-func registerBuiltinAPIProviders(reg *providers.Registry) {
-	// Placeholder: API providers are registered via deployapi contract.
-	// Implementation details in platform/deploy/core/api/providers.go
-	// Each API provider (vercel, netlify, etc.) is registered with its RPC endpoint.
-	_ = reg // Use reg to avoid unused variable warning
 }
 
 // DefaultLoader creates a loader with external plugins enabled and no version pinning.

@@ -14,10 +14,27 @@ import (
 	kubernetesprovider "github.com/runfabric/runfabric/extensions/providers/kubernetes"
 	netlifyprovider "github.com/runfabric/runfabric/extensions/providers/netlify"
 	vercelprovider "github.com/runfabric/runfabric/extensions/providers/vercel"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
+
+type APIDispatchProvider struct {
+	ID    string
+	Ops   inprocess.APIOps
+	Hooks *inprocess.APIDispatchHooks
+}
+
+// BuiltinProviderSet is the single provider-loading view for built-in providers.
+// It contains the in-process registry, builtin manifest descriptors, and the
+// API-dispatch provider ID set.
+type BuiltinProviderSet struct {
+	Registry          *providers.Registry
+	ManifestProviders []catalog.ProviderDescriptor
+	APIDispatch       map[string]APIDispatchProvider
+	APIProviderIDs    map[string]struct{}
+}
 
 var providerEntries = func() []catalog.ProviderPolicyEntry {
 	awsHooks := inprocess.APIDispatchHooks{
@@ -286,4 +303,40 @@ func APIDispatchProviderIDs() []string {
 		}
 	}
 	return ids
+}
+
+// NewBuiltinProvidersRegistry returns a providers registry populated with all
+// built-in in-process provider implementations defined in provider policy.
+func NewBuiltinProvidersRegistry() *providers.Registry {
+	reg := providers.NewRegistry()
+	for _, e := range providerEntries {
+		if !e.Descriptor.BuiltinImplementation || e.Factory == nil {
+			continue
+		}
+		_ = reg.Register(inprocess.New(e.Factory()))
+	}
+	return reg
+}
+
+// NewBuiltinProviderSet returns the centralized built-in provider loading set.
+func NewBuiltinProviderSet() *BuiltinProviderSet {
+	apiDispatch := map[string]APIDispatchProvider{}
+	apiProviderIDs := map[string]struct{}{}
+	for _, entry := range providerEntries {
+		if entry.Descriptor.ExcludeFromAPIDispatch {
+			continue
+		}
+		apiProviderIDs[entry.Descriptor.ID] = struct{}{}
+		apiDispatch[entry.Descriptor.ID] = APIDispatchProvider{
+			ID:    entry.Descriptor.ID,
+			Ops:   entry.Ops,
+			Hooks: entry.Hooks,
+		}
+	}
+	return &BuiltinProviderSet{
+		Registry:          NewBuiltinProvidersRegistry(),
+		ManifestProviders: BuiltinManifestProviders(),
+		APIDispatch:       apiDispatch,
+		APIProviderIDs:    apiProviderIDs,
+	}
 }

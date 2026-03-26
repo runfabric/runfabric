@@ -8,8 +8,8 @@ import (
 	"context"
 	"encoding/json"
 
+	coreprovider "github.com/runfabric/runfabric/internal/provider/contracts"
 	sdkbridge "github.com/runfabric/runfabric/internal/provider/sdkbridge"
-	coreprovider "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	planner "github.com/runfabric/runfabric/platform/core/planner/api"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )

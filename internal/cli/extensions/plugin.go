@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/runfabric/runfabric/internal/app"
-	extproviders "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	extproviders "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/workflow/lifecycle"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"

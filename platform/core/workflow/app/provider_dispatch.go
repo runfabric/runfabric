@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 )
 
 type providerDispatchMode int

@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/runfabric/runfabric/platform/core/contracts/simulators"
 	"github.com/runfabric/runfabric/platform/core/model/config"
+	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 )
 
 // CallLocal runs the service locally: starts an HTTP server that can invoke handlers.
@@ -21,7 +21,11 @@ func CallLocal(configPath, stage, host, port string, serve bool) (any, error) {
 	}
 
 	addr := host + ":" + port
-	sim, err := resolveSimulatorForLocal(ctx)
+	simID := resolveSimulatorIDForLocal(ctx)
+	if simID == "" {
+		simID = "local"
+	}
+	_, err = ctx.Extensions.ResolveSimulator(simID)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +38,7 @@ func CallLocal(configPath, stage, host, port string, serve bool) (any, error) {
 	})
 	for name := range ctx.Config.Functions {
 		fnName := name
-		mux.HandleFunc("/"+name, newLocalInvokeHandler(ctx, sim, fnName))
+		mux.HandleFunc("/"+name, newLocalInvokeHandler(ctx, simID, fnName))
 	}
 
 	if !serve {
@@ -57,7 +61,11 @@ func CallLocalServe(configPath, stage, host, port string) (shutdownChan <-chan s
 	}
 
 	addr := host + ":" + port
-	sim, err := resolveSimulatorForLocal(ctx)
+	simID := resolveSimulatorIDForLocal(ctx)
+	if simID == "" {
+		simID = "local"
+	}
+	_, err = ctx.Extensions.ResolveSimulator(simID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -70,7 +78,7 @@ func CallLocalServe(configPath, stage, host, port string) (shutdownChan <-chan s
 	})
 	for name := range ctx.Config.Functions {
 		fnName := name
-		mux.HandleFunc("/"+name, newLocalInvokeHandler(ctx, sim, fnName))
+		mux.HandleFunc("/"+name, newLocalInvokeHandler(ctx, simID, fnName))
 	}
 
 	server := &http.Server{Addr: addr, Handler: mux}
@@ -90,15 +98,15 @@ func CallLocalServe(configPath, stage, host, port string) (shutdownChan <-chan s
 	return done, restart, nil
 }
 
-func resolveSimulatorForLocal(ctx *AppContext) (simulators.Simulator, error) {
+func resolveSimulatorIDForLocal(ctx *AppContext) string {
 	simID := config.ExtensionString(ctx.Config, "simulatorPlugin")
 	if simID == "" {
 		simID = "local"
 	}
-	return ctx.Extensions.ResolveSimulator(simID)
+	return simID
 }
 
-func newLocalInvokeHandler(ctx *AppContext, sim simulators.Simulator, fnName string) http.HandlerFunc {
+func newLocalInvokeHandler(ctx *AppContext, simulatorID, fnName string) http.HandlerFunc {
 	fnCfg := ctx.Config.Functions[fnName]
 	runtime := fnCfg.Runtime
 	if runtime == "" {
@@ -117,7 +125,7 @@ func newLocalInvokeHandler(ctx *AppContext, sim simulators.Simulator, fnName str
 		for k := range r.Header {
 			headers[k] = r.Header.Get(k)
 		}
-		res, err := sim.Simulate(r.Context(), simulators.Request{
+		res, err := ctx.Extensions.Simulate(r.Context(), simulatorID, resolution.SimulatorInvokeRequest{
 			Service:    ctx.Config.Service,
 			Stage:      ctx.Stage,
 			Function:   fnName,

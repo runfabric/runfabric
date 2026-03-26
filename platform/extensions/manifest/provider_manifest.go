@@ -6,8 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	builtinruntimes "github.com/runfabric/runfabric/internal/provider/runtimes"
-	builtinsimulators "github.com/runfabric/runfabric/internal/provider/simulators"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )
 
@@ -81,13 +79,18 @@ type PluginRegistry struct {
 	nameLower map[string]string
 }
 
-// NewPluginRegistry returns a registry pre-filled with built-in provider and runtime manifests.
-func NewPluginRegistry() *PluginRegistry {
-	r := &PluginRegistry{
+// NewEmptyPluginRegistry returns an empty plugin registry without preloaded built-ins.
+func NewEmptyPluginRegistry() *PluginRegistry {
+	return &PluginRegistry{
 		plugins:   make(map[string]*PluginManifest),
 		idLower:   make(map[string]string),
 		nameLower: make(map[string]string),
 	}
+}
+
+// NewPluginRegistry returns a registry pre-filled with built-in provider and runtime manifests.
+func NewPluginRegistry() *PluginRegistry {
+	r := NewEmptyPluginRegistry()
 	for _, m := range builtinPluginManifests() {
 		r.plugins[m.ID] = m
 		r.idLower[m.ID] = strings.ToLower(m.ID)
@@ -105,12 +108,6 @@ func builtinPluginManifests() []*PluginManifest {
 			Name:        p.Name,
 			Description: p.Description,
 		})
-	}
-	for _, rt := range builtinruntimes.BuiltinRuntimeManifests() {
-		list = append(list, &PluginManifest{ID: rt.ID, Kind: KindRuntime, Name: rt.Name, Description: rt.Description})
-	}
-	for _, sim := range builtinsimulators.BuiltinSimulatorManifests() {
-		list = append(list, &PluginManifest{ID: sim.ID, Kind: KindSimulator, Name: sim.Name, Description: sim.Description})
 	}
 	return list
 }

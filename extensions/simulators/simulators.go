@@ -8,9 +8,84 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-
-	simulators "github.com/runfabric/runfabric/platform/core/contracts/simulators"
+	"sync"
 )
+
+type Meta struct {
+	ID          string `json:"id"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type Request struct {
+	Service  string            `json:"service,omitempty"`
+	Stage    string            `json:"stage,omitempty"`
+	Function string            `json:"function,omitempty"`
+	Method   string            `json:"method,omitempty"`
+	Path     string            `json:"path,omitempty"`
+	Query    map[string]string `json:"query,omitempty"`
+	Headers  map[string]string `json:"headers,omitempty"`
+	Body     []byte            `json:"body,omitempty"`
+
+	WorkDir    string `json:"workDir,omitempty"`
+	HandlerRef string `json:"handlerRef,omitempty"`
+	Runtime    string `json:"runtime,omitempty"`
+}
+
+type Response struct {
+	StatusCode int               `json:"statusCode"`
+	Headers    map[string]string `json:"headers,omitempty"`
+	Body       json.RawMessage   `json:"body,omitempty"`
+}
+
+type Simulator interface {
+	Meta() Meta
+	Simulate(ctx context.Context, req Request) (*Response, error)
+}
+
+type Registry struct {
+	mu         sync.RWMutex
+	simulators map[string]Simulator
+}
+
+func NewRegistry() *Registry {
+	return &Registry{simulators: map[string]Simulator{}}
+}
+
+func (r *Registry) Register(sim Simulator) error {
+	if sim == nil {
+		return fmt.Errorf("simulator plugin is nil")
+	}
+	id := strings.TrimSpace(sim.Meta().ID)
+	if id == "" {
+		return fmt.Errorf("simulator plugin id is required")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.simulators[id] = sim
+	return nil
+}
+
+func (r *Registry) Get(id string) (Simulator, error) {
+	id = strings.TrimSpace(id)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	sim, ok := r.simulators[id]
+	if !ok {
+		return nil, fmt.Errorf("simulator plugin %q is not registered", id)
+	}
+	return sim, nil
+}
+
+func (r *Registry) List() []Meta {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]Meta, 0, len(r.simulators))
+	for _, sim := range r.simulators {
+		out = append(out, sim.Meta())
+	}
+	return out
+}
 
 // nodeRunner is an inline Node.js script executed per-request to invoke the
 // handler function. It reads execution parameters from environment variables
@@ -41,15 +116,15 @@ const path = require('path');
 
 type localSimulator struct{}
 
-func (s localSimulator) Meta() simulators.Meta {
-	return simulators.Meta{
+func (s localSimulator) Meta() Meta {
+	return Meta{
 		ID:          "local",
 		Name:        "Local Simulator",
 		Description: "Built-in local simulator for call-local/dev workflows",
 	}
 }
 
-func (s localSimulator) Simulate(_ context.Context, req simulators.Request) (*simulators.Response, error) {
+func (s localSimulator) Simulate(_ context.Context, req Request) (*Response, error) {
 	ctx := context.Background()
 	if req.WorkDir != "" && req.HandlerRef != "" && isNodeRuntime(req.Runtime) {
 		return invokeNodeHandler(ctx, req)
@@ -73,7 +148,7 @@ func (s localSimulator) Simulate(_ context.Context, req simulators.Request) (*si
 		body["body"] = string(req.Body)
 	}
 	raw, _ := json.Marshal(body)
-	return &simulators.Response{
+	return &Response{
 		StatusCode: 200,
 		Headers: map[string]string{
 			"Content-Type": "application/json",
@@ -88,7 +163,7 @@ func isNodeRuntime(runtime string) bool {
 
 // invokeNodeHandler spawns a Node.js process, calls the exported handler
 // function with a Lambda-compatible HTTP event, and returns the response.
-func invokeNodeHandler(ctx context.Context, req simulators.Request) (*simulators.Response, error) {
+func invokeNodeHandler(ctx context.Context, req Request) (*Response, error) {
 	event := map[string]any{
 		"httpMethod":            req.Method,
 		"path":                  req.Path,
@@ -153,7 +228,7 @@ func invokeNodeHandler(ctx context.Context, req simulators.Request) (*simulators
 		bodyRaw, _ = json.Marshal(result.Body)
 	}
 
-	return &simulators.Response{
+	return &Response{
 		StatusCode: status,
 		Headers:    headers,
 		Body:       bodyRaw,
@@ -161,14 +236,14 @@ func invokeNodeHandler(ctx context.Context, req simulators.Request) (*simulators
 }
 
 // BuiltinSimulatorManifests returns simulator metadata entries used by extension manifest catalogs.
-func BuiltinSimulatorManifests() []simulators.Meta {
-	return []simulators.Meta{
+func BuiltinSimulatorManifests() []Meta {
+	return []Meta{
 		{ID: "local", Name: "Local Simulator", Description: "Built-in local simulator for call-local/dev"},
 	}
 }
 
-func NewBuiltinRegistry() *simulators.Registry {
-	reg := simulators.NewRegistry()
+func NewBuiltinRegistry() *Registry {
+	reg := NewRegistry()
 	_ = reg.Register(localSimulator{})
 	return reg
 }

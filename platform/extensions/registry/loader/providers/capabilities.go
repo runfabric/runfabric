@@ -3,6 +3,8 @@ package providers
 import (
 	"sort"
 	"strings"
+
+	ext "github.com/runfabric/runfabric/internal/provider/contracts"
 )
 
 // CapabilitySet provides fast, case-insensitive capability checks for provider metadata.
@@ -12,7 +14,7 @@ type CapabilitySet struct {
 }
 
 // NewCapabilitySet builds a normalized capability set from provider metadata.
-func NewCapabilitySet(meta ProviderMeta) CapabilitySet {
+func NewCapabilitySet(meta ext.ProviderMeta) CapabilitySet {
 	index := map[string]struct{}{}
 	all := make([]string, 0, len(meta.Capabilities))
 	for _, raw := range meta.Capabilities {

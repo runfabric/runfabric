@@ -7,17 +7,13 @@ import (
 )
 
 var apiProviders = func() map[string]Provider {
-	m := make(map[string]Provider)
-	for _, id := range providerpolicy.APIDispatchProviderIDs() {
-		m[id] = buildProvider(id)
+	providerSet := providerpolicy.NewBuiltinProviderSet()
+	m := make(map[string]Provider, len(providerSet.APIDispatch))
+	for id, provider := range providerSet.APIDispatch {
+		m[id] = newAPIProviderFromOps(id, provider.Ops, provider.Hooks)
 	}
 	return m
 }()
-
-func buildProvider(id string) Provider {
-	ops, _ := providerpolicy.GetProviderAPIOps(id)
-	return newAPIProviderFromOps(id, ops, providerpolicy.GetAPIHooks(id))
-}
 
 // GetProvider returns the API-dispatch provider for name, or nil, false if not found.
 func GetProvider(name string) (Provider, bool) {

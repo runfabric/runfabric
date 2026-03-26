@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	extproviders "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	extproviders "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/runtime/build/artifacts"
 )

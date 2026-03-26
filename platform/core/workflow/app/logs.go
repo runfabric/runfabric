@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/core/workflow/lifecycle"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"

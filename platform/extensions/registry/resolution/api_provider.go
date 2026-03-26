@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	sdkbridge "github.com/runfabric/runfabric/internal/provider/sdkbridge"
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 	planner "github.com/runfabric/runfabric/platform/planner/engine"

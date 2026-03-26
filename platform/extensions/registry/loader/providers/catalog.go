@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	providercontract "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	providercontract "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/extensions/application/external"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 	planner "github.com/runfabric/runfabric/platform/planner/engine"

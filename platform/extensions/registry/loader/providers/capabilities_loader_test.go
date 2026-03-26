@@ -1,9 +1,13 @@
 package providers
 
-import "testing"
+import (
+	"testing"
+
+	providercontract "github.com/runfabric/runfabric/internal/provider/contracts"
+)
 
 func TestNewCapabilitySet_NormalizesAndDedupes(t *testing.T) {
-	set := NewCapabilitySet(ProviderMeta{Capabilities: []string{" Deploy ", "deploy", "LOGS", ""}})
+	set := NewCapabilitySet(providercontract.ProviderMeta{Capabilities: []string{" Deploy ", "deploy", "LOGS", ""}})
 	if !set.Has("deploy") {
 		t.Fatal("expected deploy capability")
 	}
