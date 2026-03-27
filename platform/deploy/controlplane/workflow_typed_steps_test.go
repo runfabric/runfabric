@@ -198,3 +198,411 @@ func TestNewTypedStepHandlerFromConfig_WiresMCP(t *testing.T) {
 		t.Fatalf("expected default deny policy wiring")
 	}
 }
+
+// --- Code step path ---
+
+func TestTypedStepHandler_CodeStep_ExecutesAndEchoesInput(t *testing.T) {
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	run := &state.WorkflowRun{RunID: "run-code", WorkflowHash: "wf-code"}
+	step := state.WorkflowStepRun{
+		StepID: "do-work",
+		Kind:   StepKindCode,
+		Input:  map[string]any{"function": "processOrder", "orderId": "42"},
+	}
+	res, err := handler.ExecuteStep(context.Background(), run, step)
+	if err != nil {
+		t.Fatalf("code step returned error: %v", err)
+	}
+	if res == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if res.Output["result"] != "code_executed" {
+		t.Fatalf("expected result=code_executed, got %v", res.Output["result"])
+	}
+	input, _ := res.Output["input"].(map[string]any)
+	if input["function"] != "processOrder" {
+		t.Fatalf("expected function echoed in output, got %+v", input)
+	}
+}
+
+func TestTypedStepHandler_CodeStep_InjectableRunner(t *testing.T) {
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	var executedInput map[string]any
+	handler.CodeRunner = &customCodeRunner{captureInput: &executedInput}
+
+	run := &state.WorkflowRun{RunID: "run-custom-code", WorkflowHash: "wf"}
+	step := state.WorkflowStepRun{
+		StepID: "cs1",
+		Kind:   StepKindCode,
+		Input:  map[string]any{"cmd": "build"},
+	}
+	_, err := handler.ExecuteStep(context.Background(), run, step)
+	if err != nil {
+		t.Fatalf("custom code runner returned error: %v", err)
+	}
+	if executedInput["cmd"] != "build" {
+		t.Fatalf("expected injected runner to receive step input, got %+v", executedInput)
+	}
+}
+
+type customCodeRunner struct {
+	captureInput *map[string]any
+}
+
+func (r *customCodeRunner) ExecuteStep(_ *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
+	*r.captureInput = step.Input
+	output["result"] = "custom_executed"
+	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
+}
+
+// --- Human-approval step ---
+
+func TestTypedStepHandler_HumanApproval_PausesWithNoDecision(t *testing.T) {
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	run := &state.WorkflowRun{RunID: "appr-run", WorkflowHash: "wf"}
+	step := state.WorkflowStepRun{
+		StepID: "review",
+		Kind:   StepKindHumanApproval,
+		Input:  map[string]any{"approvalRequest": "please review this PR"},
+	}
+	res, err := handler.ExecuteStep(context.Background(), run, step)
+	if err != nil {
+		t.Fatalf("human approval step returned error: %v", err)
+	}
+	if !res.Pause {
+		t.Fatal("expected Pause=true when no approval decision supplied")
+	}
+	if res.Output["status"] != "awaiting_approval" {
+		t.Fatalf("expected awaiting_approval status, got %v", res.Output["status"])
+	}
+}
+
+func TestTypedStepHandler_HumanApproval_RejectPath(t *testing.T) {
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	run := &state.WorkflowRun{RunID: "appr-run-2", WorkflowHash: "wf"}
+	step := state.WorkflowStepRun{
+		StepID: "review",
+		Kind:   StepKindHumanApproval,
+		Input:  map[string]any{"approvalDecision": "reject", "approvalReviewer": "bob"},
+	}
+	res, err := handler.ExecuteStep(context.Background(), run, step)
+	if err != nil {
+		t.Fatalf("human approval rejection returned error: %v", err)
+	}
+	if res.Output["status"] != "rejected" {
+		t.Fatalf("expected rejected status, got %v", res.Output["status"])
+	}
+	if res.Output["reviewer"] != "bob" {
+		t.Fatalf("expected reviewer=bob, got %v", res.Output["reviewer"])
+	}
+}
+
+func TestTypedStepHandler_HumanApproval_InvalidDecisionErrors(t *testing.T) {
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	run := &state.WorkflowRun{RunID: "appr-run-3", WorkflowHash: "wf"}
+	step := state.WorkflowStepRun{
+		StepID: "review",
+		Kind:   StepKindHumanApproval,
+		Input:  map[string]any{"approvalDecision": "maybe"},
+	}
+	_, err := handler.ExecuteStep(context.Background(), run, step)
+	if err == nil {
+		t.Fatal("expected error for invalid approval decision")
+	}
+	if !strings.Contains(err.Error(), "invalid") {
+		t.Fatalf("expected invalid decision error, got %v", err)
+	}
+}
+
+func TestTypedStepHandler_HumanApproval_InjectableRunner(t *testing.T) {
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	var called bool
+	handler.ApprovalRunner = &customApprovalRunner{called: &called}
+
+	run := &state.WorkflowRun{RunID: "appr-custom", WorkflowHash: "wf"}
+	step := state.WorkflowStepRun{
+		StepID: "review",
+		Kind:   StepKindHumanApproval,
+		Input:  map[string]any{"approvalDecision": "approved"},
+	}
+	_, err := handler.ExecuteStep(context.Background(), run, step)
+	if err != nil {
+		t.Fatalf("custom approval runner returned error: %v", err)
+	}
+	if !called {
+		t.Fatal("expected custom ApprovalRunner to be invoked")
+	}
+}
+
+type customApprovalRunner struct {
+	called *bool
+}
+
+func (r *customApprovalRunner) ExecuteStep(_ *state.WorkflowRun, _ state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
+	*r.called = true
+	output["status"] = "approved"
+	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
+}
+
+// --- AI structured step ---
+
+func TestTypedStepHandler_AIStructured_ProducesObjectOutput(t *testing.T) {
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	run := &state.WorkflowRun{RunID: "run-struct", WorkflowHash: "wf"}
+	step := state.WorkflowStepRun{
+		StepID: "extract",
+		Kind:   StepKindAIStructured,
+		Input: map[string]any{
+			"schema": map[string]any{"type": "object", "properties": map[string]any{"name": "string"}},
+			"data":   map[string]any{"name": "alice"},
+		},
+	}
+	res, err := handler.ExecuteStep(context.Background(), run, step)
+	if err != nil {
+		t.Fatalf("ai-structured step returned error: %v", err)
+	}
+	if _, ok := res.Output["object"]; !ok {
+		t.Fatalf("expected object field in output, got %+v", res.Output)
+	}
+	if _, ok := res.Output["schema"]; !ok {
+		t.Fatalf("expected schema field in output, got %+v", res.Output)
+	}
+	mo, _ := res.Output["modelOutput"].(map[string]any)
+	if mo["type"] != "object" {
+		t.Fatalf("expected modelOutput.type=object, got %v", mo["type"])
+	}
+}
+
+// --- AI eval step ---
+
+func TestTypedStepHandler_AIEval_PassAboveThreshold(t *testing.T) {
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	run := &state.WorkflowRun{RunID: "run-eval-pass", WorkflowHash: "wf"}
+	step := state.WorkflowStepRun{
+		StepID: "quality-gate",
+		Kind:   StepKindAIEval,
+		Input:  map[string]any{"score": 0.9, "threshold": 0.7},
+	}
+	res, err := handler.ExecuteStep(context.Background(), run, step)
+	if err != nil {
+		t.Fatalf("ai-eval step returned error: %v", err)
+	}
+	pass, _ := res.Output["pass"].(bool)
+	if !pass {
+		t.Fatalf("expected pass=true for score 0.9 >= threshold 0.7, got output %+v", res.Output)
+	}
+}
+
+func TestTypedStepHandler_AIEval_FailBelowThreshold(t *testing.T) {
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	run := &state.WorkflowRun{RunID: "run-eval-fail", WorkflowHash: "wf"}
+	step := state.WorkflowStepRun{
+		StepID: "quality-gate",
+		Kind:   StepKindAIEval,
+		Input:  map[string]any{"score": 0.3, "threshold": 0.7},
+	}
+	res, err := handler.ExecuteStep(context.Background(), run, step)
+	if err != nil {
+		t.Fatalf("ai-eval step returned error: %v", err)
+	}
+	pass, _ := res.Output["pass"].(bool)
+	if pass {
+		t.Fatalf("expected pass=false for score 0.3 < threshold 0.7, got output %+v", res.Output)
+	}
+}
+
+func TestTypedStepHandler_AIEval_DefaultThreshold(t *testing.T) {
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	run := &state.WorkflowRun{RunID: "run-eval-default", WorkflowHash: "wf"}
+	// No threshold supplied; default is 0.5.
+	step := state.WorkflowStepRun{
+		StepID: "gate",
+		Kind:   StepKindAIEval,
+		Input:  map[string]any{"score": 0.6},
+	}
+	res, err := handler.ExecuteStep(context.Background(), run, step)
+	if err != nil {
+		t.Fatalf("ai-eval default threshold returned error: %v", err)
+	}
+	pass, _ := res.Output["pass"].(bool)
+	if !pass {
+		t.Fatalf("expected pass=true with score 0.6 >= default threshold 0.5")
+	}
+}
+
+// --- AI retrieval + MCP resource ---
+
+func TestTypedStepHandler_AIRetrieval_WithMCPResource(t *testing.T) {
+	handler := NewTypedStepHandler(
+		config.MCPIntegrationsConfig{
+			Servers: map[string]config.MCPServerConfig{
+				"kb": {URL: "https://kb.internal/mcp"},
+			},
+		},
+		config.MCPPolicyConfig{Allow: config.MCPPolicyRuleSet{Resources: []string{"kb.*"}}},
+		fakeMCPClient{},
+	)
+	run := &state.WorkflowRun{RunID: "run-retrieval", WorkflowHash: "wf"}
+	step := state.WorkflowStepRun{
+		StepID: "fetch-docs",
+		Kind:   StepKindAIRetrieval,
+		Input: map[string]any{
+			"query": "what is the refund policy",
+			"mcp": map[string]any{
+				"server":   "kb",
+				"resource": "kb://policies/refund",
+			},
+		},
+	}
+	res, err := handler.ExecuteStep(context.Background(), run, step)
+	if err != nil {
+		t.Fatalf("ai-retrieval with mcp resource returned error: %v", err)
+	}
+	if res.Output["query"] != "what is the refund policy" {
+		t.Fatalf("expected query echoed in output, got %+v", res.Output)
+	}
+	if _, ok := res.Output["documents"]; !ok {
+		t.Fatalf("expected documents in output, got %+v", res.Output)
+	}
+}
+
+// --- End-to-end state transitions (WorkflowRuntime) ---
+
+func TestWorkflowRuntime_CodeStepEndToEnd(t *testing.T) {
+	root := t.TempDir()
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	rt := NewWorkflowRuntime(root, handler)
+
+	run, err := rt.StartRun(context.Background(), WorkflowRunSpec{
+		RunID:        "e2e-code-1",
+		Service:      "svc",
+		Stage:        "dev",
+		WorkflowHash: "wf-e2e",
+		Entrypoint:   "step1",
+		Steps: []WorkflowStepSpec{
+			{ID: "step1", Kind: StepKindCode, Input: map[string]any{"fn": "a"}},
+			{ID: "step2", Kind: StepKindCode, Input: map[string]any{"fn": "b"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartRun returned error: %v", err)
+	}
+	if run.Status != state.RunStatusOK {
+		t.Fatalf("expected ok status after two code steps, got %q", run.Status)
+	}
+	if len(run.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(run.Steps))
+	}
+	for _, s := range run.Steps {
+		if s.Status != state.StepStatusOK {
+			t.Fatalf("expected all steps ok, step %q has status %q", s.StepID, s.Status)
+		}
+	}
+}
+
+func TestWorkflowRuntime_AIStepEndToEnd(t *testing.T) {
+	root := t.TempDir()
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	rt := NewWorkflowRuntime(root, handler)
+
+	run, err := rt.StartRun(context.Background(), WorkflowRunSpec{
+		RunID:        "e2e-ai-1",
+		Service:      "svc",
+		Stage:        "dev",
+		WorkflowHash: "wf-e2e",
+		Entrypoint:   "generate",
+		Steps: []WorkflowStepSpec{
+			{ID: "generate", Kind: StepKindAIGenerate, Input: map[string]any{"prompt": "summarise this document"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AI generate step e2e returned error: %v", err)
+	}
+	if run.Status != state.RunStatusOK {
+		t.Fatalf("expected ok status, got %q", run.Status)
+	}
+	step := run.Steps[0]
+	if step.Status != state.StepStatusOK {
+		t.Fatalf("expected ai-generate step ok, got %q", step.Status)
+	}
+	if _, ok := step.Output["text"]; !ok {
+		t.Fatalf("expected text in ai-generate output, got %+v", step.Output)
+	}
+}
+
+func TestWorkflowRuntime_HumanApprovalFullLifecycle(t *testing.T) {
+	root := t.TempDir()
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	rt := NewWorkflowRuntime(root, handler)
+
+	run, err := rt.StartRun(context.Background(), WorkflowRunSpec{
+		RunID:        "e2e-approval-1",
+		Service:      "svc",
+		Stage:        "dev",
+		WorkflowHash: "wf-e2e",
+		Entrypoint:   "pre",
+		Steps: []WorkflowStepSpec{
+			{ID: "pre", Kind: StepKindCode, Input: map[string]any{}},
+			{ID: "review", Kind: StepKindHumanApproval, Input: map[string]any{}},
+			{ID: "post", Kind: StepKindCode, Input: map[string]any{}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartRun returned error: %v", err)
+	}
+	if run.Status != state.RunStatusPaused {
+		t.Fatalf("expected paused run awaiting approval, got %q", run.Status)
+	}
+
+	// Resolve and resume.
+	if err := rt.ResolveApproval("dev", "e2e-approval-1", "review", "approved", "reviewer-1"); err != nil {
+		t.Fatalf("ResolveApproval returned error: %v", err)
+	}
+	completed, err := rt.ResumeRun(context.Background(), "dev", "e2e-approval-1")
+	if err != nil {
+		t.Fatalf("ResumeRun after approval returned error: %v", err)
+	}
+	if completed.Status != state.RunStatusOK {
+		t.Fatalf("expected ok status after approval completion, got %q", completed.Status)
+	}
+	for _, s := range completed.Steps {
+		if s.Status != state.StepStatusOK {
+			t.Fatalf("expected all steps ok after completion, step %q has %q", s.StepID, s.Status)
+		}
+	}
+}
+
+func TestWorkflowRuntime_MixedStepsStateTransitions(t *testing.T) {
+	root := t.TempDir()
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	rt := NewWorkflowRuntime(root, handler)
+
+	run, err := rt.StartRun(context.Background(), WorkflowRunSpec{
+		RunID:        "e2e-mixed-1",
+		Service:      "svc",
+		Stage:        "dev",
+		WorkflowHash: "wf-e2e",
+		Entrypoint:   "ingest",
+		Steps: []WorkflowStepSpec{
+			{ID: "ingest", Kind: StepKindCode, Input: map[string]any{"fn": "ingest"}},
+			{ID: "eval", Kind: StepKindAIEval, Input: map[string]any{"score": 0.8, "threshold": 0.5}},
+			{ID: "summarise", Kind: StepKindAIGenerate, Input: map[string]any{"prompt": "summarise"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("mixed step run returned error: %v", err)
+	}
+	if run.Status != state.RunStatusOK {
+		t.Fatalf("expected ok status, got %q", run.Status)
+	}
+	for _, s := range run.Steps {
+		if s.Status != state.StepStatusOK {
+			t.Fatalf("step %q has status %q", s.StepID, s.Status)
+		}
+	}
+	// Confirm eval passed.
+	evalOut := run.Steps[1].Output
+	if evalOut["pass"] != true {
+		t.Fatalf("expected eval step to pass, got %+v", evalOut)
+	}
+}

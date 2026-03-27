@@ -6,9 +6,8 @@ import (
 	"context"
 	"fmt"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 )
 
 // Run deploys via the provider's API and returns a DeployResult. Saves receipt to root.
@@ -21,9 +20,9 @@ func Run(ctx context.Context, provider string, cfg *config.Config, stage, root s
 	if err != nil {
 		return nil, err
 	}
-	artifacts := make([]state.Artifact, 0, len(result.Artifacts))
+	artifacts := make([]ReceiptArtifact, 0, len(result.Artifacts))
 	for _, a := range result.Artifacts {
-		artifacts = append(artifacts, state.Artifact{
+		artifacts = append(artifacts, ReceiptArtifact{
 			Function:        a.Function,
 			Runtime:         a.Runtime,
 			SourcePath:      a.SourcePath,
@@ -33,7 +32,7 @@ func Run(ctx context.Context, provider string, cfg *config.Config, stage, root s
 			ConfigSignature: a.ConfigSignature,
 		})
 	}
-	receipt := &state.Receipt{
+	receipt := &ReceiptRecord{
 		Service:      cfg.Service,
 		Stage:        stage,
 		Provider:     result.Provider,
@@ -41,10 +40,10 @@ func Run(ctx context.Context, provider string, cfg *config.Config, stage, root s
 		Outputs:      result.Outputs,
 		Artifacts:    artifacts,
 		Metadata:     result.Metadata,
-		Functions:    make([]state.FunctionDeployment, 0, len(result.Artifacts)),
+		Functions:    make([]ReceiptFunctionDeployment, 0, len(result.Artifacts)),
 	}
 	for _, a := range result.Artifacts {
-		fn := state.FunctionDeployment{Function: a.Function}
+		fn := ReceiptFunctionDeployment{Function: a.Function}
 		if deployed, ok := result.Functions[a.Function]; ok {
 			fn.ResourceName = deployed.ResourceName
 			fn.ResourceIdentifier = deployed.ResourceIdentifier
@@ -52,8 +51,8 @@ func Run(ctx context.Context, provider string, cfg *config.Config, stage, root s
 		}
 		receipt.Functions = append(receipt.Functions, fn)
 	}
-	state.EnrichReceiptWithWorkflows(receipt, cfg)
-	if err := state.Save(root, receipt); err != nil {
+	coreState.EnrichReceiptWithWorkflows(receipt, cfg)
+	if err := coreState.SaveReceipt(root, receipt); err != nil {
 		return nil, err
 	}
 	return result, nil

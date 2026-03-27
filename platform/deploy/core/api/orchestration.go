@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 )
 

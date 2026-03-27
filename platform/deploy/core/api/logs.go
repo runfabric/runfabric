@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 )
@@ -18,10 +18,12 @@ func Logs(ctx context.Context, provider string, cfg *config.Config, stage, funct
 	}
 	if receipt == nil {
 		var err error
-		receipt, err = state.Load(root, stage)
+		stored, loadErr := coreState.LoadReceipt(root, stage)
+		err = loadErr
 		if err != nil {
 			return nil, fmt.Errorf("no deployment found for stage %q (run deploy first): %w", stage, err)
 		}
+		receipt = toCoreReceipt(stored)
 	}
 	if receipt.Provider != provider {
 		return nil, fmt.Errorf("receipt provider %q does not match %q", receipt.Provider, provider)

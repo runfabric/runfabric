@@ -20,13 +20,6 @@ const (
 	StepKindHumanApproval = "human-approval"
 )
 
-// MCPClient is the runtime MCP client contract used by typed step handlers.
-type MCPClient interface {
-	CallTool(ctx context.Context, server, name string, args map[string]any) (map[string]any, error)
-	ReadResource(ctx context.Context, server, uri string) (map[string]any, error)
-	GetPrompt(ctx context.Context, server, ref string, args map[string]any) (map[string]any, error)
-}
-
 // NoopMCPClient is a deterministic MCP client for local runtime/testing.
 type NoopMCPClient struct{}
 
@@ -58,171 +51,30 @@ func (NoopMCPClient) GetPrompt(_ context.Context, server, ref string, args map[s
 	}, nil
 }
 
-type TypedStepHandler struct {
-	MCPClient    MCPClient
-	Integrations config.MCPIntegrationsConfig
-	Policy       config.MCPPolicyConfig
-	Now          func() time.Time
+// CodeStepRunner executes code step kinds.
+type CodeStepRunner interface {
+	ExecuteStep(run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error)
 }
 
-func NewTypedStepHandler(integrations config.MCPIntegrationsConfig, policy config.MCPPolicyConfig, mcp MCPClient) *TypedStepHandler {
-	if mcp == nil {
-		mcp = NoopMCPClient{}
-	}
-	return &TypedStepHandler{
-		MCPClient:    mcp,
-		Integrations: integrations,
-		Policy:       policy,
-		Now:          time.Now,
-	}
-}
+// DefaultCodeStepRunner is the built-in code step executor (stub: invocation is provider/runtime-specific).
+type DefaultCodeStepRunner struct{}
 
-func NewTypedStepHandlerFromConfig(cfg *config.Config, mcp MCPClient) (*TypedStepHandler, error) {
-	integrations, err := config.ParseMCPIntegrations(cfg)
-	if err != nil {
-		return nil, err
-	}
-	policy, err := config.ParseMCPPolicy(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return NewTypedStepHandler(integrations, policy, mcp), nil
-}
-
-func (h *TypedStepHandler) ExecuteStep(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun) (*StepExecutionResult, error) {
-	kind := strings.ToLower(strings.TrimSpace(step.Kind))
-	if kind == "" {
-		kind = StepKindCode
-	}
-
-	output := map[string]any{
-		"kind":   kind,
-		"stepId": step.StepID,
-	}
-	metadata := map[string]any{
-		"kind": kind,
-		"correlation": map[string]any{
-			"runId":        run.RunID,
-			"stepId":       step.StepID,
-			"workflowHash": run.WorkflowHash,
-		},
-	}
-
-	switch kind {
-	case StepKindCode:
-		output["result"] = "code_executed"
-		output["input"] = step.Input
-		return &StepExecutionResult{Output: output, Metadata: metadata}, nil
-	case StepKindAIRetrieval:
-		return h.executeAIRetrieval(ctx, run, step, output, metadata)
-	case StepKindAIGenerate:
-		return h.executeAIGenerate(ctx, run, step, output, metadata)
-	case StepKindAIStructured:
-		return h.executeAIStructured(ctx, run, step, output, metadata)
-	case StepKindAIEval:
-		return h.executeAIEval(ctx, run, step, output, metadata)
-	case StepKindHumanApproval:
-		return h.executeHumanApproval(run, step, output, metadata)
-	default:
-		return nil, fmt.Errorf("unsupported workflow step kind %q (allowed: code, ai-retrieval, ai-generate, ai-structured, ai-eval, human-approval)", step.Kind)
-	}
-}
-
-func (h *TypedStepHandler) executeAIRetrieval(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
-	query := strings.TrimSpace(asInputString(step.Input, "query"))
-	if query == "" {
-		return nil, fmt.Errorf("step %s kind ai-retrieval requires input.query", step.StepID)
-	}
-	documents := []any{}
-	if binding, ok := readMCPBinding(step.Input); ok {
-		if binding.Resource != "" {
-			result, err := h.callMCPResource(ctx, run, step, binding, metadata)
-			if err != nil {
-				return nil, err
-			}
-			documents = append(documents, result)
-		}
-		if binding.Tool != "" {
-			result, err := h.callMCPTool(ctx, run, step, binding, metadata)
-			if err != nil {
-				return nil, err
-			}
-			documents = append(documents, result)
-		}
-	}
-	output["query"] = query
-	output["documents"] = documents
+func (DefaultCodeStepRunner) ExecuteStep(_ *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
+	output["result"] = "code_executed"
+	output["input"] = step.Input
+	_ = metadata
 	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
 }
 
-func (h *TypedStepHandler) executeAIGenerate(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
-	prompt := strings.TrimSpace(asInputString(step.Input, "prompt"))
-	if prompt == "" {
-		return nil, fmt.Errorf("step %s kind ai-generate requires input.prompt", step.StepID)
-	}
-	var mcpPromptText string
-	if binding, ok := readMCPBinding(step.Input); ok {
-		if binding.Prompt != "" {
-			result, err := h.callMCPPrompt(ctx, run, step, binding, metadata)
-			if err != nil {
-				return nil, err
-			}
-			if text, ok := result["text"].(string); ok {
-				mcpPromptText = text
-			}
-			output["mcpPrompt"] = result
-		}
-		if binding.Tool != "" {
-			toolRes, err := h.callMCPTool(ctx, run, step, binding, metadata)
-			if err != nil {
-				return nil, err
-			}
-			output["mcpTool"] = toolRes
-		}
-	}
-	fullPrompt := prompt
-	if mcpPromptText != "" {
-		fullPrompt = mcpPromptText + "\n" + prompt
-	}
-	output["text"] = fmt.Sprintf("generated(%s): %s", step.StepID, fullPrompt)
-	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
+// ApprovalStepRunner executes human-approval step kinds.
+type ApprovalStepRunner interface {
+	ExecuteStep(run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error)
 }
 
-func (h *TypedStepHandler) executeAIStructured(_ context.Context, _ *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
-	schemaObj, ok := step.Input["schema"].(map[string]any)
-	if !ok || len(schemaObj) == 0 {
-		return nil, fmt.Errorf("step %s kind ai-structured requires input.schema object", step.StepID)
-	}
-	obj := map[string]any{
-		"schemaValidated": true,
-		"stepId":          step.StepID,
-	}
-	if data, ok := step.Input["data"].(map[string]any); ok {
-		for k, v := range data {
-			obj[k] = v
-		}
-	}
-	output["object"] = obj
-	output["schema"] = schemaObj
-	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
-}
+// DefaultApprovalStepRunner implements pause-on-first-call / decision-on-resume human approval.
+type DefaultApprovalStepRunner struct{}
 
-func (h *TypedStepHandler) executeAIEval(_ context.Context, _ *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
-	score, ok := asFloat(step.Input["score"])
-	if !ok {
-		return nil, fmt.Errorf("step %s kind ai-eval requires numeric input.score", step.StepID)
-	}
-	threshold := 0.5
-	if v, ok := asFloat(step.Input["threshold"]); ok {
-		threshold = v
-	}
-	output["score"] = score
-	output["threshold"] = threshold
-	output["pass"] = score >= threshold
-	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
-}
-
-func (h *TypedStepHandler) executeHumanApproval(run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
+func (DefaultApprovalStepRunner) ExecuteStep(run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
 	decision := strings.ToLower(strings.TrimSpace(asInputString(step.Input, "approvalDecision")))
 	if decision == "" {
 		output["status"] = "awaiting_approval"
@@ -248,76 +100,113 @@ func (h *TypedStepHandler) executeHumanApproval(run *state.WorkflowRun, step sta
 	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
 }
 
-type mcpBinding struct {
-	Server     string
-	Tool       string
-	ToolArgs   map[string]any
-	Resource   string
-	Prompt     string
-	PromptArgs map[string]any
+type TypedStepHandler struct {
+	MCPClient      MCPClient
+	Integrations   config.MCPIntegrationsConfig
+	Policy         config.MCPPolicyConfig
+	AIRunner       AIStepRunner
+	CodeRunner     CodeStepRunner
+	ApprovalRunner ApprovalStepRunner
+	Now            func() time.Time
+	// TelemetryHook records step execution metrics to provider monitoring. Optional.
+	TelemetryHook StepTelemetryHook
 }
 
-func readMCPBinding(input map[string]any) (mcpBinding, bool) {
-	if input == nil {
-		return mcpBinding{}, false
+func NewTypedStepHandler(integrations config.MCPIntegrationsConfig, policy config.MCPPolicyConfig, mcp MCPClient) *TypedStepHandler {
+	if mcp == nil {
+		mcp = NoopMCPClient{}
 	}
-	raw, ok := input["mcp"]
-	if !ok || raw == nil {
-		return mcpBinding{}, false
+	mcpRuntime := NewMCPRuntime(mcp, integrations, policy)
+	aiRunner := NewDefaultAIStepRunner(mcpRuntime, DeterministicPromptRenderer{})
+	return &TypedStepHandler{
+		MCPClient:      mcp,
+		Integrations:   integrations,
+		Policy:         policy,
+		AIRunner:       aiRunner,
+		CodeRunner:     DefaultCodeStepRunner{},
+		ApprovalRunner: DefaultApprovalStepRunner{},
+		TelemetryHook:  NoopTelemetryHook{},
+		Now:            time.Now,
 	}
-	obj, ok := raw.(map[string]any)
-	if !ok {
-		return mcpBinding{}, false
-	}
-	b := mcpBinding{
-		Server:   asInputString(obj, "server"),
-		Tool:     asInputString(obj, "tool"),
-		Resource: asInputString(obj, "resource"),
-		Prompt:   asInputString(obj, "prompt"),
-	}
-	if args, ok := obj["toolArgs"].(map[string]any); ok {
-		b.ToolArgs = args
-	}
-	if args, ok := obj["promptArgs"].(map[string]any); ok {
-		b.PromptArgs = args
-	}
-	return b, true
 }
 
-func (h *TypedStepHandler) callMCPTool(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b mcpBinding, metadata map[string]any) (map[string]any, error) {
-	if err := h.ensureMCPAllowed("tool", b.Server, b.Tool); err != nil {
-		return nil, err
-	}
-	result, err := h.MCPClient.CallTool(ctx, b.Server, b.Tool, b.ToolArgs)
+func NewTypedStepHandlerFromConfig(cfg *config.Config, mcp MCPClient) (*TypedStepHandler, error) {
+	integrations, err := config.ParseMCPIntegrations(cfg)
 	if err != nil {
 		return nil, err
 	}
-	appendMCPCorrelation(metadata, "tool", b.Server, b.Tool, run, step)
-	return result, nil
-}
-
-func (h *TypedStepHandler) callMCPResource(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b mcpBinding, metadata map[string]any) (map[string]any, error) {
-	if err := h.ensureMCPAllowed("resource", b.Server, b.Resource); err != nil {
-		return nil, err
-	}
-	result, err := h.MCPClient.ReadResource(ctx, b.Server, b.Resource)
+	policy, err := config.ParseMCPPolicy(cfg)
 	if err != nil {
 		return nil, err
 	}
-	appendMCPCorrelation(metadata, "resource", b.Server, b.Resource, run, step)
-	return result, nil
+	h := NewTypedStepHandler(integrations, policy, mcp)
+	provider := strings.ToLower(strings.TrimSpace(cfg.Provider.Name))
+	region := strings.TrimSpace(cfg.Provider.Region)
+	if provider != "" {
+		h.TelemetryHook = ProviderTelemetryHook(provider, region, "")
+		if runner, ok := h.AIRunner.(*DefaultAIStepRunner); ok {
+			if runner.MCPRuntime != nil {
+				runner.MCPRuntime.Provider = provider
+				runner.MCPRuntime.ActiveRegion = region
+			}
+			runner.PromptRenderer = ProviderPromptRenderer(provider)
+			runner.ToolMapper = ProviderToolResultMapper(provider)
+			runner.OutputShaper = ProviderModelOutputShaper(provider)
+			runner.ModelSelector = ProviderModelSelector(provider)
+			runner.RetryStrategy = ProviderRetryStrategy(provider)
+			runner.CostTracker = ProviderCostTracker(provider)
+		}
+	}
+	return h, nil
 }
 
-func (h *TypedStepHandler) callMCPPrompt(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b mcpBinding, metadata map[string]any) (map[string]any, error) {
-	if err := h.ensureMCPAllowed("prompt", b.Server, b.Prompt); err != nil {
-		return nil, err
+func (h *TypedStepHandler) ExecuteStep(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun) (*StepExecutionResult, error) {
+	kind := strings.ToLower(strings.TrimSpace(step.Kind))
+	if kind == "" {
+		kind = StepKindCode
 	}
-	result, err := h.MCPClient.GetPrompt(ctx, b.Server, b.Prompt, b.PromptArgs)
-	if err != nil {
-		return nil, err
+
+	output := map[string]any{
+		"kind":   kind,
+		"stepId": step.StepID,
 	}
-	appendMCPCorrelation(metadata, "prompt", b.Server, b.Prompt, run, step)
-	return result, nil
+	metadata := map[string]any{
+		"kind": kind,
+		"correlation": map[string]any{
+			"runId":        run.RunID,
+			"stepId":       step.StepID,
+			"workflowHash": run.WorkflowHash,
+		},
+	}
+
+	start := h.Now()
+	var result *StepExecutionResult
+	var err error
+
+	switch kind {
+	case StepKindCode:
+		if h.CodeRunner == nil {
+			return nil, fmt.Errorf("code step runner is not configured")
+		}
+		result, err = h.CodeRunner.ExecuteStep(run, step, output, metadata)
+	case StepKindAIRetrieval, StepKindAIGenerate, StepKindAIStructured, StepKindAIEval:
+		if h.AIRunner == nil {
+			return nil, fmt.Errorf("ai step runner is not configured")
+		}
+		result, err = h.AIRunner.ExecuteStep(ctx, run, step, output, metadata)
+	case StepKindHumanApproval:
+		if h.ApprovalRunner == nil {
+			return nil, fmt.Errorf("approval step runner is not configured")
+		}
+		result, err = h.ApprovalRunner.ExecuteStep(run, step, output, metadata)
+	default:
+		return nil, fmt.Errorf("unsupported workflow step kind %q (allowed: code, ai-retrieval, ai-generate, ai-structured, ai-eval, human-approval)", step.Kind)
+	}
+
+	if h.TelemetryHook != nil {
+		h.TelemetryHook.RecordStep(run, step, result, h.Now().Sub(start), err)
+	}
+	return result, err
 }
 
 func appendMCPCorrelation(metadata map[string]any, typ, server, target string, run *state.WorkflowRun, step state.WorkflowStepRun) {
@@ -342,31 +231,6 @@ func appendMCPCorrelation(metadata map[string]any, typ, server, target string, r
 	metadata["mcpCalls"] = append(arr, record)
 }
 
-func (h *TypedStepHandler) ensureMCPAllowed(action, server, target string) error {
-	server = strings.TrimSpace(server)
-	target = strings.TrimSpace(target)
-	if server == "" {
-		return fmt.Errorf("mcp %s binding requires server", action)
-	}
-	if target == "" {
-		return fmt.Errorf("mcp %s binding requires target", action)
-	}
-	if _, ok := h.Integrations.Servers[server]; !ok {
-		return fmt.Errorf("mcp server %q is not configured under integrations.mcp.servers", server)
-	}
-	compound := server + "." + target
-	if matchesAny(h.Policy.Deny.Servers, server) || matchesAny(ruleSetByAction(h.Policy.Deny, action), compound) {
-		return fmt.Errorf("mcp %s %q on server %q denied by policies.mcp.deny", action, target, server)
-	}
-	if !h.Policy.DefaultDeny {
-		return nil
-	}
-	if matchesAny(h.Policy.Allow.Servers, server) || matchesAny(ruleSetByAction(h.Policy.Allow, action), compound) {
-		return nil
-	}
-	return fmt.Errorf("mcp %s %q on server %q denied by policies.mcp.defaultDeny", action, target, server)
-}
-
 func ruleSetByAction(set config.MCPPolicyRuleSet, action string) []string {
 	switch action {
 	case "tool":
@@ -378,15 +242,6 @@ func ruleSetByAction(set config.MCPPolicyRuleSet, action string) []string {
 	default:
 		return nil
 	}
-}
-
-func matchesAny(patterns []string, value string) bool {
-	for _, p := range patterns {
-		if wildcardMatch(p, value) {
-			return true
-		}
-	}
-	return false
 }
 
 func wildcardMatch(pattern, value string) bool {

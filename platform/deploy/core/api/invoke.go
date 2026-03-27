@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 )
 
 // Invoke invokes the deployed function via provider API.
@@ -15,14 +14,14 @@ func Invoke(ctx context.Context, provider string, cfg *config.Config, stage, fun
 	if !ok {
 		return nil, fmt.Errorf("invoke via API is not supported for unregistered provider %q", provider)
 	}
-	receipt, err := state.Load(root, stage)
+	receipt, err := coreState.LoadReceipt(root, stage)
 	if err != nil {
 		return nil, fmt.Errorf("no deployment found for stage %q (run deploy first): %w", stage, err)
 	}
 	if receipt.Provider != provider {
 		return nil, fmt.Errorf("receipt provider %q does not match %q", receipt.Provider, provider)
 	}
-	return p.Invoke(ctx, cfg, stage, function, payload, receipt)
+	return p.Invoke(ctx, cfg, stage, function, payload, toCoreReceipt(receipt))
 }
 
 // HasInvoker returns whether the provider has an API-based invoker.
