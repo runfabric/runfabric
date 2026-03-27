@@ -1,7 +1,7 @@
 package api
 
 import (
-	internalplanner "github.com/runfabric/runfabric/platform/core/planner/engine"
+	internalplanner "github.com/runfabric/runfabric/platform/planner/engine"
 
 	engconfig "github.com/runfabric/runfabric/platform/core/model/config"
 )

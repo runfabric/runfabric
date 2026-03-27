@@ -20,10 +20,26 @@ type MCPPolicyRuleSet struct {
 	Prompts   []string
 }
 
+// MCPProviderPolicyRule holds provider-context enforcement rules for MCP policy.
+// Rules are keyed by provider name (aws, gcp, azure) under policies.mcp.providers.
+type MCPProviderPolicyRule struct {
+	// RequiredRegion, if set, denies MCP calls when the active region does not match.
+	RequiredRegion string
+	// RequiredAuth names the required auth mechanism (e.g. "oauth", "managed-identity").
+	// Enforcement is advisory — recorded in metadata for audit; real auth is at the MCP client.
+	RequiredAuth string
+	// DenyCrossRegion denies calls when the active region differs from RequiredRegion.
+	DenyCrossRegion bool
+	// DenyRegions lists specific regions from which MCP calls are blocked.
+	DenyRegions []string
+}
+
 type MCPPolicyConfig struct {
 	DefaultDeny bool
 	Allow       MCPPolicyRuleSet
 	Deny        MCPPolicyRuleSet
+	// Providers holds provider-context rules keyed by provider name (aws, gcp, azure).
+	Providers map[string]MCPProviderPolicyRule
 }
 
 func ParseMCPIntegrations(cfg *Config) (MCPIntegrationsConfig, error) {
@@ -106,6 +122,35 @@ func ParseMCPPolicy(cfg *Config) (MCPPolicyConfig, error) {
 			return out, err
 		}
 		out.Deny = rules
+	}
+	if providersRaw, ok := mcpObj["providers"]; ok && providersRaw != nil {
+		providersObj, ok := providersRaw.(map[string]any)
+		if !ok {
+			return out, fmt.Errorf("policies.mcp.providers must be an object")
+		}
+		out.Providers = make(map[string]MCPProviderPolicyRule, len(providersObj))
+		for provName, provRaw := range providersObj {
+			provObj, ok := provRaw.(map[string]any)
+			if !ok {
+				return out, fmt.Errorf("policies.mcp.providers.%s must be an object", provName)
+			}
+			rule := MCPProviderPolicyRule{
+				RequiredRegion: asString(provObj["requiredRegion"]),
+				RequiredAuth:   asString(provObj["requiredAuth"]),
+			}
+			if v, ok := provObj["denyCrossRegion"].(bool); ok {
+				rule.DenyCrossRegion = v
+			}
+			if denyRegions, ok := provObj["denyRegions"]; ok && denyRegions != nil {
+				list, err := readStringList(map[string]any{"denyRegions": denyRegions}, "denyRegions",
+					"policies.mcp.providers."+provName)
+				if err != nil {
+					return out, err
+				}
+				rule.DenyRegions = list
+			}
+			out.Providers[provName] = rule
+		}
 	}
 	return out, nil
 }

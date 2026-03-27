@@ -197,9 +197,15 @@ type WorkflowConfig struct {
 }
 
 type WorkflowStep struct {
-	Function string         `yaml:"function,omitempty"`
-	Next     string         `yaml:"next,omitempty"`
-	Retry    *WorkflowRetry `yaml:"retry,omitempty"`
+	Function string `yaml:"function,omitempty"`
+	// Kind sets the step execution kind: code|ai-generate|ai-retrieval|ai-structured|ai-eval|human-approval (default: code).
+	Kind string `yaml:"kind,omitempty"`
+	// Timeout sets the per-step timeout in seconds (0 = no timeout).
+	Timeout int    `yaml:"timeout,omitempty"`
+	Next    string `yaml:"next,omitempty"`
+	// Input provides kind-specific typed step input fields (e.g. prompt, query, schema, score, mcp block).
+	Input map[string]any `yaml:"input,omitempty"`
+	Retry *WorkflowRetry `yaml:"retry,omitempty"`
 }
 
 type WorkflowRetry struct {

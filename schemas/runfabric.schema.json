@@ -71,6 +71,10 @@
           "type": "string",
           "description": "Optional simulator plugin ID to ensure is installed when autoInstallExtensions is enabled (kind=simulator)."
         },
+        "routerPlugin": {
+          "type": "string",
+          "description": "Optional router plugin ID for runfabric router commands. Defaults to cloudflare when omitted."
+        },
         "aws-lambda": {
           "$ref": "#/$defs/AWSLambdaExtensionConfig"
         }
