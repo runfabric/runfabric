@@ -8,11 +8,11 @@ import (
 	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/runfabric/runfabric/internal/cli/configuration"
 	"github.com/runfabric/runfabric/internal/cli/extensions"
-	"github.com/runfabric/runfabric/internal/cli/fabric"
 	"github.com/runfabric/runfabric/internal/cli/infrastructure"
 	"github.com/runfabric/runfabric/internal/cli/invocation"
 	"github.com/runfabric/runfabric/internal/cli/lifecycle"
 	"github.com/runfabric/runfabric/internal/cli/project"
+	"github.com/runfabric/runfabric/internal/cli/router"
 	"github.com/runfabric/runfabric/platform/extensions/registry/loader/runtime"
 	"github.com/spf13/cobra"
 )
@@ -70,7 +70,7 @@ func NewRootCmd() *cobra.Command {
 	allCommands = append(allCommands, extensions.RegisterCommands(opts)...)
 	allCommands = append(allCommands, infrastructure.RegisterCommands(opts)...)
 	allCommands = append(allCommands, admin.RegisterCommands(opts)...)
-	allCommands = append(allCommands, fabric.RegisterCommands(opts)...)
+	allCommands = append(allCommands, router.RegisterCommands(opts)...)
 	// Common root-level commands
 	allCommands = append(allCommands, common.NewWorkflowCmd(opts))
 

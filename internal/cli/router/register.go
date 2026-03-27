@@ -1,5 +1,5 @@
-// Package fabric groups fabric management commands: fabric
-package fabric
+// Package router groups router management commands: deploy, status, endpoints, routing, dns-sync
+package router
 
 import (
 	"github.com/runfabric/runfabric/internal/cli/common"
@@ -9,9 +9,9 @@ import (
 // GlobalOptions is re-exported from common
 type GlobalOptions = common.GlobalOptions
 
-// RegisterCommands returns all fabric commands for registration with the root command
+// RegisterCommands returns all router commands for registration with the root command
 func RegisterCommands(opts *GlobalOptions) []*cobra.Command {
 	return []*cobra.Command{
-		newFabricCmd(opts),
+		newRouteCmd(opts),
 	}
 }
