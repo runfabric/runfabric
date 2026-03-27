@@ -24,8 +24,6 @@ github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.46.1 h1:pYm/RS3V/UaSAkHAG
 github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.46.1/go.mod h1:uo14VBn5cNk/BPGTPz3kyLBxgpgOObgO8lmz+H7Z4Ck=
 github.com/aws/aws-sdk-go-v2/service/dynamodb v1.56.2 h1:xi/ECwajy2mixviBD7bKAlGGSwzEaFKX2wIhrZt9NGw=
 github.com/aws/aws-sdk-go-v2/service/dynamodb v1.56.2/go.mod h1:dLREOeW66eVaaGIOi2ZlLHDgkR3nuJ02rd00j0YSlBE=
-github.com/aws/aws-sdk-go-v2/service/elasticache v1.51.12 h1:S066ajzfPRCSW4lsSHOYglne6SNi2CHt1u5omzW1RBg=
-github.com/aws/aws-sdk-go-v2/service/elasticache v1.51.12/go.mod h1:86SE4NcXxbxr8KTG3yOyDmd4HyiFmKl8TexXnhYJ+Bw=
 github.com/aws/aws-sdk-go-v2/service/eventbridge v1.45.22 h1:cm/RiC6QzSQ8aM6q7jkNtwmionz3QqRgFT54dotIqXI=
 github.com/aws/aws-sdk-go-v2/service/eventbridge v1.45.22/go.mod h1:J2863TSn5IpQqTh7RgH8fFV+nnC4JNei47nq5PO/vhI=
 github.com/aws/aws-sdk-go-v2/service/iam v1.40.2 h1:F1hBvOiplp6lHg5clau/reqayZT+K5EBXkFRNrHF+To=
@@ -42,8 +40,6 @@ github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.20 h1:siU1A6xjUZ2N8
 github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.20/go.mod h1:4TLZCmVJDM3FOu5P5TJP0zOlu9zWgDWU7aUxWbr+rcw=
 github.com/aws/aws-sdk-go-v2/service/lambda v1.69.11 h1:ybqEgFe2k84vK1P6MxoVoDuljM/MVCbtuJRTfinAU5c=
 github.com/aws/aws-sdk-go-v2/service/lambda v1.69.11/go.mod h1:rhwwYoVLICURXdg/st0cIUq3suDUiC86vkV7jVuIh/A=
-github.com/aws/aws-sdk-go-v2/service/rds v1.116.3 h1:H/ZYZ6QR4EXJAYElI5xkIM/yCz+A4uHIvWpzl+IfJks=
-github.com/aws/aws-sdk-go-v2/service/rds v1.116.3/go.mod h1:QbXW4coAMakHQhf1qhE0eVVCen9gwB/Kvn+HHHKhpGY=
 github.com/aws/aws-sdk-go-v2/service/s3 v1.97.1 h1:csi9NLpFZXb9fxY7rS1xVzgPRGMt7MSNWeQ6eo247kE=
 github.com/aws/aws-sdk-go-v2/service/s3 v1.97.1/go.mod h1:qXVal5H0ChqXP63t6jze5LmFalc7+ZE7wOdLtZ0LCP0=
 github.com/aws/aws-sdk-go-v2/service/sfn v1.40.9 h1:b/BHYG0tfOlrgz63kfRaUos5dUjGq5fsgORRzliezuY=
