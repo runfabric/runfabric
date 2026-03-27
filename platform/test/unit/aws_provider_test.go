@@ -3,9 +3,9 @@ package unit
 import (
 	"testing"
 
-	providers "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	resolution "github.com/runfabric/runfabric/platform/extension/resolution"
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
+	resolution "github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 )
 
 // resolveBuiltinProvider resolves the first provider listed as a builtin implementation

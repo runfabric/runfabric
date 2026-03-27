@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
-	"github.com/runfabric/runfabric/platform/core/workflow/app"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 )
 
 func TestRecoverDryRunE2E(t *testing.T) {

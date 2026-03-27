@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
-	"github.com/runfabric/runfabric/platform/core/workflow/recovery"
+	"github.com/runfabric/runfabric/platform/workflow/recovery"
 )
 
 func TestArchiveJournal(t *testing.T) {

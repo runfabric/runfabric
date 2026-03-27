@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/runfabric/runfabric/platform/core/workflow/app"
 	"github.com/runfabric/runfabric/platform/observability/diagnostics"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 )
 
 func TestBackendDoctorE2ELocal(t *testing.T) {

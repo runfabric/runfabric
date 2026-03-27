@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	app "github.com/runfabric/runfabric/platform/core/workflow/app"
+	app "github.com/runfabric/runfabric/platform/workflow/app"
 )
 
 func TestPrepareDevStreamTunnelAWSIfEnabled(t *testing.T) {
