@@ -1,53 +1,38 @@
 service: hello-api
 
 provider:
-  name: aws
+  name: aws-lambda
   runtime: nodejs20.x
   region: ${env:AWS_REGION,ap-southeast-1}
 
 # backend:
-#   kind: aws
+#   kind: s3
 #   s3Bucket: ${env:RUNFABRIC_S3_BUCKET}
 #   s3Prefix: runfabric/dev
 #   lockTable: ${env:RUNFABRIC_DYNAMODB_TABLE}
 
 backend:
-  kind: aws
+  kind: s3
   s3Bucket: runfabric
   s3Prefix: apps/dev
   lockTable: rf-locks
 
-aiWorkflow:
-  enable: true
-  entrypoint: start
-  nodes:
-    - id: start
-      type: trigger
-      params:
-        note: example-only (Phase 14)
-    - id: callHello
-      type: system
-      params:
-        function: hello
-  edges:
-    - from: start
-      to: callHello
+workflows:
+  - name: hello-flow
+    steps:
+      - function: hello
 
 functions:
-  hello:
-    handler: src/handler.hello
-    memory: 128
-    timeout: 10
-    events:
-      - http:
-          path: /hello
-          method: get
+  - name: hello
+    entry: src/handler.hello
+    triggers:
+      - type: http
+        path: /hello
+        method: GET
 
-  createUser:
-    handler: src/handler.createUser
-    memory: 128
-    timeout: 10
-    events:
-      - http:
-          path: /users
-          method: post
+  - name: createUser
+    entry: src/handler.createUser
+    triggers:
+      - type: http
+        path: /users
+        method: POST

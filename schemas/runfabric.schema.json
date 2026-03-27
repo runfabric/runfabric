@@ -2,9 +2,11 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://runfabric.dev/schemas/runfabric.schema.json",
   "title": "runfabric.yml",
-  "description": "RunFabric service configuration. Supports legacy (provider + functions map) or reference format (runtime + entry + providers + triggers). See docs/RUNFABRIC_YML_REFERENCE.md.",
+  "description": "RunFabric service configuration. Supports provider-based and reference-format configuration. See docs/RUNFABRIC_YML_REFERENCE.md.",
   "type": "object",
-  "required": ["service"],
+  "required": [
+    "service"
+  ],
   "properties": {
     "service": {
       "type": "string",
@@ -13,6 +15,13 @@
     },
     "provider": {
       "$ref": "#/$defs/ProviderConfig"
+    },
+    "providerOverrides": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ProviderConfig"
+      },
+      "description": "Multi-cloud named provider overrides. Key is a logical selector used with --provider (e.g. aws, gcp)."
     },
     "backend": {
       "$ref": "#/$defs/BackendConfig"
@@ -27,12 +36,16 @@
     },
     "providers": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Provider list (reference format). First element becomes provider.name."
     },
     "triggers": {
       "type": "array",
-      "items": { "$ref": "#/$defs/TriggerRef" },
+      "items": {
+        "$ref": "#/$defs/TriggerRef"
+      },
       "description": "Top-level triggers (reference format). Normalized into default function events."
     },
     "state": {
@@ -57,43 +70,100 @@
         "simulatorPlugin": {
           "type": "string",
           "description": "Optional simulator plugin ID to ensure is installed when autoInstallExtensions is enabled (kind=simulator)."
+        },
+        "routerPlugin": {
+          "type": "string",
+          "description": "Optional router plugin ID for runfabric router commands. Defaults to cloudflare when omitted."
+        },
+        "aws-lambda": {
+          "$ref": "#/$defs/AWSLambdaExtensionConfig"
         }
       },
       "additionalProperties": true
     },
-    "hooks": { "type": "array", "items": { "type": "string" } },
-    "env": { "type": "object", "additionalProperties": { "type": "string" } },
-    "params": { "type": "object", "additionalProperties": { "type": "string" } },
-    "resources": { "type": "object" },
-    "secrets": { "type": "object", "additionalProperties": { "type": "string" } },
+    "integrations": {
+      "type": "object",
+      "description": "Optional integration configuration blocks (e.g. mcp, approvals, external systems). Keys are integration IDs.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "policies": {
+      "type": "object",
+      "description": "Optional policy configuration blocks used by workflow/deploy/runtime policy engines.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "hooks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "resources": {
+      "type": "object"
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "workflows": {
       "type": "array",
-      "items": { "$ref": "#/$defs/WorkflowConfig" }
+      "items": {
+        "$ref": "#/$defs/WorkflowConfig"
+      }
     },
     "functions": {
-      "oneOf": [
-        { "type": "object", "additionalProperties": { "$ref": "#/$defs/FunctionConfig" } },
-        { "type": "array", "items": { "$ref": "#/$defs/FunctionOverrideConfig" } }
-      ],
-      "description": "Map of function name to config (legacy) or array of overrides (reference)."
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FunctionOverrideConfig"
+      },
+      "description": "Reference-format function overrides."
+    },
+    "layers": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/LayerConfig"
+      },
+      "description": "Named layer declarations. Use ref as the provider-specific layer identifier; arn is supported as a deprecated alias."
     },
     "stages": {
       "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/StageConfig" },
+      "additionalProperties": {
+        "$ref": "#/$defs/StageConfig"
+      },
       "description": "Stage-specific overrides (e.g. dev, prod)."
-    },
-    "aiWorkflow": { "$ref": "#/$defs/AiWorkflowConfig" }
+    }
   },
   "additionalProperties": false,
   "$defs": {
     "ProviderConfig": {
       "type": "object",
-      "required": ["name", "runtime"],
+      "required": [
+        "name",
+        "runtime"
+      ],
       "properties": {
         "name": {
           "type": "string",
           "enum": [
-            "aws",
             "aws-lambda",
             "gcp-functions",
             "azure-functions",
@@ -106,7 +176,7 @@
             "fly-machines",
             "ibm-openwhisk"
           ],
-          "description": "Provider ID. Use aws or aws-lambda for AWS Lambda."
+          "description": "Provider ID."
         },
         "runtime": {
           "type": "string",
@@ -118,7 +188,10 @@
         },
         "source": {
           "type": "string",
-          "enum": ["builtin", "external"],
+          "enum": [
+            "builtin",
+            "external"
+          ],
           "description": "Provider resolution source. builtin keeps engine providers; external prefers installed external provider plugins."
         },
         "version": {
@@ -130,155 +203,383 @@
     },
     "BackendConfig": {
       "type": "object",
-      "description": "State backend for locks and journal. For kind s3/aws, s3Bucket is required.",
+      "description": "State backend for locks and journal. For kind s3, s3Bucket is required.",
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["local", "s3", "aws", "gcs", "azblob", "postgres", "sqlite", "dynamodb"],
+          "enum": [
+            "local",
+            "s3",
+            "gcs",
+            "azblob",
+            "postgres",
+            "sqlite",
+            "dynamodb"
+          ],
           "default": "local"
         },
-        "s3Bucket": { "type": "string" },
-        "s3Prefix": { "type": "string" },
-        "lockTable": { "type": "string", "description": "DynamoDB table name for locking when kind is s3/aws." },
-        "postgresConnectionStringEnv": { "type": "string", "description": "Environment variable name containing Postgres DSN when kind is postgres." },
-        "postgresTable": { "type": "string", "description": "Postgres table name for receipts when kind is postgres (default runfabric_receipts)." },
-        "sqlitePath": { "type": "string", "description": "SQLite path for receipts when kind is sqlite (default .runfabric/state.db)." },
-        "receiptTable": { "type": "string", "description": "DynamoDB table for receipts when kind is dynamodb; falls back to lockTable when omitted." }
+        "s3Bucket": {
+          "type": "string"
+        },
+        "s3Prefix": {
+          "type": "string"
+        },
+        "lockTable": {
+          "type": "string",
+          "description": "DynamoDB table name for locking when kind is s3/aws."
+        },
+        "postgresConnectionStringEnv": {
+          "type": "string",
+          "description": "Environment variable name containing Postgres DSN when kind is postgres."
+        },
+        "postgresTable": {
+          "type": "string",
+          "description": "Postgres table name for receipts when kind is postgres (default runfabric_receipts)."
+        },
+        "sqlitePath": {
+          "type": "string",
+          "description": "SQLite path for receipts when kind is sqlite (default .runfabric/state.db)."
+        },
+        "receiptTable": {
+          "type": "string",
+          "description": "DynamoDB table for receipts when kind is dynamodb; falls back to lockTable when omitted."
+        }
       },
       "additionalProperties": false
     },
     "FunctionConfig": {
       "type": "object",
-      "required": ["handler"],
+      "required": [
+        "handler"
+      ],
       "properties": {
-        "handler": { "type": "string", "description": "Handler module and export (e.g. index.handler)." },
-        "runtime": { "type": "string" },
-        "memory": { "type": "integer", "minimum": 1 },
-        "timeout": { "type": "integer", "minimum": 1 },
-        "architecture": { "type": "string", "enum": ["x86_64", "arm64"] },
-        "environment": { "type": "object", "additionalProperties": { "type": "string" } },
-        "tags": { "type": "object", "additionalProperties": { "type": "string" } },
-        "layers": { "type": "array", "items": { "type": "string" } },
-        "secrets": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Secret key to env var mapping." },
+        "handler": {
+          "type": "string",
+          "description": "Handler module and export (e.g. index.handler)."
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "memory": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "architecture": {
+          "type": "string",
+          "enum": [
+            "x86_64",
+            "arm64"
+          ]
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "secrets": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Secret key to env var mapping."
+        },
         "events": {
           "type": "array",
-          "items": { "$ref": "#/$defs/EventConfig" }
+          "items": {
+            "$ref": "#/$defs/EventConfig"
+          }
         }
       },
+      "additionalProperties": false
+    },
+    "LayerConfig": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "description": "Preferred provider-specific layer identifier."
+        },
+        "arn": {
+          "type": "string",
+          "description": "Deprecated AWS-specific alias for ref."
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "ref"
+          ]
+        },
+        {
+          "required": [
+            "arn"
+          ]
+        }
+      ],
       "additionalProperties": false
     },
     "EventConfig": {
       "type": "object",
       "description": "One trigger per event; supported: api, worker, queue, cron, storage, eventbridge, pubsub. kafka/rabbitmq valid in schema but may lack provider support.",
       "properties": {
-        "http": { "$ref": "#/$defs/HTTPEvent" },
-        "cron": { "type": "string" },
-        "queue": { "$ref": "#/$defs/QueueEvent" },
-        "storage": { "$ref": "#/$defs/StorageEvent" },
-        "eventbridge": { "$ref": "#/$defs/EventBridgeEvent" },
-        "pubsub": { "$ref": "#/$defs/PubSubEvent" },
-        "kafka": { "$ref": "#/$defs/KafkaEvent" },
-        "rabbitmq": { "$ref": "#/$defs/RabbitMQEvent" }
+        "http": {
+          "$ref": "#/$defs/HTTPEvent"
+        },
+        "cron": {
+          "type": "string"
+        },
+        "queue": {
+          "$ref": "#/$defs/QueueEvent"
+        },
+        "storage": {
+          "$ref": "#/$defs/StorageEvent"
+        },
+        "eventbridge": {
+          "$ref": "#/$defs/EventBridgeEvent"
+        },
+        "pubsub": {
+          "$ref": "#/$defs/PubSubEvent"
+        },
+        "kafka": {
+          "$ref": "#/$defs/KafkaEvent"
+        },
+        "rabbitmq": {
+          "$ref": "#/$defs/RabbitMQEvent"
+        }
       },
       "additionalProperties": false
     },
     "HTTPEvent": {
       "type": "object",
       "properties": {
-        "path": { "type": "string" },
-        "method": { "type": "string" },
-        "cors": { "$ref": "#/$defs/CORSConfig" },
-        "authorizer": { "$ref": "#/$defs/AuthorizerConfig" },
-        "routeSettings": { "$ref": "#/$defs/RouteSettings" }
+        "path": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "cors": {
+          "$ref": "#/$defs/CORSConfig"
+        },
+        "authorizer": {
+          "$ref": "#/$defs/AuthorizerConfig"
+        },
+        "routeSettings": {
+          "$ref": "#/$defs/RouteSettings"
+        }
       },
       "additionalProperties": false
     },
     "CORSConfig": {
       "type": "object",
       "properties": {
-        "allowOrigins": { "type": "array", "items": { "type": "string" } },
-        "allowMethods": { "type": "array", "items": { "type": "string" } },
-        "allowHeaders": { "type": "array", "items": { "type": "string" } },
-        "exposeHeaders": { "type": "array", "items": { "type": "string" } },
-        "allowCredentials": { "type": "boolean" },
-        "maxAge": { "type": "integer" }
+        "allowOrigins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowMethods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowHeaders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exposeHeaders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowCredentials": {
+          "type": "boolean"
+        },
+        "maxAge": {
+          "type": "integer"
+        }
       },
       "additionalProperties": false
     },
     "AuthorizerConfig": {
       "type": "object",
       "properties": {
-        "type": { "type": "string", "enum": ["jwt", "lambda", "iam"] },
-        "name": { "type": "string" },
-        "identitySources": { "type": "array", "items": { "type": "string" } },
-        "issuer": { "type": "string" },
-        "audience": { "type": "array", "items": { "type": "string" } },
-        "function": { "type": "string" }
+        "type": {
+          "type": "string",
+          "enum": [
+            "jwt",
+            "lambda",
+            "iam"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "identitySources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "audience": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "function": {
+          "type": "string"
+        }
       },
       "additionalProperties": false
     },
     "RouteSettings": {
       "type": "object",
       "properties": {
-        "throttlingBurstLimit": { "type": "integer" },
-        "throttlingRateLimit": { "type": "integer" }
+        "throttlingBurstLimit": {
+          "type": "integer"
+        },
+        "throttlingRateLimit": {
+          "type": "integer"
+        }
       },
       "additionalProperties": false
     },
     "QueueEvent": {
       "type": "object",
-      "required": ["queue"],
+      "required": [
+        "queue"
+      ],
       "properties": {
-        "queue": { "type": "string" },
-        "batchSize": { "type": "integer" },
-        "enabled": { "type": "boolean" }
+        "queue": {
+          "type": "string"
+        },
+        "batchSize": {
+          "type": "integer"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
       },
       "additionalProperties": false
     },
     "StorageEvent": {
       "type": "object",
-      "required": ["bucket"],
+      "required": [
+        "bucket"
+      ],
       "properties": {
-        "bucket": { "type": "string" },
-        "prefix": { "type": "string" },
-        "suffix": { "type": "string" },
-        "events": { "type": "array", "items": { "type": "string" } }
+        "bucket": {
+          "type": "string"
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "suffix": {
+          "type": "string"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       },
       "additionalProperties": false
     },
     "EventBridgeEvent": {
       "type": "object",
       "properties": {
-        "pattern": { "type": "object" },
-        "bus": { "type": "string" }
+        "pattern": {
+          "type": "object"
+        },
+        "bus": {
+          "type": "string"
+        }
       },
       "additionalProperties": false
     },
     "PubSubEvent": {
       "type": "object",
-      "required": ["topic"],
+      "required": [
+        "topic"
+      ],
       "properties": {
-        "topic": { "type": "string" },
-        "subscription": { "type": "string" }
+        "topic": {
+          "type": "string"
+        },
+        "subscription": {
+          "type": "string"
+        }
       },
       "additionalProperties": false
     },
     "KafkaEvent": {
       "type": "object",
-      "required": ["bootstrapServers", "topic"],
+      "required": [
+        "bootstrapServers",
+        "topic"
+      ],
       "properties": {
-        "bootstrapServers": { "type": "array", "items": { "type": "string" } },
-        "topic": { "type": "string" },
-        "groupId": { "type": "string" }
+        "bootstrapServers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "topic": {
+          "type": "string"
+        },
+        "groupId": {
+          "type": "string"
+        }
       },
       "additionalProperties": false
     },
     "RabbitMQEvent": {
       "type": "object",
-      "required": ["url", "queue"],
+      "required": [
+        "url",
+        "queue"
+      ],
       "properties": {
-        "url": { "type": "string" },
-        "queue": { "type": "string" }
+        "url": {
+          "type": "string"
+        },
+        "queue": {
+          "type": "string"
+        }
       },
       "additionalProperties": false
     },
@@ -286,12 +587,20 @@
       "type": "object",
       "description": "Stage override; can override provider, backend, http, functions.",
       "properties": {
-        "provider": { "$ref": "#/$defs/ProviderConfig" },
-        "backend": { "$ref": "#/$defs/BackendConfig" },
-        "http": { "$ref": "#/$defs/StageHTTPConfig" },
+        "provider": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "backend": {
+          "$ref": "#/$defs/BackendConfig"
+        },
+        "http": {
+          "$ref": "#/$defs/StageHTTPConfig"
+        },
         "functions": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/FunctionConfig" }
+          "additionalProperties": {
+            "$ref": "#/$defs/FunctionConfig"
+          }
         }
       },
       "additionalProperties": false
@@ -299,19 +608,36 @@
     "StageHTTPConfig": {
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
-        "tags": { "type": "object", "additionalProperties": { "type": "string" } },
-        "domain": { "$ref": "#/$defs/DomainConfig" },
-        "accessLogging": { "type": "boolean" }
+        "name": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "domain": {
+          "$ref": "#/$defs/DomainConfig"
+        },
+        "accessLogging": {
+          "type": "boolean"
+        }
       },
       "additionalProperties": false
     },
     "DomainConfig": {
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
-        "certificate": { "type": "string" },
-        "basePath": { "type": "string" }
+        "name": {
+          "type": "string"
+        },
+        "certificate": {
+          "type": "string"
+        },
+        "basePath": {
+          "type": "string"
+        }
       },
       "additionalProperties": false
     },
@@ -319,120 +645,407 @@
       "type": "object",
       "description": "Reference-format trigger: type (http|cron|queue|storage|eventbridge|pubsub|kafka|rabbitmq) + type-specific fields.",
       "properties": {
-        "type": { "type": "string", "enum": ["http", "cron", "queue", "storage", "eventbridge", "pubsub", "kafka", "rabbitmq"] },
-        "method": { "type": "string" },
-        "path": { "type": "string" },
-        "schedule": { "type": "string" },
-        "timezone": { "type": "string" },
-        "queue": { "type": "string" },
-        "batchSize": { "type": "integer" },
-        "maximumBatchingWindowSeconds": { "type": "integer" },
-        "maximumConcurrency": { "type": "integer" },
-        "enabled": { "type": "boolean" },
-        "functionResponseType": { "type": "string" },
-        "bucket": { "type": "string" },
-        "events": { "type": "array", "items": { "type": "string" } },
-        "prefix": { "type": "string" },
-        "suffix": { "type": "string" },
-        "existingBucket": { "type": "boolean" },
-        "pattern": { "type": "object" },
-        "bus": { "type": "string" },
-        "topic": { "type": "string" },
-        "subscription": { "type": "string" },
-        "brokers": { "type": "array", "items": { "type": "string" } },
-        "groupId": { "type": "string" },
-        "exchange": { "type": "string" },
-        "routingKey": { "type": "string" }
+        "type": {
+          "type": "string",
+          "enum": [
+            "http",
+            "cron",
+            "queue",
+            "storage",
+            "eventbridge",
+            "pubsub",
+            "kafka",
+            "rabbitmq"
+          ]
+        },
+        "method": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "queue": {
+          "type": "string"
+        },
+        "batchSize": {
+          "type": "integer"
+        },
+        "maximumBatchingWindowSeconds": {
+          "type": "integer"
+        },
+        "maximumConcurrency": {
+          "type": "integer"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "functionResponseType": {
+          "type": "string"
+        },
+        "bucket": {
+          "type": "string"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "suffix": {
+          "type": "string"
+        },
+        "existingBucket": {
+          "type": "boolean"
+        },
+        "pattern": {
+          "type": "object"
+        },
+        "bus": {
+          "type": "string"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "subscription": {
+          "type": "string"
+        },
+        "brokers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "groupId": {
+          "type": "string"
+        },
+        "exchange": {
+          "type": "string"
+        },
+        "routingKey": {
+          "type": "string"
+        }
       }
     },
     "StateConfig": {
       "type": "object",
       "properties": {
-        "backend": { "type": "string", "enum": ["local", "postgres", "s3", "gcs", "azblob"] },
-        "keyPrefix": { "type": "string" },
-        "lock": { "$ref": "#/$defs/StateLockConfig" },
-        "local": { "type": "object", "properties": { "dir": { "type": "string" } } },
-        "postgres": { "type": "object", "properties": { "connectionStringEnv": { "type": "string" }, "schema": { "type": "string" }, "table": { "type": "string" } } },
-        "s3": { "type": "object", "properties": { "bucket": { "type": "string" }, "region": { "type": "string" }, "keyPrefix": { "type": "string" }, "useLockfile": { "type": "boolean" } } },
-        "gcs": { "type": "object", "properties": { "bucket": { "type": "string" }, "prefix": { "type": "string" } } },
-        "azblob": { "type": "object", "properties": { "container": { "type": "string" }, "prefix": { "type": "string" } } }
+        "backend": {
+          "type": "string",
+          "enum": [
+            "local",
+            "postgres",
+            "s3",
+            "gcs",
+            "azblob"
+          ]
+        },
+        "keyPrefix": {
+          "type": "string"
+        },
+        "lock": {
+          "$ref": "#/$defs/StateLockConfig"
+        },
+        "local": {
+          "type": "object",
+          "properties": {
+            "dir": {
+              "type": "string"
+            }
+          }
+        },
+        "postgres": {
+          "type": "object",
+          "properties": {
+            "connectionStringEnv": {
+              "type": "string"
+            },
+            "schema": {
+              "type": "string"
+            },
+            "table": {
+              "type": "string"
+            }
+          }
+        },
+        "s3": {
+          "type": "object",
+          "properties": {
+            "bucket": {
+              "type": "string"
+            },
+            "region": {
+              "type": "string"
+            },
+            "keyPrefix": {
+              "type": "string"
+            },
+            "useLockfile": {
+              "type": "boolean"
+            }
+          }
+        },
+        "gcs": {
+          "type": "object",
+          "properties": {
+            "bucket": {
+              "type": "string"
+            },
+            "prefix": {
+              "type": "string"
+            }
+          }
+        },
+        "azblob": {
+          "type": "object",
+          "properties": {
+            "container": {
+              "type": "string"
+            },
+            "prefix": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     "StateLockConfig": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "timeoutSeconds": { "type": "integer" },
-        "heartbeatSeconds": { "type": "integer" },
-        "staleAfterSeconds": { "type": "integer" }
+        "enabled": {
+          "type": "boolean"
+        },
+        "timeoutSeconds": {
+          "type": "integer"
+        },
+        "heartbeatSeconds": {
+          "type": "integer"
+        },
+        "staleAfterSeconds": {
+          "type": "integer"
+        }
       }
     },
     "DeployConfig": {
       "type": "object",
       "properties": {
-        "rollbackOnFailure": { "type": "boolean" }
-      }
-    },
-    "AiWorkflowConfig": {
-      "type": "object",
-      "description": "AI workflow graph (Phase 14). enable, entrypoint, optional models/datasets, nodes, edges.",
-      "properties": {
-        "enable": { "type": "boolean", "default": false },
-        "entrypoint": { "type": "string", "description": "Node id that is the workflow entry." },
-        "models": { "type": "object", "additionalProperties": true, "description": "Model id -> config." },
-        "datasets": { "type": "object", "additionalProperties": true, "description": "Dataset id -> config." },
-        "nodes": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/AiWorkflowNode" },
-          "description": "Workflow nodes (trigger, ai, data, logic, system, human)."
-        },
-        "edges": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/AiWorkflowEdge" },
-          "description": "Edges connecting nodes (from, to, optional expression)."
+        "rollbackOnFailure": {
+          "type": "boolean"
         }
-      },
-      "additionalProperties": false
-    },
-    "AiWorkflowNode": {
-      "type": "object",
-      "required": ["id", "type"],
-      "properties": {
-        "id": { "type": "string", "minLength": 1, "description": "Unique node id." },
-        "type": {
-          "type": "string",
-          "enum": ["trigger", "ai", "data", "logic", "system", "human"],
-          "description": "Node type (MVP)."
-        },
-        "params": { "type": "object", "additionalProperties": true, "description": "Type-specific config." }
-      },
-      "additionalProperties": false
-    },
-    "AiWorkflowEdge": {
-      "type": "object",
-      "required": ["from", "to"],
-      "properties": {
-        "from": { "type": "string", "minLength": 1, "description": "Source node id." },
-        "to": { "type": "string", "minLength": 1, "description": "Target node id." },
-        "expression": { "type": "string", "description": "Optional condition expression." }
-      },
-      "additionalProperties": false
+      }
     },
     "WorkflowConfig": {
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
-        "steps": { "type": "array", "items": { "type": "object" } }
-      }
+        "name": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorkflowStepConfig"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorkflowStepConfig": {
+      "type": "object",
+      "description": "Workflow step. Legacy fields (function, next, retry) and typed kinds are both accepted for compatibility.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "code",
+            "ai-retrieval",
+            "ai-generate",
+            "ai-structured",
+            "ai-eval",
+            "human-approval"
+          ],
+          "description": "Typed workflow step kind for AI/human-in-the-loop flows. Omit for legacy function-based steps."
+        },
+        "function": {
+          "type": "string"
+        },
+        "next": {
+          "type": "string"
+        },
+        "retry": {
+          "$ref": "#/$defs/WorkflowRetry"
+        },
+        "with": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Kind-specific options and parameters."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Prompt text for AI-oriented step kinds."
+        },
+        "model": {
+          "type": "string",
+          "description": "Model identifier for AI-oriented step kinds."
+        },
+        "schema": {
+          "type": "object",
+          "description": "JSON schema used by ai-structured for output validation."
+        },
+        "input": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "output": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "approval": {
+          "$ref": "#/$defs/HumanApprovalConfig"
+        }
+      },
+      "additionalProperties": true
+    },
+    "WorkflowRetry": {
+      "type": "object",
+      "properties": {
+        "attempts": {
+          "type": "integer"
+        },
+        "backoffSeconds": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HumanApprovalConfig": {
+      "type": "object",
+      "description": "Configuration for human-approval workflow steps.",
+      "properties": {
+        "inputKey": {
+          "type": "string",
+          "description": "Input key that contains approval payload/context for reviewers."
+        },
+        "timeoutSeconds": {
+          "type": "integer"
+        },
+        "onTimeout": {
+          "type": "string",
+          "enum": [
+            "fail",
+            "continue"
+          ]
+        },
+        "approvers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "AWSLambdaExtensionConfig": {
+      "type": "object",
+      "properties": {
+        "stepFunctions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StepFunctionConfig"
+          },
+          "description": "Optional AWS Step Functions declarations managed alongside Lambda deploys."
+        }
+      },
+      "additionalProperties": true
+    },
+    "StepFunctionConfig": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "definition": {
+          "type": "object",
+          "description": "Inline Amazon States Language JSON definition."
+        },
+        "definitionPath": {
+          "type": "string",
+          "description": "Path to an external ASL definition file."
+        },
+        "role": {
+          "type": "string",
+          "description": "IAM role ARN used by the state machine."
+        },
+        "logging": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "tracing": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Optional named bindings used for Lambda/function substitutions in ASL templates."
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "definition"
+          ]
+        },
+        {
+          "required": [
+            "definitionPath"
+          ]
+        }
+      ],
+      "additionalProperties": true
     },
     "FunctionOverrideConfig": {
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
-        "entry": { "type": "string" },
-        "runtime": { "type": "string" },
-        "triggers": { "type": "array", "items": { "$ref": "#/$defs/TriggerRef" } },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } }
+        "name": {
+          "type": "string"
+        },
+        "entry": {
+          "type": "string"
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "triggers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TriggerRef"
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
       }
     }
   }

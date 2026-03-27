@@ -61,7 +61,7 @@ await runLifecycleHooks(hooks, "beforeBuild", { cwd: process.cwd(), config });
 await runLifecycleHooks(hooks, "afterBuild", { cwd: process.cwd(), config });
 ```
 
-See [docs/PLUGINS.md](../../docs/PLUGINS.md).
+See [apps/registry/docs/PLUGINS.md](../../../apps/registry/docs/PLUGINS.md).
 
 ## Exports
 
@@ -74,4 +74,4 @@ See [docs/PLUGINS.md](../../docs/PLUGINS.md).
 | `@runfabric/sdk/adapters/nest`    | `nestHandler(handler)`                                                                                                                                         |
 | `@runfabric/sdk/adapters/raw`     | `createHttpHandler(handler)`, `loadHandler(modulePath)`                                                                                                        |
 
-See [docs/SDK_FRAMEWORKS.md](../../docs/SDK_FRAMEWORKS.md) for examples.
+See examples in the `examples/` directory for usage patterns.

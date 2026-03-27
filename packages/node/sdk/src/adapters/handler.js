@@ -11,14 +11,14 @@ const nestAdapter = require("./nest");
 const universal = require("./universalHandler");
 
 /**
- * RunFabric universal handler: (request: UniversalRequest) => Promise<UniversalResponse>, or legacy (event, context) => response.
+ * RunFabric universal handler: (request: UniversalRequest) => Promise<UniversalResponse>, or raw (event, context) => response.
  * Also callable as (req, res) for HTTP and has .mountExpress(), .mountFastify(), .forNest().
  * @typedef {(event: object, context?: object) => Promise<object> | object} UniversalHandler
  */
 
 /**
  * Creates a universal handler from a raw function or from an Express/Fastify/Nest app.
- * - createHandler((event, context) => response) — legacy; invoked directly; has .mountExpress(), .mountFastify(), .forNest().
+ * - createHandler((event, context) => response) — raw function; invoked directly; has .mountExpress(), .mountFastify(), .forNest().
  * - createHandler(expressApp | fastifyInstance | nestApp) — universal contract (request → { status, headers, body }); Express via real server + fetch, Fastify via inject.
  * @param {((event: object, context?: object) => Promise<object> | object) | import('express').Application | import('fastify').FastifyInstance | import('@nestjs/common').INestApplication} handlerOrApp
  * @returns {UniversalHandler & { mountExpress: Function, mountFastify: Function, forNest: Function }}

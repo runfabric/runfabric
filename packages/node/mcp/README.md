@@ -1,6 +1,6 @@
 # @runfabric/mcp-stdio
 
-MCP server that exposes RunFabric **doctor**, **plan**, **deploy**, **remove**, and **invoke** as tools for AI agents and IDEs. **Requires the RunFabric CLI binary (`runfabric`) on PATH or set `RUNFABRIC_CMD`.**
+MCP server that exposes RunFabric **doctor**, **plan**, **build**, **deploy**, **remove**, **invoke**, **logs**, **list**, **inspect**, **releases**, **generate**, **state**, and **workflow** as tools for AI agents and IDEs. **Requires the RunFabric CLI binary (`runfabric`) on PATH or set `RUNFABRIC_CMD`.**
 
 ## Requirement: RunFabric CLI
 
@@ -33,21 +33,24 @@ npm install @runfabric/mcp-stdio
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `runfabric_doctor` | Validate config and credentials |
-| `runfabric_plan` | Show deployment plan |
-| `runfabric_build` | Build artifacts for deploy |
-| `runfabric_deploy` | Deploy |
-| `runfabric_remove` | Remove deployed resources |
-| `runfabric_invoke` | Invoke a deployed function (requires `function`; optional `payload`) |
-| `runfabric_logs` | Fetch logs (optional `function`; set `all: true` for all functions) |
-| `runfabric_list` | List functions and deployment status |
-| `runfabric_inspect` | Show lock, journal, and receipt state |
-| `runfabric_releases` | List deployment history (releases) for the stage |
+| Tool                 | Description                                                          |
+| -------------------- | -------------------------------------------------------------------- |
+| `runfabric_doctor`   | Validate config and credentials                                      |
+| `runfabric_plan`     | Show deployment plan                                                 |
+| `runfabric_build`    | Build artifacts for deploy                                           |
+| `runfabric_deploy`   | Deploy                                                               |
+| `runfabric_remove`   | Remove deployed resources                                            |
+| `runfabric_invoke`   | Invoke a deployed function (requires `function`; optional `payload`) |
+| `runfabric_logs`     | Fetch logs (optional `function`; set `all: true` for all functions)  |
+| `runfabric_list`     | List functions and deployment status                                 |
+| `runfabric_inspect`  | Show lock, journal, and receipt state                                |
+| `runfabric_releases` | List deployment history (releases) for the stage                     |
+| `runfabric_generate` | Run `runfabric generate` with forwarded args                         |
+| `runfabric_state`    | Run `runfabric state <command>` with forwarded args                  |
+| `runfabric_workflow` | Run `runfabric workflow <command>` with forwarded args               |
 
 All tools run the CLI with `--json`, `--non-interactive`, and `--yes`.
 
 ## See also
 
-- [MCP.md](../../docs/MCP.md) in the repo for full setup and Cursor config.
+- [MCP.md](../../../docs/MCP.md) in the repo for full setup and Cursor config.

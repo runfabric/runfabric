@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
 
 	"github.com/runfabric/runfabric/plugin-sdk/go/protocol"
@@ -13,13 +14,24 @@ import (
 
 type MethodFunc func(ctx context.Context, params json.RawMessage) (any, error)
 
+type HandshakeMetadata struct {
+	Version           string
+	Platform          string
+	Capabilities      []string
+	SupportsRuntime   []string
+	SupportsTriggers  []string
+	SupportsResources []string
+}
+
 type Options struct {
 	ProtocolVersion string
+	Handshake       HandshakeMetadata
 	Methods         map[string]MethodFunc
 }
 
 type Server struct {
 	protocolVersion string
+	handshake       HandshakeMetadata
 	methods         map[string]MethodFunc
 }
 
@@ -28,12 +40,17 @@ func New(opts Options) *Server {
 	if protocolVersion == "" {
 		protocolVersion = "2025-01-01"
 	}
+	handshake := opts.Handshake
+	if strings.TrimSpace(handshake.Platform) == "" {
+		handshake.Platform = runtime.GOOS + "/" + runtime.GOARCH
+	}
 	methods := map[string]MethodFunc{}
 	for k, v := range opts.Methods {
 		methods[k] = v
 	}
 	return &Server{
 		protocolVersion: protocolVersion,
+		handshake:       handshake,
 		methods:         methods,
 	}
 }
@@ -84,12 +101,10 @@ func (s *Server) handle(ctx context.Context, req protocol.Request) protocol.Resp
 		}
 	}
 
-	if method == "handshake" {
+	if strings.EqualFold(method, "handshake") {
 		return protocol.Response{
-			ID: req.ID,
-			Result: map[string]any{
-				"protocolVersion": s.protocolVersion,
-			},
+			ID:     req.ID,
+			Result: s.handshakeResult(),
 		}
 	}
 
@@ -117,6 +132,29 @@ func (s *Server) handle(ctx context.Context, req protocol.Request) protocol.Resp
 		ID:     req.ID,
 		Result: result,
 	}
+}
+
+func (s *Server) handshakeResult() map[string]any {
+	result := map[string]any{
+		"protocolVersion": s.protocolVersion,
+		"platform":        s.handshake.Platform,
+	}
+	if strings.TrimSpace(s.handshake.Version) != "" {
+		result["version"] = s.handshake.Version
+	}
+	if len(s.handshake.Capabilities) > 0 {
+		result["capabilities"] = append([]string(nil), s.handshake.Capabilities...)
+	}
+	if len(s.handshake.SupportsRuntime) > 0 {
+		result["supportsRuntime"] = append([]string(nil), s.handshake.SupportsRuntime...)
+	}
+	if len(s.handshake.SupportsTriggers) > 0 {
+		result["supportsTriggers"] = append([]string(nil), s.handshake.SupportsTriggers...)
+	}
+	if len(s.handshake.SupportsResources) > 0 {
+		result["supportsResources"] = append([]string(nil), s.handshake.SupportsResources...)
+	}
+	return result
 }
 
 func writeResponseLine(w *bufio.Writer, res protocol.Response) error {

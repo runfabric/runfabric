@@ -1,6 +1,6 @@
 # RunFabric
 
-**RunFabric is a multi-provider serverless framework package. It gives you one config and one CLI workflow across cloud providers, so you can deploy on managed serverless services that auto-scale and keep idle-cost overhead low.**
+**RunFabric is a multi-provider serverless framework with a unified config and CLI workflow for services, functions, resources, and workflows.**
 
 - **One config** — Single `runfabric.yml` per service; same structure whether you target AWS, GCP, Azure, Cloudflare, Vercel, Netlify, or others.
 - **One CLI workflow** — Same commands everywhere: `runfabric doctor`, `plan`, `build`, `deploy`, `invoke`, `logs`, `remove`.
@@ -8,7 +8,7 @@
 
 **Current scope:**
 
-- **Core engine and CLI** — Go code in `engine/`; build with `make build` → `bin/runfabric`. **Packages** (Node CLI/SDK, Python, Go, Java, .NET) live under `packages/`. See [docs/developer/FILE_STRUCTURE.md](docs/developer/FILE_STRUCTURE.md) and [docs/developer/LAYOUT.md](docs/developer/LAYOUT.md).
+- **Core engine and CLI** — Go code in `cmd/`, `internal/`, and `platform/`; build with `make build` → `bin/runfabric` and `bin/runfabricd`. **Packages** (Node CLI/SDK, Python, Go, Java, .NET) live under `packages/`. See [docs/FILE_STRUCTURE.md](docs/FILE_STRUCTURE.md) and [docs/LAYOUT.md](docs/LAYOUT.md).
 - **Deployment framework** — Not a cluster scheduler or standalone runtime; uses each provider’s managed serverless (Lambda, Cloud Run, Workers, etc.).
 - **Config** — `runfabric.yml` (not a drop-in replacement for `serverless.yml`; use `runfabric migrate` to convert).
 - **Production path** — Node-first beta; other runtimes (Python, Go) are supported per provider.
@@ -55,11 +55,11 @@ runfabric --help
 
 Or without global install: `npx @runfabric/cli@latest --help`.
 
-The npm package bundles or fetches the RunFabric binary for your OS; the core is the Go engine in `engine/`. The repo uses a **Makefile** for build, test, and release (no root `package.json`). See `CONTRIBUTING.md` and `make help`.
+The npm package bundles or fetches the RunFabric binary for your OS; the core is the Go engine in this repo (`cmd/`, `internal/`, `platform/`). The repo uses a **Makefile** for build, test, and release (no root `package.json`). See `CONTRIBUTING.md` and `make help`.
 
 **Apple Silicon (arm64):** Use the native binary from `make build`. If the binary is **killed**, it may be quarantined (e.g. after copying from CI); run `make bin-clear-quarantine` or `xattr -cr bin/` then try again.
 
-If the npm package is not yet published, build from source and use `./bin/runfabric` or follow `docs/developer/REPO_DEVELOPMENT.md`.
+If the npm package is not yet published, build from source and use `./bin/runfabric` or follow `docs/REPO_DEVELOPMENT.md`.
 
 ## Quick Start
 
@@ -127,7 +127,7 @@ npm run call:local -- --serve --event ./event.template.json
 
 ## Framework wrappers (Express, Fastify, Nest)
 
-The **Node SDK** (`@runfabric/sdk`, `packages/node/sdk`) lets you use a single handler or mount RunFabric handlers in Express, Fastify, or Nest. The **Node CLI** is `@runfabric/cli` (`packages/node/cli`). See [docs/developer/SDK_FRAMEWORKS.md](docs/developer/SDK_FRAMEWORKS.md) and `packages/node/sdk/README.md` for `createHandler`, `mountExpress`, and `mountFastify`.
+The **Node SDK** (`@runfabric/sdk`, `packages/node/sdk`) lets you use a single handler or mount RunFabric handlers in Express, Fastify, or Nest. The **Node CLI** is `@runfabric/cli` (`packages/node/cli`). See `packages/node/sdk/README.md` for `createHandler`, `mountExpress`, and `mountFastify`.
 
 ## Core Commands
 
@@ -150,7 +150,7 @@ The **Node SDK** (`@runfabric/sdk`, `packages/node/sdk`) lets you use a single h
 - `runfabric compose plan|deploy|remove`
 - `runfabric state pull|list|backup|restore|force-unlock|migrate|reconcile`
 
-Rollback precedence: CLI `--rollback-on-failure` / `--no-rollback-on-failure` → `runfabric.yml` `deploy.rollbackOnFailure` → `RUNFABRIC_ROLLBACK_ON_FAILURE`. Full command reference: [docs/user/COMMAND_REFERENCE.md](docs/user/COMMAND_REFERENCE.md).
+Rollback precedence: CLI `--rollback-on-failure` / `--no-rollback-on-failure` → `runfabric.yml` `deploy.rollbackOnFailure` → `RUNFABRIC_ROLLBACK_ON_FAILURE`. Full command reference: [docs/COMMAND_REFERENCE.md](docs/COMMAND_REFERENCE.md).
 
 ## Security scanning
 
@@ -179,22 +179,21 @@ Rollback precedence: CLI `--rollback-on-failure` / `--no-rollback-on-failure` �
 
 ## Documentation
 
-- `docs/user/QUICKSTART.md` — get started
-- `docs/user/COMMAND_REFERENCE.md` — CLI commands and flags
-- `docs/user/RUNFABRIC_YML_REFERENCE.md` — runfabric.yml config
-- `docs/user/CREDENTIALS.md` — provider and state backend credentials
-- `docs/user/PROVIDER_SETUP.md` — per-provider setup
-- `docs/user/DEPLOY_PROVIDERS.md` — deploy by provider (REST/SDK)
-- `docs/user/STATE_BACKENDS.md` — state storage
-- `docs/developer/HANDLER_SCENARIOS.md` — handler patterns
-- `docs/developer/SDK_FRAMEWORKS.md` — SDK and framework adapters
-- `docs/developer/MIGRATION.md` — Serverless Framework migration
-- `docs/developer/ARCHITECTURE.md` — deploy flow and provider layout
-- `docs/developer/BUILD_AND_RELEASE.md` — build and release
-- `docs/developer/REPO_DEVELOPMENT.md` — contributor setup
-- `docs/developer/PLUGINS.md` — plugins (lifecycle hooks) and API contract
-- `docs/user/EXAMPLES_MATRIX.md` — examples and trigger matrix
-- `docs/user/EXAMPLE_VALIDATION.md` — example checklist
+- `docs/QUICKSTART.md` — get started
+- `docs/COMMAND_REFERENCE.md` — CLI commands and flags
+- `docs/RUNFABRIC_YML_REFERENCE.md` — runfabric.yml config
+- `docs/CREDENTIALS.md` — provider and state backend credentials
+- `docs/PROVIDER_SETUP.md` — per-provider setup
+- `docs/DEPLOY_PROVIDERS.md` — deploy by provider (REST/SDK)
+- `docs/STATE_BACKENDS.md` — state storage
+
+- `docs/MIGRATION.md` — Serverless Framework migration
+- `docs/ARCHITECTURE.md` — deploy flow and provider layout
+- `docs/BUILD_AND_RELEASE.md` — build and release
+- `docs/REPO_DEVELOPMENT.md` — contributor setup
+- `apps/registry/docs/PLUGINS.md` — plugins (lifecycle hooks) and API contract
+- `docs/EXAMPLES_MATRIX.md` — examples and trigger matrix
+- `docs/EXAMPLE_VALIDATION.md` — example checklist
 - `docs/README.md` — doc index
 
 ## Contributing

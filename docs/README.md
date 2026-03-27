@@ -1,32 +1,24 @@
-# RunFabric docs
+# Docs
 
-Docs are split into two buckets:
+Start here for RunFabric user and developer documentation.
 
-- **User docs** (`docs/user/`): how to use RunFabric (CLI, `runfabric.yml`, providers, troubleshooting).
-- **Developer docs** (`docs/developer/`): repo development + internals (extensions/plugins/registry/SDK authoring, architecture, roadmap).
+## Core + internals
 
-## User docs
+- **Contributing**: [../CONTRIBUTING.md](../CONTRIBUTING.md)
+- **Architecture**: [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Build & release**: [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md)
 
-- **Getting started** — [user/QUICKSTART.md](user/QUICKSTART.md)
-- **CLI commands** — [user/COMMAND_REFERENCE.md](user/COMMAND_REFERENCE.md)
-- **Config reference** — [user/RUNFABRIC_YML_REFERENCE.md](user/RUNFABRIC_YML_REFERENCE.md)
-- **Addons** — [user/ADDONS.md](user/ADDONS.md)
-- **Credentials** — [user/CREDENTIALS.md](user/CREDENTIALS.md)
-- **Provider setup** — [user/PROVIDER_SETUP.md](user/PROVIDER_SETUP.md)
-- **Deploy by provider** — [user/DEPLOY_PROVIDERS.md](user/DEPLOY_PROVIDERS.md)
-- **State backends** — [user/STATE_BACKENDS.md](user/STATE_BACKENDS.md)
-- **Troubleshooting** — [user/TROUBLESHOOTING.md](user/TROUBLESHOOTING.md)
-- **Testing** — [user/TESTING_GUIDE.md](user/TESTING_GUIDE.md)
-- **Examples matrix** — [user/EXAMPLES_MATRIX.md](user/EXAMPLES_MATRIX.md)
+## Extensions + plugins + registry
 
-## Developer docs
+- **Plugins (hooks)**: [../apps/registry/docs/PLUGINS.md](../apps/registry/docs/PLUGINS.md)
+- **Extension development guide**: [../apps/registry/docs/EXTENSION_DEVELOPMENT_GUIDE.md](../apps/registry/docs/EXTENSION_DEVELOPMENT_GUIDE.md)
+- **Addon contract**: [../apps/registry/docs/ADDON_CONTRACT.md](../apps/registry/docs/ADDON_CONTRACT.md)
+- **Registry implementation guide**: [../apps/registry/docs/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md](../apps/registry/docs/EXTENSION_REGISTRY_IMPLEMENTATION_GUIDE.md)
+- **Registry development**: [../apps/registry/docs/REGISTRY_DEVELOPMENT.md](../apps/registry/docs/REGISTRY_DEVELOPMENT.md)
+- **Registry MVP spec (API + DB)**: [../apps/registry/docs/REGISTRY_API_DB_SCHEMA_MVP.md](../apps/registry/docs/REGISTRY_API_DB_SCHEMA_MVP.md)
+- **Registry security + DDoS**: [../apps/registry/docs/REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md](../apps/registry/docs/REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md)
 
-- **Repo development** — [developer/REPO_DEVELOPMENT.md](developer/REPO_DEVELOPMENT.md)
-- **Architecture** — [developer/ARCHITECTURE.md](developer/ARCHITECTURE.md)
-- **Roadmap** — [developer/ROADMAP.md](developer/ROADMAP.md)
-- **SDK frameworks** — [developer/SDK_FRAMEWORKS.md](developer/SDK_FRAMEWORKS.md)
-- **Plugins (hooks)** — [developer/PLUGINS.md](developer/PLUGINS.md)
-- **Extension dev guide** — [developer/EXTENSION_DEVELOPMENT_GUIDE.md](developer/EXTENSION_DEVELOPMENT_GUIDE.md)
-- **Registry MVP spec** — [developer/REGISTRY_API_DB_SCHEMA_MVP_V1.md](developer/REGISTRY_API_DB_SCHEMA_MVP_V1.md)
-- **Registry security** — [developer/REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md](developer/REGISTRY_SECURITY_DDOS_PRODUCTION_GUIDE.md)
+## SDKs + handlers
 
+- **SDK frameworks**: [SDK_FRAMEWORKS.md](SDK_FRAMEWORKS.md)
+- **Handler scenarios**: [HANDLER_SCENARIOS.md](HANDLER_SCENARIOS.md)

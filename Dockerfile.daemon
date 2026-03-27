@@ -1,4 +1,4 @@
-# Dockerfile for the RunFabric engine daemon (config API + optional dashboard).
+# Dockerfile for the RunFabric daemon (config API + optional dashboard).
 # Build from repo root: docker build -f Dockerfile.daemon -t runfabric-daemon .
 
 # Build stage
@@ -6,21 +6,23 @@ FROM golang:1.25-alpine AS builder
 RUN apk add --no-cache ca-certificates
 WORKDIR /build
 
-# Copy engine and version for ldflags
-COPY engine/ engine/
+# Copy daemon sources and shared packages
+COPY cmd/ cmd/
+COPY internal/ internal/
+COPY platform/ platform/
+COPY go.mod go.sum ./
 COPY VERSION /build/VERSION
 
 RUN VERSION_FILE=$(cat /build/VERSION 2>/dev/null | tr -d '\n' || echo "0.0.0-dev") && \
-    cd engine && \
     CGO_ENABLED=0 go build -trimpath \
-    -ldflags "-s -w -X github.com/runfabric/runfabric/engine/internal/runtime.Version=${VERSION_FILE} -X github.com/runfabric/runfabric/engine/internal/runtime.ProtocolVersion=1" \
-    -o /build/runfabric ./cmd/runfabric
+    -ldflags "-s -w -X github.com/runfabric/runfabric/platform/core/model.Version=${VERSION_FILE}" \
+    -o /build/runfabricd ./cmd/runfabricd
 
 # Run stage
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates wget && \
     adduser -D -u 1000 runfabric
-COPY --from=builder /build/runfabric /usr/local/bin/runfabric
+COPY --from=builder /build/runfabricd /usr/local/bin/runfabricd
 USER runfabric
 
 EXPOSE 8766
@@ -29,5 +31,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=2 \
     CMD wget -q -O- http://127.0.0.1:8766/healthz || exit 1
 
 # Default: daemon API only. Override to add --dashboard, --config, --cache-url, etc.
-ENTRYPOINT ["/usr/local/bin/runfabric", "daemon", "--address", "0.0.0.0", "--port", "8766"]
+ENTRYPOINT ["/usr/local/bin/runfabricd", "--address", "0.0.0.0", "--port", "8766"]
 CMD []

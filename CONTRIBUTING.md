@@ -8,11 +8,11 @@ Thanks for contributing to `runfabric`.
 
 ## Local Setup
 
-Clone the repo. The Go engine and CLI live under `engine/`. Build and test via the root Makefile:
+Clone the repo. The Go engine and CLI live at the repository root (`cmd/`, `internal/`, `platform/`). Build and test via the root Makefile:
 
 ```bash
-make build    # builds bin/runfabric from engine/cmd/runfabric
-make test     # runs tests (from engine/)
+make build    # builds bin/runfabric from cmd/runfabric
+make test     # runs tests across Go packages
 ```
 
 ## Development Workflow
@@ -43,7 +43,7 @@ git config core.hooksPath .githooks
 
 From then on, `git push` will run `make pre-push` (gofmt, go vet, build, tests with `-race`, and doc link checks). If any step fails, the push is aborted. To skip the hook once: `git push --no-verify`.
 
-**Coverage target:** Critical paths (e.g. `engine/internal/config`, `engine/internal/planner`, lifecycle, state) aim for ~95% coverage. Run `make coverage` for engine coverage; run `cd packages/go/sdk && go test ./...` for Go SDK tests. Java (`packages/java/sdk`) and .NET (`packages/dotnet/sdk`) SDKs have their own test suites (`mvn test`, `dotnet test`). See the internal product roadmap for coverage targets.
+**Coverage target:** Critical paths (e.g. `internal/config`, `internal/planner`, lifecycle, state) aim for high coverage. Run `make coverage` for core coverage; run `cd packages/go/sdk && go test ./...` for Go SDK tests. Java (`packages/java/sdk`) and .NET (`packages/dotnet/sdk`) SDKs have their own test suites (`mvn test`, `dotnet test`).
 
 ## Commit Guidance
 
@@ -64,18 +64,16 @@ Use clear, scoped commit messages. Suggested prefixes:
 - Tests added/updated when behavior changes.
 - Provider credential/config changes reflected in docs.
 - `README.md` and relevant docs are updated.
+- CLI changes follow package boundaries: command wiring in `internal/cli/*`, orchestration through `internal/app`, provider-specific behavior outside CLI packages.
 
 ## Architecture References
 
-- `docs/developer/REPO_DEVELOPMENT.md`
-- `docs/developer/ARCHITECTURE.md`
-- `docs/user/CREDENTIALS.md`
-- `docs/user/QUICKSTART.md`
-- `docs/developer/BUILD_AND_RELEASE.md`
+- `docs/REPO_DEVELOPMENT.md`
+- `docs/ARCHITECTURE.md`
+- `docs/CREDENTIALS.md`
+- `docs/QUICKSTART.md`
+- `docs/BUILD_AND_RELEASE.md`
 - `RELEASE_PROCESS.md`
 - `CHANGELOG_POLICY.md`
- 
-Docs are split by audience:
- 
-- **User docs:** `docs/user/`
-- **Developer docs:** `docs/developer/`
+
+Docs are in `docs/`.

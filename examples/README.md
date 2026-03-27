@@ -2,9 +2,9 @@
 
 Examples are grouped by runtime. Today this repo ships **Node/JS/TS** examples under `examples/node/`.
 
-| Directory   | Description |
-|------------|-------------|
-| **node/**  | Node/JS/TS examples (hello-aws, hello-http, compose-app, compose-contracts, handler-scenarios) |
+| Directory | Description                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------------- |
+| **node/** | Node/JS/TS examples (hello-aws, hello-http, compose-app, compose-contracts, handler-scenarios) |
 
 ## Quick start (recommended)
 
@@ -27,4 +27,4 @@ To generate new examples with `runfabric init` for **js**, **ts**, **python**, a
 - Gives the exact `runfabric init` pattern and examples for each language.
 - Uses naming like `runfabric-<provider>-<trigger>-state-<backend>[-<lang>]`.
 
-See also [docs/QUICKSTART.md](../docs/QUICKSTART.md) and [docs/SDK_FRAMEWORKS.md](../docs/SDK_FRAMEWORKS.md) for usage.
+See also [docs/QUICKSTART.md](../docs/QUICKSTART.md) and `packages/node/sdk/README.md` for handler patterns and usage.

@@ -22,6 +22,9 @@ jobs:
       - name: Build daemon image
         run: docker build -f infra/Dockerfile.daemon -t ghcr.io/runfabric/runfabric-daemon:latest .
 
+      - name: Smoke test daemon image
+        run: docker run --rm ghcr.io/runfabric/runfabric-daemon:latest --help >/dev/null
+
       - name: Push daemon image
         run: docker push ghcr.io/runfabric/runfabric-daemon:latest
 
