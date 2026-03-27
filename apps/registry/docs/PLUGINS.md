@@ -29,7 +29,7 @@ Provider/runtime resolution in the Go engine should happen through the app boots
 
 ## Provider plugin interface (Go, recommended)
 
-The recommended interface for internal provider plugins is **ProviderPlugin** (context + request/result). It is defined in `platform/core/contracts/extension/provider` and re-exported from `platform/extensions/registry/loader/providers`.
+The recommended interface for internal provider plugins is **ProviderPlugin** (context + request/result). It is defined in `internal/provider/contracts` and re-exported from `platform/extensions/registry/loader/providers`.
 
 **Interface:**
 

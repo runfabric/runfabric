@@ -95,7 +95,7 @@ The recommended interface is **ProviderPlugin** (see [PLUGINS.md](PLUGINS.md)):
 - **Invoke(ctx, req)** → \*InvokeResult.
 - **Logs(ctx, req)** → \*LogsResult.
 
-Request types (`DoctorRequest`, `PlanRequest`, etc.) carry `Config`, `Stage`, `Root`, `Function`, `Payload` as needed. Defined in `platform/core/contracts/extension/provider` (re-exported from `platform/extensions/registry/loader/providers`).
+Request types (`DoctorRequest`, `PlanRequest`, etc.) carry `Config`, `Stage`, `Root`, `Function`, `Payload` as needed. Defined in `internal/provider/contracts` (re-exported from `platform/extensions/registry/loader/providers`).
 
 ### 2.3 Development guidelines (extensions)
 
