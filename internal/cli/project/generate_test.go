@@ -268,6 +268,38 @@ func TestGenerateFunction_Success(t *testing.T) {
 	}
 }
 
+func TestGenerateWorkerCommand_Success(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "runfabric.yml")
+	writeMinimalConfig(t, cfgPath)
+
+	opts := &GlobalOptions{ConfigPath: cfgPath}
+	cmd := newGenerateCmd(opts)
+	cmd.SetArgs([]string{"worker", "jobs", "--queue-name", "jobs-queue", "--no-backup"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("generate worker should succeed: %v", err)
+	}
+
+	handlerPath := filepath.Join(dir, "src", "jobs.js")
+	if _, err := os.Stat(handlerPath); err != nil {
+		t.Fatalf("worker handler file should exist at %s: %v", handlerPath, err)
+	}
+
+	cfgData, _ := os.ReadFile(cfgPath)
+	content := string(cfgData)
+	if !strings.Contains(content, "name: jobs") {
+		t.Errorf("runfabric.yml should contain worker function jobs, got: %s", content)
+	}
+	if !strings.Contains(content, "type: queue") {
+		t.Errorf("runfabric.yml should contain queue trigger, got: %s", content)
+	}
+	if !strings.Contains(content, "queue: jobs-queue") {
+		t.Errorf("runfabric.yml should contain queue name jobs-queue, got: %s", content)
+	}
+}
+
 func TestGenerateFunction_Collision(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "runfabric.yml")
@@ -517,8 +549,15 @@ func TestGeneratePlugin_Success(t *testing.T) {
 	if !strings.Contains(string(mainData), `sdkprovider.NewServer(`) || !strings.Contains(string(mainData), `type plugin struct`) || !strings.Contains(string(mainData), `defaultProviderCLICommand`) {
 		t.Fatalf("expected generated main.go to use typed provider SDK server, got: %s", string(mainData))
 	}
+	if strings.Contains(string(mainData), `github.com/runfabric/runfabric/platform/`) {
+		t.Fatalf("generated main.go must not import platform packages; plugins must depend on SDK only, got: %s", string(mainData))
+	}
 	if !strings.Contains(string(mainData), `RUNFABRIC_ARTIFACT_PATH`) || !strings.Contains(string(mainData), `resolveCommand`) {
 		t.Fatalf("expected generated main.go to include command-resolution and artifact scaffold, got: %s", string(mainData))
+	}
+	goModData, _ := os.ReadFile(filepath.Join(root, "go.mod"))
+	if strings.Contains(string(goModData), `github.com/runfabric/runfabric/platform/`) {
+		t.Fatalf("generated go.mod must not reference platform modules; plugins must depend on SDK only, got: %s", string(goModData))
 	}
 	readmeData, _ := os.ReadFile(filepath.Join(root, "README.md"))
 	if !strings.Contains(string(readmeData), `ACME_PROVIDER_DEPLOY_CMD`) || !strings.Contains(string(readmeData), `defaultProviderCLICommand`) {

@@ -9,9 +9,9 @@ import (
 
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/core/model/configpatch"
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
 	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	scaffold "github.com/runfabric/runfabric/platform/generator/application"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
 	"github.com/spf13/cobra"
 )
 
@@ -171,10 +171,45 @@ func newGenerateCmd(opts *GlobalOptions) *cobra.Command {
 		Long:  "Add new functions, resources, addons, provider overrides, or provider plugin boilerplate without hand-editing runfabric.yml. Use 'runfabric generate function <name>', 'generate resource <name>', 'generate addon <name>', 'generate provider-override <key>', or 'generate plugin <provider-id>'.",
 	}
 	cmd.AddCommand(newGenerateFunctionCmd(opts))
+	cmd.AddCommand(newGenerateWorkerCmd(opts))
 	cmd.AddCommand(newGenerateResourceCmd(opts))
 	cmd.AddCommand(newGenerateAddonCmd(opts))
 	cmd.AddCommand(newGenerateProviderOverrideCmd(opts))
 	cmd.AddCommand(newGeneratePluginCmd(opts))
+	return cmd
+}
+
+func newGenerateWorkerCmd(opts *GlobalOptions) *cobra.Command {
+	o := &generateOpts{Trigger: planner.TriggerQueue}
+
+	cmd := &cobra.Command{
+		Use:   "worker [name]",
+		Short: "Generate a queue worker function",
+		Long:  "Scaffolds a worker function and patches runfabric.yml with a queue trigger by default. Equivalent to 'runfabric generate function <name> --trigger queue'.",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var name string
+			if len(args) > 0 {
+				name = strings.TrimSpace(args[0])
+			}
+			if strings.TrimSpace(o.Trigger) == "" {
+				o.Trigger = planner.TriggerQueue
+			}
+			return runGenerateFunction(opts, o, name)
+		},
+	}
+
+	cmd.Flags().StringVar(&o.Trigger, "trigger", planner.TriggerQueue, "Trigger type (default: queue)")
+	cmd.Flags().StringVar(&o.QueueName, "queue-name", "", "Queue name for queue trigger")
+	cmd.Flags().StringVar(&o.Provider, "provider", "", "Provider override (default: from runfabric.yml)")
+	cmd.Flags().StringVar(&o.Lang, "lang", "", "Language: js, ts, python, go (default: infer from config/project)")
+	cmd.Flags().StringVar(&o.Entry, "entry", "", "Custom handler path (default: src/<name>.<ext>)")
+	cmd.Flags().BoolVar(&o.DryRun, "dry-run", false, "Preview files and config diff without writing")
+	cmd.Flags().BoolVar(&o.Force, "force", false, "Overwrite handler file if it exists (never overwrites config)")
+	cmd.Flags().BoolVar(&o.NoBackup, "no-backup", false, "Do not create runfabric.yml.bak before patching")
+	cmd.Flags().BoolVar(&o.Interactive, "interactive", false, "Prompt for missing inputs")
+	cmd.Flags().BoolVar(&o.NoInteractive, "no-interactive", false, "Disable prompts and require explicit args/flags")
+
 	return cmd
 }
 

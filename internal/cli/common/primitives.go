@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
 	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
 	"github.com/spf13/cobra"
 )
 

@@ -3,7 +3,7 @@ package lifecycle
 import (
 	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
-	"github.com/runfabric/runfabric/platform/core/workflow/recovery"
+	"github.com/runfabric/runfabric/platform/workflow/recovery"
 	"github.com/spf13/cobra"
 )
 

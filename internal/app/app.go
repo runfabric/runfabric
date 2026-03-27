@@ -1,13 +1,14 @@
 package app
 
 import (
+	"io"
 	"time"
 
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	statecore "github.com/runfabric/runfabric/platform/core/state/core"
-	coreapp "github.com/runfabric/runfabric/platform/core/workflow/app"
-	"github.com/runfabric/runfabric/platform/core/workflow/recovery"
 	"github.com/runfabric/runfabric/platform/deploy/source"
+	coreapp "github.com/runfabric/runfabric/platform/workflow/app"
+	"github.com/runfabric/runfabric/platform/workflow/recovery"
 )
 
 type AppContext = coreapp.AppContext
@@ -16,7 +17,7 @@ type BuildResult = coreapp.BuildResult
 type DashboardData = coreapp.DashboardData
 type DevStreamReport = coreapp.DevStreamReport
 type WorkflowRunResult = coreapp.WorkflowRunResult
-type FabricRoutingConfig = coreapp.FabricRoutingConfig
+type RouterRoutingConfig = coreapp.RouterRoutingConfig
 
 // AppService is the contract boundary between CLI and workflow app operations.
 type AppService interface {
@@ -168,11 +169,14 @@ func FabricHealth(configPath, stage string) (*statecore.FabricState, error) {
 	return coreapp.FabricHealth(configPath, stage)
 }
 func FabricTargets(cfg *config.Config) []string { return coreapp.FabricTargets(cfg) }
-func GenerateFabricRoutingConfig(fabricState *statecore.FabricState, cfg *config.Config) *coreapp.FabricRoutingConfig {
-	return coreapp.GenerateFabricRoutingConfig(fabricState, cfg)
+func GenerateRouterRoutingConfig(fabricState *statecore.FabricState, cfg *config.Config, stage string) *coreapp.RouterRoutingConfig {
+	return coreapp.GenerateRouterRoutingConfig(fabricState, cfg, stage)
 }
-func FormatFabricRoutingGuide(routingCfg *coreapp.FabricRoutingConfig) string {
-	return coreapp.FormatFabricRoutingGuide(routingCfg)
+func SelectedRouterPlugin(cfg *config.Config) string {
+	return coreapp.SelectedRouterPlugin(cfg)
+}
+func FormatRouterRoutingGuide(routingCfg *coreapp.RouterRoutingConfig) string {
+	return coreapp.FormatRouterRoutingGuide(routingCfg)
 }
 func ComposeDeploy(composePath, stage string, rollbackOnFailure, noRollbackOnFailure bool) (any, error) {
 	return coreapp.ComposeDeploy(composePath, stage, rollbackOnFailure, noRollbackOnFailure)
@@ -183,4 +187,11 @@ func ComposeRemove(composePath, stage string) (any, error) {
 
 func FetchDeploySource(sourceURL string) (extractRoot, resolvedConfig string, cleanup func(), err error) {
 	return source.FetchAndExtract(sourceURL)
+}
+
+// RouterDNSSync dispatches DNS sync to the configured router plugin (extensions.routerPlugin).
+// The router plugin is dynamically loaded from runfabric.yaml and applied idempotently.
+// When no plugin is configured, defaults to cloudflare.
+func RouterDNSSync(ctx *AppContext, routing *coreapp.RouterRoutingConfig, zoneID, accountID string, dryRun bool, out io.Writer) (*coreapp.RouterSyncResult, error) {
+	return coreapp.RouterDNSSync(ctx, routing, zoneID, accountID, dryRun, out)
 }

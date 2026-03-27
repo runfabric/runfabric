@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 
 	"github.com/runfabric/runfabric/internal/app"
-	extproviders "github.com/runfabric/runfabric/platform/core/contracts/extension/provider"
-	"github.com/runfabric/runfabric/platform/core/workflow/lifecycle"
+	extproviders "github.com/runfabric/runfabric/internal/provider/contracts"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
+	"github.com/runfabric/runfabric/platform/workflow/lifecycle"
 	"github.com/spf13/cobra"
 )
 

@@ -3,7 +3,7 @@ package project
 import (
 	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
-	workflow "github.com/runfabric/runfabric/platform/core/workflow/core"
+	workflow "github.com/runfabric/runfabric/platform/workflow/core"
 	"github.com/spf13/cobra"
 )
 

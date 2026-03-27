@@ -17,7 +17,7 @@ func newExtensionCmd(opts *GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "extension",
 		Short: "List or inspect RunFabric plugins (Phase 15)",
-		Long:  "RunFabric Extensions: plugins (providers, runtimes, simulators) and addons. Use 'runfabric extensions extension list' to see built-in + installed external plugins; 'runfabric extensions addons list' for the addon catalog.",
+		Long:  "RunFabric Extensions: plugins (providers, runtimes, simulators, routers) and addons. Use 'runfabric extensions extension list' to see built-in + installed external plugins; 'runfabric extensions addons list' for the addon catalog.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
@@ -45,7 +45,7 @@ func newExtensionInstallCmd(opts *GlobalOptions) *cobra.Command {
 		Long:  "Installs an external plugin into RUNFABRIC_HOME/plugins/<kind>/<id>/<version>/. You can install from --source (URL/path) or from a registry (default https://registry.runfabric.cloud).",
 		RunE: func(c *cobra.Command, args []string) error {
 			if len(args) < 1 {
-				return fmt.Errorf("usage: runfabric extension install <id> [--source <url|path>] [--registry <url>] [--kind provider|runtime|simulator] [--version v]")
+				return fmt.Errorf("usage: runfabric extension install <id> [--source <url|path>] [--registry <url>] [--kind provider|runtime|simulator|router] [--version v]")
 			}
 			id := args[0]
 			rc := common.LoadRunfabricrc()
@@ -109,7 +109,7 @@ func newExtensionInstallCmd(opts *GlobalOptions) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&kind, "kind", "", "Plugin kind: provider, runtime, simulator (required when using --source)")
+	cmd.Flags().StringVar(&kind, "kind", "", "Plugin kind: provider, runtime, simulator, router (required when using --source)")
 	cmd.Flags().StringVar(&version, "version", "", "Expected version (optional; best-effort validation)")
 	cmd.Flags().StringVar(&source, "source", "", "Source archive URL or local file path (.zip/.tar.gz). If omitted, installs via registry resolve.")
 	cmd.Flags().StringVar(&registry, "registry", "", "Registry base URL (default: https://registry.runfabric.cloud; override via RUNFABRIC_REGISTRY_URL)")
@@ -125,7 +125,7 @@ func newExtensionUninstallCmd(opts *GlobalOptions) *cobra.Command {
 		Short: "Uninstall an installed extension",
 		RunE: func(c *cobra.Command, args []string) error {
 			if len(args) < 1 {
-				return fmt.Errorf("usage: runfabric extension uninstall <id> [--kind provider|runtime|simulator] [--version v]")
+				return fmt.Errorf("usage: runfabric extension uninstall <id> [--kind provider|runtime|simulator|router] [--version v]")
 			}
 			id := args[0]
 			var k manifests.PluginKind
@@ -147,7 +147,7 @@ func newExtensionUninstallCmd(opts *GlobalOptions) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&kind, "kind", "", "Plugin kind: provider, runtime, simulator (optional)")
+	cmd.Flags().StringVar(&kind, "kind", "", "Plugin kind: provider, runtime, simulator, router (optional)")
 	cmd.Flags().StringVar(&version, "version", "", "Remove a specific version (optional)")
 	return cmd
 }
@@ -163,7 +163,7 @@ func newExtensionUpgradeCmd(opts *GlobalOptions) *cobra.Command {
 		Long:  "Upgrade reinstalls an external plugin. Use --source (URL/path) or resolve from a registry (default https://registry.runfabric.cloud).",
 		RunE: func(c *cobra.Command, args []string) error {
 			if len(args) < 1 {
-				return fmt.Errorf("usage: runfabric extension upgrade <id> [--source <url|path>] [--registry <url>] [--kind provider|runtime|simulator]")
+				return fmt.Errorf("usage: runfabric extension upgrade <id> [--source <url|path>] [--registry <url>] [--kind provider|runtime|simulator|router]")
 			}
 			id := args[0]
 			rc := common.LoadRunfabricrc()
@@ -222,7 +222,7 @@ func newExtensionUpgradeCmd(opts *GlobalOptions) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&kind, "kind", "", "Plugin kind: provider, runtime, simulator (required when using --source)")
+	cmd.Flags().StringVar(&kind, "kind", "", "Plugin kind: provider, runtime, simulator, router (required when using --source)")
 	cmd.Flags().StringVar(&source, "source", "", "Source archive URL or local file path (.zip/.tar.gz). If omitted, upgrades via registry resolve.")
 	cmd.Flags().StringVar(&registry, "registry", "", "Registry base URL (default: https://registry.runfabric.cloud; override via RUNFABRIC_REGISTRY_URL)")
 	cmd.Flags().StringVar(&registryToken, "registry-token", "", "Registry bearer token (override via RUNFABRIC_REGISTRY_TOKEN or .runfabricrc registry.token)")
@@ -235,7 +235,7 @@ func newExtensionListCmd(opts *GlobalOptions) *cobra.Command {
 	var preferExternal bool
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List RunFabric plugins (providers, runtimes, simulators)",
+		Short: "List RunFabric plugins (providers, runtimes, simulators, routers)",
 		RunE: func(c *cobra.Command, args []string) error {
 			prefer := preferExternal || external.PreferExternalFromEnv()
 			catalog, err := resolution.DiscoverPluginCatalog(external.DiscoverOptions{
@@ -300,7 +300,7 @@ func newExtensionListCmd(opts *GlobalOptions) *cobra.Command {
 			return tw.Flush()
 		},
 	}
-	cmd.Flags().StringVar(&kind, "kind", "", "Filter by kind: provider, runtime, simulator")
+	cmd.Flags().StringVar(&kind, "kind", "", "Filter by kind: provider, runtime, simulator, router")
 	cmd.Flags().BoolVar(&showInvalid, "show-invalid", false, "Show invalid/skipped external plugins and reasons")
 	cmd.Flags().BoolVar(&preferExternal, "prefer-external", false, "Prefer external plugin manifests when IDs conflict with built-ins")
 	return cmd
@@ -397,7 +397,7 @@ func newExtensionSearchCmd(opts *GlobalOptions) *cobra.Command {
 func parsePluginKindFlag(raw string) (manifests.PluginKind, error) {
 	kind := manifests.NormalizePluginKind(raw)
 	if !manifests.IsSupportedPluginKind(kind) {
-		return "", fmt.Errorf("--kind must be provider, runtime, or simulator")
+		return "", fmt.Errorf("--kind must be provider, runtime, simulator, or router")
 	}
 	return kind, nil
 }
