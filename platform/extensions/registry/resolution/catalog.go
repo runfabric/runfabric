@@ -16,7 +16,7 @@ type PluginCatalog struct {
 // DiscoverPluginCatalog returns built-in plugin manifests merged with discovered external plugins.
 // Built-ins keep precedence unless discover options explicitly prefer external manifests.
 func DiscoverPluginCatalog(opts external.DiscoverOptions) (*PluginCatalog, error) {
-	reg := manifests.NewPluginRegistry()
+	reg := NewBuiltinSet().Plugins
 	res, err := external.Discover(opts)
 	if err != nil {
 		return &PluginCatalog{Registry: reg}, err

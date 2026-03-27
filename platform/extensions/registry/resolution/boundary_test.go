@@ -2,6 +2,8 @@ package resolution
 
 import (
 	"testing"
+
+	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 )
 
 func TestResolveRuntime_NormalizesVersionedRuntimeIDs(t *testing.T) {
@@ -57,5 +59,24 @@ func TestResolveSimulator_BuiltinLocal(t *testing.T) {
 	}
 	if sim.Meta().ID != "local" {
 		t.Fatalf("simulator id = %q, want local", sim.Meta().ID)
+	}
+}
+
+func TestResolveRouter_Builtin(t *testing.T) {
+	b, err := New(Options{IncludeExternal: false})
+	if err != nil {
+		t.Fatalf("new boundary: %v", err)
+	}
+	routers := b.PluginRegistry().List(manifests.KindRouter)
+	if len(routers) == 0 {
+		t.Fatal("expected at least one built-in router plugin")
+	}
+	wantID := routers[0].ID
+	router, err := b.ResolveRouter(wantID)
+	if err != nil {
+		t.Fatalf("resolve router %q: %v", wantID, err)
+	}
+	if router.Meta().ID != wantID {
+		t.Fatalf("router id = %q, want %q", router.Meta().ID, wantID)
 	}
 }

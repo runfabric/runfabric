@@ -9,16 +9,16 @@ import (
 func TestPluginRegistry_List(t *testing.T) {
 	reg := NewPluginRegistry()
 	all := reg.List("")
-	if len(all) < 4 {
-		t.Errorf("expected at least 4 built-in plugins, got %d", len(all))
+	if len(all) < 2 {
+		t.Errorf("expected at least 2 built-in provider plugins, got %d", len(all))
 	}
 	providers := reg.List(KindProvider)
 	if len(providers) < 2 {
 		t.Errorf("expected at least 2 provider plugins, got %d", len(providers))
 	}
 	runtimes := reg.List(KindRuntime)
-	if len(runtimes) < 2 {
-		t.Errorf("expected at least 2 runtime plugins, got %d", len(runtimes))
+	if len(runtimes) != 0 {
+		t.Errorf("expected 0 runtime plugins in base manifest registry, got %d", len(runtimes))
 	}
 }
 
@@ -56,9 +56,9 @@ func TestPluginRegistry_Search(t *testing.T) {
 			t.Errorf("Search(%q) should return at least one plugin (first builtin manifest provider)", term)
 		}
 	}
-	node := reg.Search("node")
-	if len(node) < 1 {
-		t.Error("Search(node) should return nodejs or runtime-node")
+	runtimeTerm := reg.Search("runtime-node")
+	if len(runtimeTerm) != 0 {
+		t.Error("Search(runtime-node) should be empty in base provider-only registry")
 	}
 	none := reg.Search("xyznonexistent123")
 	if len(none) != 0 {
@@ -77,6 +77,8 @@ func TestNormalizePluginKind(t *testing.T) {
 		{in: "runtimes", want: KindRuntime},
 		{in: "simulator", want: KindSimulator},
 		{in: "simulators", want: KindSimulator},
+		{in: "router", want: KindRouter},
+		{in: "routers", want: KindRouter},
 		{in: "unknown", want: "unknown"},
 	}
 
@@ -97,6 +99,9 @@ func TestIsSupportedPluginKind(t *testing.T) {
 	}
 	if !IsSupportedPluginKind(KindSimulator) {
 		t.Fatal("simulator should be supported")
+	}
+	if !IsSupportedPluginKind(KindRouter) {
+		t.Fatal("router should be supported")
 	}
 	if IsSupportedPluginKind("providers") {
 		t.Fatal("raw alias should not be supported until normalized")

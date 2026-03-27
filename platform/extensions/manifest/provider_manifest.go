@@ -6,18 +6,17 @@ import (
 	"strings"
 	"sync"
 
-	runtimes "github.com/runfabric/runfabric/platform/core/contracts/runtime"
-	simulators "github.com/runfabric/runfabric/platform/core/contracts/simulators"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )
 
-// PluginKind is the type of a RunFabric plugin (provider, runtime, or simulator).
+// PluginKind is the type of a RunFabric plugin (provider, runtime, simulator, or router).
 type PluginKind string
 
 const (
 	KindProvider  PluginKind = "provider"
 	KindRuntime   PluginKind = "runtime"
 	KindSimulator PluginKind = "simulator"
+	KindRouter    PluginKind = "router"
 )
 
 // NormalizePluginKind normalizes singular/plural aliases to canonical plugin kinds.
@@ -29,15 +28,17 @@ func NormalizePluginKind(raw string) PluginKind {
 		return KindRuntime
 	case "simulator", "simulators":
 		return KindSimulator
+	case "router", "routers":
+		return KindRouter
 	default:
 		return PluginKind(strings.TrimSpace(raw))
 	}
 }
 
-// IsSupportedPluginKind reports whether kind is one of provider/runtime/simulator.
+// IsSupportedPluginKind reports whether kind is one of provider/runtime/simulator/router.
 func IsSupportedPluginKind(kind PluginKind) bool {
 	switch kind {
-	case KindProvider, KindRuntime, KindSimulator:
+	case KindProvider, KindRuntime, KindSimulator, KindRouter:
 		return true
 	default:
 		return false
@@ -52,7 +53,7 @@ type Permissions struct {
 	Cloud   bool `json:"cloud,omitempty"`
 }
 
-// PluginManifest describes a RunFabric Plugin (provider, runtime, simulator) for list/info/search.
+// PluginManifest describes a RunFabric Plugin (provider, runtime, simulator, router) for list/info/search.
 type PluginManifest struct {
 	ID                string      `json:"id"`
 	Kind              PluginKind  `json:"kind"`
@@ -81,13 +82,18 @@ type PluginRegistry struct {
 	nameLower map[string]string
 }
 
-// NewPluginRegistry returns a registry pre-filled with built-in provider and runtime manifests.
-func NewPluginRegistry() *PluginRegistry {
-	r := &PluginRegistry{
+// NewEmptyPluginRegistry returns an empty plugin registry without preloaded built-ins.
+func NewEmptyPluginRegistry() *PluginRegistry {
+	return &PluginRegistry{
 		plugins:   make(map[string]*PluginManifest),
 		idLower:   make(map[string]string),
 		nameLower: make(map[string]string),
 	}
+}
+
+// NewPluginRegistry returns a registry pre-filled with built-in provider and runtime manifests.
+func NewPluginRegistry() *PluginRegistry {
+	r := NewEmptyPluginRegistry()
 	for _, m := range builtinPluginManifests() {
 		r.plugins[m.ID] = m
 		r.idLower[m.ID] = strings.ToLower(m.ID)
@@ -105,12 +111,6 @@ func builtinPluginManifests() []*PluginManifest {
 			Name:        p.Name,
 			Description: p.Description,
 		})
-	}
-	for _, rt := range runtimes.BuiltinRuntimeManifests() {
-		list = append(list, &PluginManifest{ID: rt.ID, Kind: KindRuntime, Name: rt.Name, Description: rt.Description})
-	}
-	for _, sim := range simulators.BuiltinSimulatorManifests() {
-		list = append(list, &PluginManifest{ID: sim.ID, Kind: KindSimulator, Name: sim.Name, Description: sim.Description})
 	}
 	return list
 }
@@ -134,7 +134,7 @@ func (r *PluginRegistry) Get(id string) *PluginManifest {
 	return r.plugins[id]
 }
 
-// List returns all plugins, optionally filtered by kind, sorted by kind (provider, runtime, simulator) then by ID.
+// List returns all plugins, optionally filtered by kind, sorted by kind (provider, runtime, simulator, router) then by ID.
 func (r *PluginRegistry) List(kind PluginKind) []*PluginManifest {
 	r.mu.RLock()
 	list := make([]*PluginManifest, 0, len(r.plugins))
@@ -162,8 +162,10 @@ func kindOrder(k PluginKind) int {
 		return 1
 	case KindSimulator:
 		return 2
-	default:
+	case KindRouter:
 		return 3
+	default:
+		return 4
 	}
 }
 

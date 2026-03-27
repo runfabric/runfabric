@@ -128,6 +128,7 @@ func Discover(opts DiscoverOptions) (DiscoverResult, error) {
 		manifests.KindProvider,
 		manifests.KindRuntime,
 		manifests.KindSimulator,
+		manifests.KindRouter,
 	} {
 		found, invalid := discoverKindAcrossAliases(root, kind, opts)
 		res.Plugins = append(res.Plugins, found...)
@@ -419,6 +420,8 @@ func pluginKindDirs(kind manifests.PluginKind) []string {
 		return []string{"runtimes", "runtime"}
 	case manifests.KindSimulator:
 		return []string{"simulators", "simulator"}
+	case manifests.KindRouter:
+		return []string{"routers", "router"}
 	default:
 		return nil
 	}
