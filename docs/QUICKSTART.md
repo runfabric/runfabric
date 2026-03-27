@@ -144,7 +144,7 @@ Inside an existing project, add a function without hand-editing `runfabric.yml`:
 
 ```bash
 runfabric generate function hello --trigger http --route GET:/hello
-runfabric generate function worker --trigger queue --queue-name my-queue
+runfabric generate worker worker --queue-name my-queue
 runfabric generate function cron-job --trigger cron --schedule "rate(5 minutes)"
 ```
 

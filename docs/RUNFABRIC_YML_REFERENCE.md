@@ -140,7 +140,10 @@ extensions:
   autoInstallExtensions: true
   runtimePlugin: nodejs # kind=runtime
   simulatorPlugin: local # kind=simulator
+  routerPlugin: cloudflare # kind=router (router command backend)
 ```
+
+Router commands currently support `cloudflare` as the implemented backend. When omitted, `extensions.routerPlugin` defaults to `cloudflare`.
 
 ## Real deploy and unsafe defaults
 
@@ -228,6 +231,63 @@ functions:
 ```
 
 If a `${secret:KEY}` reference cannot be resolved, config resolution fails with an explicit error.
+
+## MCP Integrations and Policies
+
+MCP configuration is provider-neutral and configured under `integrations.mcp` plus `policies.mcp`.
+
+### Register MCP servers
+
+```yaml
+integrations:
+  mcp:
+    servers:
+      crm:
+        url: https://mcp.internal/crm
+      kb:
+        url: https://mcp.internal/kb
+```
+
+### Enforce MCP allow/deny policy
+
+```yaml
+policies:
+  mcp:
+    defaultDeny: true
+    allow:
+      servers: ["crm", "kb"]
+      tools: ["crm.lookup*", "kb.search*"]
+      resources: ["kb.kb://*"]
+      prompts: ["crm.reply*"]
+    deny:
+      tools: ["crm.delete*"]
+```
+
+Policy semantics:
+
+- `defaultDeny: true` blocks unmatched calls.
+- `allow` and `deny` support wildcard patterns (`*`).
+- `deny` wins over `allow` when both match.
+
+### Provider-specific MCP policy rules
+
+```yaml
+policies:
+  mcp:
+    providers:
+      aws:
+        requiredRegion: us-east-1
+        denyCrossRegion: true
+        denyRegions: ["eu-*"]
+        requiredAuth: iam
+```
+
+Supported keys under `policies.mcp.providers.<provider>`:
+
+- `requiredRegion`: required runtime region for MCP calls.
+- `denyCrossRegion`: block calls when active region differs from `requiredRegion`.
+- `denyRegions`: wildcard deny list for active regions.
+- `requiredAuth`: required auth mode hint recorded in policy metadata.
 
 ## Deploy Policy
 

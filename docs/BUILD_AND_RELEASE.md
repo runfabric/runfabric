@@ -26,12 +26,12 @@
 ## Go CLI build
 
 ```bash
-make build          # → bin/runfabric and bin/runfabricd (version from VERSION file)
+make build          # → bin/runfabric, bin/runfabricd, and bin/runfabricw (version from VERSION file)
 make release-check  # build + go build ./... + go test ./...
 make clean          # remove bin/ and go caches
 ```
 
-The binary is built with `-trimpath` and ldflags for `runtime.Version` and `runtime.ProtocolVersion`.
+The binaries are built with `-trimpath` and ldflags for `platform/core/model.Version`.
 
 ## SDKs
 
@@ -65,7 +65,7 @@ make release-tag
 
 On push of a tag matching `v*`, **.github/workflows/release.yml** runs:
 
-- **goreleaser**: builds all platforms, creates GitHub Release with tarballs/zips and checksums.
+- **goreleaser**: builds all platforms for `runfabric`, `runfabricd`, and `runfabricw`, then creates GitHub Release tarballs/zips and checksums.
 - **npm**: builds all platform binaries, copies them into `packages/node/cli/bin/`, sets package version from the tag, and publishes **@runfabric/cli** and **@runfabric/sdk**. Requires **NPM_TOKEN** in repo secrets.
 
 ### 4. Optional: local snapshot (no publish)
@@ -85,7 +85,7 @@ cd packages/node/cli && npm pack
 cd ../sdk && npm pack
 ```
 
-Note: `runfabricd` binaries are built for local daemon/service usage but are not packaged into the Node CLI wrapper.
+Note: `runfabricd` and `runfabricw` binaries are built for daemon/worker usage and GitHub release artifacts, but they are not packaged into the Node CLI wrapper.
 
 ## Release (CI) summary
 

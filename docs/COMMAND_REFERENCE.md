@@ -22,8 +22,9 @@ Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-
 ## Project setup and scaffolding
 
 - `runfabric init [--dir <path>] [--template <api|worker|queue|cron|storage|eventbridge|pubsub>] [--provider <name>] [--state-backend <local|postgres|s3|gcs|azblob>] [--lang <node|ts|js|python|go>] [--service <name>] [--pm <npm|pnpm|yarn|bun>] [--skip-install] [--call-local] [--with-build] [--with-ci <github-actions>] [--no-interactive]` — Use `--with-ci github-actions` to add `.github/workflows/deploy.yml` (doctor → plan → deploy on push). `init` currently scaffolds a subset of backends for simplicity.
-- `runfabric generate` — Scaffold artifacts in an existing project: `generate function`, `generate resource`, `generate addon`, `generate provider-override`, `generate plugin`.
+- `runfabric generate` — Scaffold artifacts in an existing project: `generate function`, `generate worker`, `generate resource`, `generate addon`, `generate provider-override`, `generate plugin`.
 - `runfabric generate function <name> [--trigger http|cron|queue] [--route <method>:<path>] [--schedule <cron>] [--queue-name <name>] [--provider <key>] [--lang js|ts|python|go] [--entry <path>] [--dry-run] [--force] [--no-backup] [--interactive|--no-interactive] [--json]` — Add a new function: creates handler file and patches runfabric.yml. Infers provider and language from config and project; use `--trigger` (default http), `--route` (e.g. GET:/hello), `--schedule`, `--queue-name`. Fails if function name already exists; `--force` overwrites handler file only.
+- `runfabric generate worker <name> [--trigger queue] [--queue-name <name>] [--provider <key>] [--lang js|ts|python|go] [--entry <path>] [--dry-run] [--force] [--no-backup] [--interactive|--no-interactive] [--json]` — Add a queue worker function. Equivalent to `runfabric generate function <name> --trigger queue` with queue trigger as the default.
 - `runfabric generate resource <name> [--type database|cache|queue] [--connection-env <VAR>] [--dry-run] [--no-backup] [--interactive|--no-interactive] [--json]` — Add `resources.<name>` to runfabric.yml (type and connection env var for DATABASE_URL, REDIS_URL, etc.).
 - `runfabric generate addon <name> [--version <semver>] [--dry-run] [--no-backup] [--interactive|--no-interactive] [--json]` — Add `addons.<name>` to runfabric.yml; attach to functions via the function entry's `addons: [<name>]` field.
 - `runfabric generate provider-override <key> [--provider <name>] [--runtime <runtime>] [--region <region>] [--dry-run] [--no-backup] [--interactive|--no-interactive] [--json]` — Add `providerOverrides.<key>` for multi-cloud; use with `runfabric deploy --provider <key>`.
@@ -43,6 +44,13 @@ Generate interactive notes:
 - `runfabric workflow status -c <config> [--stage <name>] --run-id <id> [--json]` — Read a workflow run record from local run state.
 - `runfabric workflow cancel -c <config> [--stage <name>] --run-id <id> [--json]` — Mark a workflow run as cancel-requested.
 - `runfabric workflow replay -c <config> [--stage <name>] [--provider <key>] --run-id <id> --from-step <step-id> [--json]` — Replay a run from a specific step.
+
+Workflow runtime behavior notes:
+
+- Workflow commands execute through one in-process durable runtime loop (`WorkflowRuntime`) that combines scheduling + dispatch responsibilities for step execution.
+- Pause/resume semantics are durable: `human-approval` steps pause the run until approval input is persisted, then execution continues on resume/replay.
+- `workflow cancel` is boundary-based cancellation: it sets cancel-requested and the runtime applies cancellation on the next safe transition boundary.
+- Provider-native orchestration bindings (AWS Step Functions / GCP Cloud Workflows / Azure Durable) are extension/provider orchestration concerns and are separate from the local workflow runtime loop.
 
 ## Core lifecycle (doctor → plan → build/package → deploy → operate → remove)
 
@@ -130,12 +138,26 @@ Auth URL resolution order: `--auth-url` -> `RUNFABRIC_AUTH_URL` -> `.runfabricrc
 - `runfabric state lock-steal -c <config> [--stage <name>] [--json]` — Steal the deploy lock (e.g. after a crashed process).
 - `runfabric state backend-migrate -c <config> [--stage <name>] [--target <local|postgres|sqlite|s3|aws|dynamodb|gcs|azblob>] [--json]` — Migrate receipt and journal to another backend.
 
-## Runtime fabric
+## Runtime router
 
-- `runfabric fabric deploy [--rollback-on-failure|--no-rollback-on-failure] [--json]` — Active-active deploy to all `fabric.targets` (provider keys from runfabric.yml). Saves endpoints to `.runfabric/fabric-<stage>.json`. Requires `fabric` and `providerOverrides` in config.
-- `runfabric fabric status [--json]` — HTTP GET each fabric endpoint and report healthy/fail.
-- `runfabric fabric endpoints [--json]` — List fabric endpoint URLs (e.g. for Route53 failover or latency routing).
-- `runfabric fabric routing [--json]` — Generate DNS/load-balancer routing hints from `fabric.routing` and deployed fabric endpoints.
+- `runfabric router deploy [--rollback-on-failure|--no-rollback-on-failure] [--sync-cloudflare-dns] [--sync-cloudflare-dns-dry-run] [--allow-prod-dns-sync] [--enforce-dns-sync-stage-rollout] [--zone-id <id>] [--account-id <id>] [--json]` — Active-active deploy to all `fabric.targets` (provider keys from runfabric.yml). Saves endpoints to `.runfabric/fabric-<stage>.json`. Requires `fabric` and `providerOverrides` in config.
+  Optional post-deploy hook: `--sync-cloudflare-dns` runs the same Cloudflare reconciliation as `router dns-sync` immediately after a successful deploy. For `--stage prod`, `--allow-prod-dns-sync` is required as a safety gate.
+  With `--enforce-dns-sync-stage-rollout`, staged policy checks are enforced:
+  - `dev`: allowed by default
+  - `staging`: requires `RUNFABRIC_DNS_SYNC_DEV_APPROVED=true`
+  - `prod`: requires `RUNFABRIC_DNS_SYNC_STAGING_APPROVED=true` and `--allow-prod-dns-sync`
+- `runfabric router status [--json]` — HTTP GET each router endpoint and report healthy/fail.
+- `runfabric router endpoints [--json]` — List router endpoint URLs (e.g. for Route53 failover or latency routing).
+- `runfabric router routing [--json]` — Generate DNS/load-balancer routing hints from `fabric.routing` and deployed router endpoints.
+  JSON output uses deterministic contract `runfabric.fabric.routing.v1` with top-level fields: `contract`, `service`, `stage`, `hostname`, `strategy`, `healthPath`, `ttl`, `endpoints`, plus optional `dns` and `loadBalancer` hints.
+- `runfabric router dns-sync [--dry-run] [--allow-prod-dns-sync] [--enforce-dns-sync-stage-rollout] [--zone-id <id>] [--account-id <id>] [--json]` — Apply the router routing contract to Cloudflare DNS and (optionally) Load Balancer idempotently.
+  Reads `CLOUDFLARE_API_TOKEN` from the environment (never a flag). Zone ID and Account ID may be passed via flags or `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_ACCOUNT_ID` env vars.
+  - **DNS-only mode** (no Account ID): creates/updates a CNAME record at `hostname` pointing to the primary endpoint.
+  - **Full LB mode** (Account ID present): also reconciles an HTTPS health-check monitor, an LB pool (origins = all router endpoints), and a zone-level load balancer with the configured steering policy (`dynamic_latency` | `off` | `random`).
+  - Drift detection: resources are only mutated when content, origin list, steering policy, or TTL differs from the live state. No deletions without an explicit flag (not yet implemented).
+  - Use `--dry-run` to preview all planned changes before applying.
+
+Compatibility: `runfabric fabric ...` remains available as an alias to `runfabric router ...`.
 
 ## Compose
 

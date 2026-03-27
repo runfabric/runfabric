@@ -11,8 +11,20 @@ Shared contracts should live under `platform/core/contracts/` to avoid stale cro
 - **End-to-end routing**: Deploy flow (CLI → app → provider routing)
 - **Visual flow**: Engine request routing diagram
 - **Extension boundary**: Provider/runtime resolution boundary
+- **Ownership ADR**: `docs/ARCHITECTURE_OWNERSHIP.md`
 - **Where provider implementations live**: Provider code layout
 - **Why AWS is special**: Control plane + deployrunner + deployexec
+
+## Architecture ownership
+
+Canonical ownership and dependency direction rules for provider, router, runtime, and simulator domains are frozen in `docs/ARCHITECTURE_OWNERSHIP.md`.
+
+That ADR is the source of truth for:
+
+- canonical implementation areas,
+- allowed dependency directions,
+- forbidden edges,
+- the single `platform/extensions` importer rule.
 
 ---
 
@@ -86,6 +98,65 @@ For **non-AWS** providers: deploy/remove/invoke/logs via provider REST/SDK.
 ### 8. Recovery and deploy_resume
 
 **runfabric recover** can call **awsprovider.ResumeDeploy** with journal from file; same phase engine, completed checkpoints skipped.
+
+---
+
+## Workflow runtime flow: CLI -> app -> runtime -> step handler -> state
+
+Workflow execution currently uses a single in-process durable runtime loop (not separate scheduler and dispatcher services).
+
+### Runtime path (as implemented)
+
+1. CLI command entrypoint (`runfabric workflow run|status|cancel|replay`) in `internal/cli/common/workflow.go`.
+2. App boundary forwarding in `internal/app/app.go` delegates to `platform/workflow/app`.
+3. Workflow app constructs run spec and typed step handler in `platform/workflow/app/workflow.go`.
+4. Durable runtime loop executes in `platform/deploy/controlplane/workflow_runtime.go`.
+5. Step execution dispatch (code/ai/human-approval) is handled by `platform/deploy/controlplane/workflow_typed_steps.go`.
+6. Durable run/step state persists through `platform/core/state/core/runs.go` under `.runfabric/runs/<stage>/<runId>.json`.
+
+### Scheduler vs dispatcher model (current decision)
+
+- Keep scheduler and dispatcher as conceptual roles in docs for now.
+- Implementation uses one `WorkflowRuntime` loop that performs both responsibilities:
+  - selects the next executable step from durable run state,
+  - executes via `WorkflowStepHandler`,
+  - persists checkpoints/status transitions and retries,
+  - enforces pause/cancel/replay boundaries.
+- No standalone scheduler/dispatcher services are implemented in the engine at this time.
+
+### Workflow binding layers
+
+Two distinct binding layers exist and should not be conflated:
+
+1. Runtime step binding (engine runtime path)
+   - Binds workflow step kinds (`code`, `ai-*`, `human-approval`) to typed handler behavior in `workflow_typed_steps.go`.
+   - MCP/tool/resource/prompt calls are runtime-level step concerns (policy + correlation metadata).
+
+2. Provider orchestration binding (provider-native orchestration path)
+   - Binds configured provider extensions to cloud-native orchestrators (for example AWS Step Functions, GCP Cloud Workflows, Azure Durable Functions).
+   - This is provider extension/orchestration sync behavior, not the local `WorkflowRuntime` step scheduling loop.
+
+### AI workflow execution boundary
+
+- AI step execution is centralized in `platform/deploy/controlplane/workflow_ai_runtime.go` behind `AIStepRunner`.
+- `TypedStepHandler` routes `ai-retrieval`, `ai-generate`, `ai-structured`, and `ai-eval` to `AIRunner`.
+- MCP tool/resource/prompt access is executed through `workflow_mcp_runtime.go` and policy-checked in core runtime.
+- Provider adapters do not execute AI steps.
+
+### Prompt composition pipeline
+
+Prompt composition order for `ai-generate` is deterministic:
+
+1. Base prompt from step input.
+2. MCP prompt text from configured MCP binding (optional).
+3. Step context (`stepId`, `kind`).
+4. Run context (`runId`, `workflowHash`).
+
+This is implemented through `PromptRenderer` and defaults to `DeterministicPromptRenderer`; provider-specific renderers can be injected without changing core flow.
+
+### Contributor rule
+
+Do not add AI execution logic to provider adapters. Keep AI execution in controlplane/runtime so behavior remains cloud-agnostic, testable, and policy-consistent.
 
 ---
 

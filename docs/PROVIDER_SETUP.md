@@ -18,6 +18,12 @@ Provider-by-provider checklist for credentials and deploy wiring. The Go engine 
 5. Run **`runfabric doctor`**.
 6. Run **`runfabric deploy`**.
 
+## Contract Boundary (SDK-First)
+
+- External ` + "`extension/provider/runtime/simulator`" + ` plugins must import contracts from the SDK layer only.
+- Do not import ` + "`github.com/runfabric/runfabric/platform/...`" + ` in those plugin implementations.
+- Shared contracts are defined once in SDK packages and consumed by both plugins and platform internals.
+
 Real deploy is opt-in: **`RUNFABRIC_REAL_DEPLOY=1`** or **`RUNFABRIC_<PROVIDER>_REAL_DEPLOY=1`**. Simulated mode is default.
 
 ## Common flow
@@ -144,6 +150,26 @@ Optional CLI-based path:
 - `IBM_OPENWHISK_API_HOST` (optional; default `https://us-south.functions.cloud.ibm.com`)
 - `IBM_OPENWHISK_NAMESPACE` (optional; default `_`)
 - Deploy/remove/invoke/logs via OpenWhisk REST API.
+
+## Linode
+
+**Command-based deploy** (default when provider is `linode`):
+
+- `LINODE_TOKEN` — Linode API token for account authentication
+- `LINODE_CLI_BIN` (optional; default `linode-cli`)
+- Command overrides:
+  - `RUNFABRIC_LINODE_DEPLOY_CMD` — deploy command (must output JSON with deployment ID or function info)
+  - `RUNFABRIC_LINODE_REMOVE_CMD` — remove command
+  - `RUNFABRIC_LINODE_INVOKE_CMD` — invoke command (auto-discovered if `invokeUrl` is in config)
+  - `RUNFABRIC_LINODE_LOGS_CMD` — logs command
+- Built-in defaults: `linode-cli functions action-create` for deploy, `functions action-delete` for remove, `functions activation-list` for logs
+- Functions must resolve to artifact zips in order: `.runfabric/<name>.zip` → `dist/<name>.zip` → `build/<name>.zip`
+- Supported runtimes: `nodejs`, `python`
+- Supported triggers: `http`
+
+Optional direct invoke URL (bypasses command):
+
+- Set `invokeUrl` in provider config or `functions[].url` to invoke via HTTP POST directly
 
 ## Optional Provider-Native Traces/Metrics Commands
 
