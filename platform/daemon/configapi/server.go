@@ -1,14 +1,12 @@
 package configapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	"github.com/runfabric/runfabric/platform/core/workflow/app"
 )
 
 // Server provides a lightweight config API surface used by CLI daemon commands.
@@ -16,6 +14,7 @@ type Server struct {
 	Stage      string
 	APIKey     string
 	RateLimitN int
+	core       CoreWorkflowConnector
 
 	mu       sync.Mutex
 	requests map[string][]time.Time
@@ -25,7 +24,7 @@ func NewServer(stage string) *Server {
 	if stage == "" {
 		stage = "dev"
 	}
-	return &Server{Stage: stage, requests: make(map[string][]time.Time)}
+	return &Server{Stage: stage, core: coreWorkflowAdapter{}, requests: make(map[string][]time.Time)}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -87,13 +86,7 @@ func configPath(r *http.Request) string {
 }
 
 func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
-	cfg, err := config.Load(configPath(r))
-	if err == nil {
-		cfg, err = config.Resolve(cfg, s.stage(r))
-	}
-	if err == nil {
-		err = config.Validate(cfg)
-	}
+	err := s.core.Validate(configPath(r), s.stage(r))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -102,57 +95,64 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request) {
-	cfg, err := config.Load(configPath(r))
-	if err == nil {
-		cfg, err = config.Resolve(cfg, s.stage(r))
-	}
+	cfg, err := s.core.Resolve(configPath(r), s.stage(r))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	writeOK(w, cfg)
+	writeRawOK(w, cfg.Payload)
 }
 
 func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
-	res, err := app.Plan(configPath(r), s.stage(r), "")
+	res, err := s.core.Plan(configPath(r), s.stage(r))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	writeOK(w, res)
+	writeRawOK(w, res.Payload)
 }
 
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
-	res, err := app.Deploy(configPath(r), s.stage(r), "", false, false, nil, "")
+	res, err := s.core.Deploy(configPath(r), s.stage(r))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	writeOK(w, res)
+	writeRawOK(w, res.Payload)
 }
 
 func (s *Server) handleRemove(w http.ResponseWriter, r *http.Request) {
-	res, err := app.Remove(configPath(r), s.stage(r), "")
+	res, err := s.core.Remove(configPath(r), s.stage(r))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	writeOK(w, res)
+	writeRawOK(w, res.Payload)
 }
 
 func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
-	res, err := app.Releases(configPath(r))
+	res, err := s.core.Releases(configPath(r))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	writeOK(w, res)
+	writeRawOK(w, res.Payload)
 }
 
 func writeOK(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(data)
+}
+
+func writeRawOK(w http.ResponseWriter, payload json.RawMessage) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if len(payload) == 0 {
+		_, _ = w.Write([]byte("null"))
+		return
+	}
+	_, _ = bytes.NewBuffer(payload).WriteTo(w)
 }
 
 func writeErr(w http.ResponseWriter, code int, err error) {
