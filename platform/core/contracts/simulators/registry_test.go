@@ -1,22 +1,20 @@
 package simulators_test
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
-	simulators "github.com/runfabric/runfabric/platform/core/contracts/simulators"
+	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 )
 
 func TestBuiltinRegistry_LocalSimulator(t *testing.T) {
-	reg := simulators.NewBuiltinRegistry()
-	sim, err := reg.Get("local")
+	b, err := resolution.NewCached(resolution.Options{IncludeExternal: false})
 	if err != nil {
-		t.Fatalf("get local simulator: %v", err)
+		t.Fatalf("new boundary: %v", err)
 	}
-	res, err := sim.Simulate(context.Background(), simulators.Request{
+	res, err := b.Simulate(t.Context(), "local", resolution.SimulatorInvokeRequest{
 		Service:  "svc",
 		Stage:    "dev",
 		Function: "api",
@@ -51,13 +49,12 @@ func TestBuiltinRegistry_LocalSimulatorExecutesNodeHandler(t *testing.T) {
 		t.Fatalf("write handler: %v", err)
 	}
 
-	reg := simulators.NewBuiltinRegistry()
-	sim, err := reg.Get("local")
+	b, err := resolution.NewCached(resolution.Options{IncludeExternal: false})
 	if err != nil {
-		t.Fatalf("get local simulator: %v", err)
+		t.Fatalf("new boundary: %v", err)
 	}
 
-	res, err := sim.Simulate(context.Background(), simulators.Request{
+	res, err := b.Simulate(t.Context(), "local", resolution.SimulatorInvokeRequest{
 		Service:    "svc",
 		Stage:      "dev",
 		Function:   "handler",
