@@ -3,7 +3,7 @@ package application
 import (
 	"strings"
 
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
 )
 
 // HandlerResult is the generated handler file content and extension.

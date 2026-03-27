@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	planner "github.com/runfabric/runfabric/platform/core/planner/engine"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
 )
 
 func TestHandlerContent(t *testing.T) {
