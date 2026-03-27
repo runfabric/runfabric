@@ -143,11 +143,35 @@ type DevStreamRequest struct {
 
 // DevStreamSession captures provider-side tunnel redirect state for API workflows.
 // RestoreData can carry provider-specific state that callers persist externally.
+// restore is an unexported, non-serialized callback used by in-process plugins
+// to revert provider-side state when the dev-stream session exits.
 type DevStreamSession struct {
 	EffectiveMode  string         `json:"effectiveMode,omitempty"`
 	MissingPrereqs []string       `json:"missingPrereqs,omitempty"`
 	StatusMessage  string         `json:"statusMessage,omitempty"`
 	RestoreData    map[string]any `json:"restoreData,omitempty"`
+	restore        func(context.Context) error
+}
+
+// NewDevStreamSession builds a session with an optional in-process restore callback.
+// The callback is never serialized; external plugins that communicate over the
+// wire protocol should leave restore as nil and use RestoreData instead.
+func NewDevStreamSession(mode string, missing []string, message string, restore func(context.Context) error) *DevStreamSession {
+	return &DevStreamSession{
+		EffectiveMode:  mode,
+		MissingPrereqs: append([]string(nil), missing...),
+		StatusMessage:  message,
+		restore:        restore,
+	}
+}
+
+// Restore calls the in-process restore callback if one was registered.
+// It is a no-op when the session is nil or the callback is absent.
+func (s *DevStreamSession) Restore(ctx context.Context) error {
+	if s == nil || s.restore == nil {
+		return nil
+	}
+	return s.restore(ctx)
 }
 
 type RecoveryRequest struct {
