@@ -7,7 +7,6 @@ project_name: runfabric
 
 builds:
   - id: runfabric
-    dir: platform/engine
     main: ./cmd/runfabric
     binary: runfabric
     goos:
@@ -19,8 +18,39 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/runfabric/runfabric/engine/internal/runtime.Version={{ .Version }}
-      - -X github.com/runfabric/runfabric/engine/internal/runtime.ProtocolVersion=1
+      - -X github.com/runfabric/runfabric/platform/core/model.Version={{ .Version }}
+    env:
+      - CGO_ENABLED=0
+
+  - id: runfabricd
+    main: ./cmd/runfabricd
+    binary: runfabricd
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/runfabric/runfabric/platform/core/model.Version={{ .Version }}
+    env:
+      - CGO_ENABLED=0
+
+  - id: runfabricw
+    main: ./cmd/runfabricw
+    binary: runfabricw
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/runfabric/runfabric/platform/core/model.Version={{ .Version }}
     env:
       - CGO_ENABLED=0
 
@@ -33,6 +63,24 @@ archives:
     name_template: "runfabric_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     builds:
       - runfabric
+
+  - id: runfabricd
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "runfabricd_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds:
+      - runfabricd
+
+  - id: runfabricw
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "runfabricw_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds:
+      - runfabricw
 
 checksum:
   name_template: "checksums.txt"

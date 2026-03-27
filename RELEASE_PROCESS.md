@@ -8,7 +8,7 @@ When ready to ship from this repo:
 
 1. **Version + changelog** — Set **VERSION** (e.g. `0.2.0` or `0.2.0-beta.0`). Update **CHANGELOG.md** with a `## [<version>]` section (see [CHANGELOG_POLICY.md](CHANGELOG_POLICY.md)).
 2. **Pre-release gate** — From repo root: `make release-check` (format, vet, build, test with `-race`, build binary, optional UPX).
-3. **Tag and push** — `make release-tag` (creates `v$(cat VERSION)` and pushes; CI runs [.github/workflows/release.yml](.github/workflows/release.yml): GoReleaser + npm publish for `@runfabric/cli` and `@runfabric/sdk`). Ensure **NPM_TOKEN** is set in repo secrets for npm publish.
+3. **Tag and push** — `make release-tag` (creates `v$(cat VERSION)` and pushes; CI runs [.github/workflows/release.yml](.github/workflows/release.yml): GoReleaser publishes `runfabric`, `runfabricd`, and `runfabricw` artifacts + npm publish for `@runfabric/cli` and `@runfabric/sdk`). Ensure **NPM_TOKEN** is set in repo secrets for npm publish.
 
 See **docs/BUILD_AND_RELEASE.md** for build commands and local snapshot (no publish).
 

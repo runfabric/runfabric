@@ -1,88 +1,71 @@
 # TODO
 
-## Deferred: Unified Internal + External Provider Interface
+## Pro TODO: Architecture Rule Compliance (Rules 1-3 + Flow)
 
-- [ ] Extract a transport-safe shared provider type layer for request/result shapes.
-  - Goal: align core provider contracts and Go plugin SDK transport types where safe.
-  - Note: keep core-only semantics (for example in-memory restore callbacks) in core wrappers.
+- [x] Phase 1: Freeze canonical ownership model (ADR + scope lock).
+  - Define canonical source for shared contracts as `internal/<domain>/` implementations (no SDK-owned canonicals).
+  - Define allowed dependency directions and explicit forbidden edges.
+  - Publish ownership table for `router`, `runtime`, `simulator`, and `provider` domains.
 
-- [ ] Add an SDK-to-core in-process adapter.
-  - Goal: allow built-in providers to implement SDK-style plugin interfaces while running in-process.
-  - Scope: include optional capabilities (observability, dev-stream, recovery, orchestration).
+- [x] Phase 2: Remove alias-only contract layers.
+  - Replace alias/re-export blocks in `internal/extensions/contracts/types.go` with canonical concrete types in internal domain packages.
+  - Ensure shared interfaces/types are implemented once in internal and consumed downstream without bridges.
 
-- [ ] Migrate one real built-in provider first (not API-dispatch).
-  - Candidate: `gcp-functions` (current built-in implementation flag is true).
-  - Constraint: do not change API-dispatch provider behavior in this first migration.
+- [x] Phase 3: Eliminate bridge/delegator packages.
+  - Remove internal bridge wrappers that delegate to `extensions/...` (`internal/extensions/routers`, `internal/extensions/runtimes`, `internal/extensions/simulators`) or convert them into canonical implementations only.
+  - Remove any facade package that exists only to forward calls/types.
 
-- [ ] After migration, run focused validation.
-  - `go test ./platform/extensions/internal/providers/gcp/...`
-  - `go test ./platform/extensions/providerpolicy/...`
-  - `go test ./platform/extensions/registry/resolution/...`
+- [x] Phase 4: Remove duplicate implementations.
+  - For each domain (`router`, `runtime`, `simulator`), select one canonical implementation location.
+  - Delete duplicate logic in non-canonical layers and update all call sites.
 
-## Deferred: Workflow Flow Alignment (Diagram to Implementation)
+- [x] Phase 5: Enforce flow direction.
+  - Remove `internal -> extensions` imports, especially from `internal/extensions/builtins/loaders.go`.
+  - Refactor loader/wiring so internal remains upstream of SDK/extensions according to normalized flow.
 
-- [ ] Document the as-implemented workflow runtime path (CLI -> app -> runtime -> step handler -> state) in docs.
-  - Goal: make architecture docs match current code, including where scheduler/dispatcher are combined in one runtime loop.
+- [x] Phase 6: Tighten CI architecture checks.
+  - Extend `make check-boundary` (or add `make check-architecture`) to fail on:
+    - alias-only type re-export files,
+    - bridge/delegator packages,
+    - duplicate canonical symbols across layers,
+    - forbidden direction imports (`internal -> extensions`, `extensions -> internal/platform`).
 
-- [ ] Clarify workflow binding layers.
-  - Goal: distinguish runtime step binding from provider orchestration binding (AWS Step Functions / GCP Cloud Workflows).
+- [x] Phase 7: Add focused architecture tests.
+  - Add unit tests for import graph constraints and package ownership invariants.
+  - Add golden tests for allowlist/denylist package patterns.
 
-- [ ] Decide and implement target model for Scheduler and Dispatcher.
-  - Goal: either keep them conceptual (documented only) or split runtime loop into explicit scheduler/dispatcher components.
-  - Constraint: preserve replay/cancel/pause behavior.
+- [x] Phase 8: Update docs and migration notes.
+  - Update `misc/Rules (normalized).md` examples with concrete package paths.
+  - Add migration notes for moved types/functions and expected import replacements.
 
-- [ ] Align workflow config schema with typed step runtime.
-  - Goal: support typed workflow step fields end-to-end in config structs and run-spec builder.
+- [x] Exit gate: verify compliance and stability.
+  - `make check-boundary`
+  - `make check-architecture`
+  - `go build ./...`
+  - `go test ./...`
+  - Block merge unless all architecture checks pass.
 
-- [ ] Add focused tests for flow parity with architecture diagram.
-  - Cases: code step, ai step, human-approval pause/resume, MCP call path, state persistence, replay from step, cancel boundary behavior.
+- [x] Follow-up: Phase 1 ownership ADR and Phase 7 focused architecture tests are complete.
 
-- [ ] Update command/docs examples to reflect true runtime behavior.
-  - Goal: docs should not imply separate scheduler/dispatcher services unless implemented.
+## Completed Checklist: Router Plugin Configurability (Phase 1)
 
-## Deferred: Workflow AI Runtime + MCP Layering
+- [x] Add router command/backend plugin selector (`extensions.routerPlugin`) with sane default.
+- [x] Keep default behavior stable by defaulting to `cloudflare` when unset.
+- [x] Add explicit guardrails for unsupported router plugin IDs with actionable errors.
+- [x] Add unit tests for router plugin selection and validation behavior.
+- [x] Update config schema and docs for router plugin configuration.
 
-- [ ] Extract a dedicated AI runtime layer from typed step handler logic.
-  - Goal: separate step orchestration from AI execution concerns (prompt build, model call, tool use, output shaping).
-  - Constraint: preserve workflow state transitions (running, paused, failed, timed_out, cancelled).
+## Completed Checklist: Router Plugin Kind Dispatch (Phase 2)
 
-- [ ] Introduce an explicit AI step runner boundary.
-  - Goal: keep WorkflowRuntime focused on scheduling/execution flow while AI runner handles ai-retrieval, ai-generate, ai-structured, and ai-eval.
+- [x] Add first-class `router` plugin kind to extension manifests and kind normalization.
+- [x] Extend external plugin install/discovery and CLI kind parsing to support `router`.
+- [x] Add built-in router registry (`extensions/routers`) with Cloudflare router plugin.
+- [x] Add boundary/connector router dispatch (`ResolveRouter` + `SyncRouter`) through extension layer.
+- [x] Refactor DNS sync flow to execute through configured router plugin (`extensions.routerPlugin`).
+- [x] Decouple Cloudflare sync engine from workflow app types to avoid import cycles.
+- [x] Add/adjust tests for manifest kinds, boundary router resolution, and router CLI behavior.
 
-- [ ] Split MCP concerns into a standalone runtime component.
-  - Goal: centralize MCP binding parse, call dispatch, correlation metadata, and error mapping.
-
-- [ ] Harden MCP policy enforcement contract.
-  - Goal: enforce allow/deny/defaultDeny consistently before MCP calls and make policy outcomes observable.
-
-- [ ] Define and implement prompt rendering pipeline.
-  - Goal: deterministic prompt composition (base prompt + MCP prompt + step context + run context).
-
-- [ ] Add focused tests for AI runtime flow parity.
-  - Cases: prompt rendering, MCP allowed call, MCP denied call, tool result merge, model output shaping, failure propagation.
-
-- [ ] After implementation, run focused validation.
-  - `go test ./platform/deploy/controlplane/...`
-  - `go test ./platform/core/workflow/...`
-  - `go test ./platform/core/model/config/...`
-  - `go test ./platform/extensions/registry/resolution/...`
-
-## Deferred: Services -> Workflows -> Execution Model
-
-- [ ] Define canonical flow: Services -> Workflows -> Execution.
-  - Goal: make this the architecture contract used by CLI, docs, and runtime code.
-
-- [ ] Split execution into explicit runners.
-  - Scope: code runner, AI runtime runner, human approval runner.
-  - Constraint: preserve replay, cancel, and pause/resume behavior.
-
-- [ ] Formalize AI Runtime <-> MCP boundary.
-  - Goal: isolate MCP integration behind a stable interface so AI runtime owns prompt/model flow and MCP owns tool/resource/prompt calls.
-
-- [ ] Add parity tests for the model.
-  - Cases: code path, AI path, human path, AI+MCP interaction, and end-to-end state transitions.
-
-## Deferred: Code-Driven Global DNS Routing (AWS + GCP + Cloudflare)
+## Unified Backlog
 
 - [ ] Add a deterministic config contract for DNS/LB sync inputs.
   - Goal: treat `runfabric fabric routing --json` output as the source of truth for DNS intents.
@@ -124,11 +107,9 @@
 
 - [ ] Run focused validation after implementation.
   - `go test ./platform/core/workflow/...`
-  - `go test ./internal/cli/fabric/...`
+  - `go test ./internal/cli/router/...`
   - `go test ./platform/extensions/internal/providers/cloudflare/...`
   - `go test ./platform/test/...`
-
-## Deferred: New Extension Kind (router/globalrouter)
 
 - [ ] Phase 0: Feasibility checklist (go/no-go).
   - Validate plugin protocol impact: confirm adding a new kind does not break existing provider/runtime/simulator handshakes.
@@ -179,8 +160,6 @@
 - [ ] Document extension authoring guide for `router` kind.
   - Goal: enable third-party global routing plugins with examples and best practices.
   - Include: plugin template, required capabilities, and troubleshooting.
-
-## Deferred: Router/Global Routing Enhancements (Next Wave)
 
 - [ ] Add router extension SDK and generator template.
   - Goal: scaffold `router` plugins with `plan|apply|status|rollback|inspect` stubs and tests.

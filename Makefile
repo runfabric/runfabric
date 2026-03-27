@@ -1,7 +1,8 @@
 APP=runfabric
 DAEMON_APP=runfabricd
+WORKER_APP=runfabricw
 
-.PHONY: all help build build-daemon build-platform build-daemon-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
+.PHONY: all help build build-daemon build-worker build-platform build-daemon-platform build-worker-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax check-boundary check-architecture release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
 
 # UPX: compress binaries for smaller distribution. Override with e.g. make build-upx UPX="upx --best"
 # On macOS, UPX requires --force-macos; compressed binaries may need re-signing for notarization.
@@ -15,6 +16,7 @@ GOARCH := $(shell go env GOARCH)
 BIN_SUFFIX := $(if $(filter windows,$(GOOS)),.exe,)
 PLATFORM_BIN := bin/$(APP)-$(GOOS)-$(GOARCH)$(BIN_SUFFIX)
 PLATFORM_DAEMON_BIN := bin/$(DAEMON_APP)-$(GOOS)-$(GOARCH)$(BIN_SUFFIX)
+PLATFORM_WORKER_BIN := bin/$(WORKER_APP)-$(GOOS)-$(GOARCH)$(BIN_SUFFIX)
 EXAMPLE_CONFIG ?= examples/node/hello-aws/runfabric.yml
 EXAMPLE_STAGE ?= dev
 AUDIT_DIR ?= .runfabric/audit
@@ -25,10 +27,12 @@ all: build
 help:
 	@echo "RunFabric Makefile targets:"
 	@echo "  make              same as make build"
-	@echo "  make build        build binaries to bin/runfabric and bin/runfabricd"
+	@echo "  make build        build binaries to bin/runfabric, bin/runfabricd, and bin/runfabricw"
 	@echo "  make build-daemon build daemon binary to bin/runfabricd"
+	@echo "  make build-worker build worker binary to bin/runfabricw"
 	@echo "  make build-platform  build CLI to bin/runfabric-$(GOOS)-$(GOARCH)$(BIN_SUFFIX) (for SDK)"
 	@echo "  make build-daemon-platform  build daemon binary to bin/runfabricd-$(GOOS)-$(GOARCH)$(BIN_SUFFIX)"
+	@echo "  make build-worker-platform  build worker binary to bin/runfabricw-$(GOOS)-$(GOARCH)$(BIN_SUFFIX)"
 	@echo "  make build-all-platforms  build all GoReleaser targets into bin/"
 	@echo "  make build-upx    build then compress bin/runfabric with UPX"
 	@echo "  make build-platform-upx   build platform binary then compress with UPX"
@@ -39,6 +43,8 @@ help:
 	@echo "  make lint         go vet / golangci-lint"
 	@echo "  make release-check  format + vet + build + test -race + build CLI + UPX (CI gate)"
 	@echo "  make check-syntax   go vet + go build + go test -count=1 (no -race); fast PR feedback"
+	@echo "  make check-boundary  verify extension/packages/testdata stubs have no platform/ imports"
+	@echo "  make check-architecture  enforce normalized architecture flow + anti-bridge rules"
 	@echo "  make check-docs-sync  verify doc links and no outdated refs (packages/planner, packages/core)"
 	@echo "  make pre-push       lint + validation (used by .githooks/pre-push)"
 	@echo "  make release-tag   create and push tag v\$$(cat VERSION) to trigger CI release"
@@ -74,10 +80,15 @@ build:
 	@mkdir -p bin
 	go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(APP) ./cmd/runfabric
 	go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(DAEMON_APP) ./cmd/runfabricd
+	go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(WORKER_APP) ./cmd/runfabricw
 
 build-daemon:
 	@mkdir -p bin
 	go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(DAEMON_APP) ./cmd/runfabricd
+
+build-worker:
+	@mkdir -p bin
+	go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(WORKER_APP) ./cmd/runfabricw
 
 # Platform-specific binary (name matches SDK: runfabric-darwin-arm64, runfabric-windows-amd64.exe, etc.)
 build-platform:
@@ -90,6 +101,11 @@ build-daemon-platform:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o $(PLATFORM_DAEMON_BIN) ./cmd/runfabricd
 	@echo "Built $(PLATFORM_DAEMON_BIN)"
 
+build-worker-platform:
+	@mkdir -p bin
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o $(PLATFORM_WORKER_BIN) ./cmd/runfabricw
+	@echo "Built $(PLATFORM_WORKER_BIN)"
+
 # Build all platforms (same matrix as .goreleaser.yaml) into bin/
 build-all-platforms:
 	@mkdir -p bin
@@ -99,8 +115,9 @@ build-all-platforms:
 		echo "Building $$GOOS-$$GOARCH..."; \
 		CGO_ENABLED=0 GOOS=$$GOOS GOARCH=$$GOARCH go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(APP)-$$GOOS-$$GOARCH$$SUF ./cmd/runfabric; \
 		CGO_ENABLED=0 GOOS=$$GOOS GOARCH=$$GOARCH go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(DAEMON_APP)-$$GOOS-$$GOARCH$$SUF ./cmd/runfabricd; \
+		CGO_ENABLED=0 GOOS=$$GOOS GOARCH=$$GOARCH go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/$(WORKER_APP)-$$GOOS-$$GOARCH$$SUF ./cmd/runfabricw; \
 	done
-	@echo "Built all platform binaries (runfabric + runfabricd) in bin/"
+	@echo "Built all platform binaries (runfabric + runfabricd + runfabricw) in bin/"
 
 # Build then compress with UPX (requires: go build, upx). Use for smaller distribution size.
 build-upx: build
@@ -123,8 +140,81 @@ build-all-platforms-upx: build-all-platforms
 	done
 	@echo "Compressed all platform binaries in bin/"
 
+# Enforce extension boundary rules:
+#   Rule 1: extensions/ must not import github.com/runfabric/runfabric/internal/ or /platform/
+#   Rule 2: Shared types must be canonically in internal/<domain> (not duplicated/aliased)
+#   Rule 3: No bridge, alias, or re-export file anywhere (all-alias type blocks)
+#   Rule 4: At most one file in platform/extensions/ may import root extensions/
+#   Legacy: packages/ and platform/extension/external/testdata/ must not import platform/
+check-boundary:
+	@echo "Checking extension boundary rules..."
+	@FAILED=0; \
+	\
+	echo "  [Rule 1] extensions/ must not import internal/ or platform/..."; \
+	if grep -rn '"github.com/runfabric/runfabric/internal/' extensions/ --include='*.go' 2>/dev/null | grep -v '_test.go'; then \
+		echo "  ERROR [Rule 1]: extensions/ imports internal/ (see above)"; FAILED=1; \
+	fi; \
+	if grep -rn '"github.com/runfabric/runfabric/platform/' extensions/ --include='*.go' 2>/dev/null | grep -v '_test.go'; then \
+		echo "  ERROR [Rule 1]: extensions/ imports platform/ (see above)"; FAILED=1; \
+	fi; \
+	\
+	echo "  [Rule 3] No alias-only re-export files in extensions/..."; \
+	for f in $$(find extensions/ -name '*.go' ! -name '*_test.go' 2>/dev/null); do \
+		if [ -f "$$f" ] && grep -q '^\s*[A-Za-z].*=.*\.' "$$f" && ! grep -qE '^\s*(func|type [A-Za-z]+\s+(struct|interface)|var|const)\b' "$$f"; then \
+			echo "  ERROR [Rule 3]: $$f appears to be an alias-only re-export file"; FAILED=1; \
+		fi; \
+	done; \
+	\
+	echo "  [Rule 4] At most one platform/extensions file may import root extensions/..."; \
+	COUNT=$$(grep -rln '"github.com/runfabric/runfabric/extensions"' platform/extensions/ --include='*.go' 2>/dev/null | grep -v '_test.go' | wc -l | tr -d ' '); \
+	if [ "$$COUNT" -gt "1" ]; then \
+		echo "  ERROR [Rule 4]: $${COUNT} files in platform/extensions/ import root extensions/ (max 1):"; \
+		grep -rln '"github.com/runfabric/runfabric/extensions"' platform/extensions/ --include='*.go' | grep -v '_test.go'; \
+		FAILED=1; \
+	fi; \
+	\
+	echo "  [Legacy] packages/ and testdata stubs must not import platform/..."; \
+	if grep -rn '"github.com/runfabric/runfabric/platform/' packages/ platform/extensions/external/testdata/ 2>/dev/null | grep -v '_test.go'; then \
+		echo "  ERROR [Legacy]: platform/ import found in packages/ or testdata (see above)"; FAILED=1; \
+	fi; \
+	\
+	if [ "$$FAILED" -ne "0" ]; then exit 1; fi; \
+	echo "check-boundary OK"
+
+# Enforce normalized architecture rules beyond import boundary checks:
+#   - internal/ must not import root extensions/
+#   - internal/extensions/contracts must not be alias-only re-export layers
+#   - internal/extensions/{routers,runtimes,simulators} must not bridge to root extensions/
+#   - internal/extensions/builtins loader must not wire root extensions directly
+check-architecture: check-boundary
+	@echo "Checking normalized architecture rules..."
+	@FAILED=0; \
+	\
+	echo "  [Flow] internal/ must not import root extensions/..."; \
+	if grep -rn '"github.com/runfabric/runfabric/extensions/' internal/ --include='*.go' 2>/dev/null | grep -v '_test.go'; then \
+		echo "  ERROR [Flow]: internal/ imports root extensions/ (see above)"; FAILED=1; \
+	fi; \
+	\
+	echo "  [Rule 3] internal/extensions/contracts must not be alias-only re-export"; \
+	if [ -f internal/extensions/contracts/types.go ] && grep -Eq '^\s*(type\s+[A-Za-z0-9_]+\s*=|[A-Za-z0-9_]+\s*=)' internal/extensions/contracts/types.go; then \
+		echo "  ERROR [Rule 3]: internal/extensions/contracts/types.go contains alias/re-export type definitions"; FAILED=1; \
+	fi; \
+	\
+	echo "  [Rule 3] internal bridge packages must not delegate to root extensions/..."; \
+	if grep -rn '"github.com/runfabric/runfabric/extensions/' internal/extensions/routers/ internal/extensions/runtimes/ internal/extensions/simulators/ --include='*.go' 2>/dev/null | grep -v '_test.go'; then \
+		echo "  ERROR [Rule 3]: bridge/delegator imports found in internal/extensions/{routers,runtimes,simulators}"; FAILED=1; \
+	fi; \
+	\
+	echo "  [Flow] internal/extensions/builtins must not wire root extensions directly"; \
+	if [ -f internal/extensions/builtins/loaders.go ] && grep -Eq '"github.com/runfabric/runfabric/extensions/' internal/extensions/builtins/loaders.go; then \
+		echo "  ERROR [Flow]: internal/extensions/builtins/loaders.go imports root extensions/*"; FAILED=1; \
+	fi; \
+	\
+	if [ "$$FAILED" -ne "0" ]; then exit 1; fi; \
+	echo "check-architecture OK"
+
 # Fast CI check: vet, build, test without -race. Use for quick PR feedback before full release-check.
-check-syntax:
+check-syntax: check-architecture
 	@echo "Running go vet..."
 	@go vet ./...
 	@echo "Building all packages..."
@@ -134,7 +224,7 @@ check-syntax:
 	@echo "check-syntax OK"
 
 # Pre-release validation: format, vet, build all, test with race, build CLI, then compress with UPX if available (matches CI; AGENTS.md default gate).
-release-check:
+release-check: check-architecture
 	@echo "Checking format (gofmt)..."
 	@test -z "$$(gofmt -l .)" || { echo "Go code is not formatted. Run: gofmt -w ."; gofmt -d .; exit 1; }
 	@echo "Running go vet..."
@@ -183,6 +273,7 @@ check-docs-sync:
 
 # Pre-push: linting and validation (format, vet, build, test, docs). Used by .githooks/pre-push. Skips UPX.
 pre-push:
+	@$(MAKE) check-architecture
 	@echo "Checking format (gofmt)..."
 	@test -z "$$(gofmt -l .)" || { echo "Go code is not formatted. Run: gofmt -w ."; gofmt -d .; exit 1; }
 	@echo "Running go vet..."
