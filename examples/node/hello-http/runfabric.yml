@@ -1,13 +1,17 @@
-
 service: hello-http
-runtime: nodejs
-entry: src/index.ts
+provider:
+  name: aws-lambda
+  runtime: nodejs
 
-providers:
-  - aws-lambda
-  - cloudflare-workers
+providerOverrides:
+  cloudflare:
+    name: cloudflare-workers
+    runtime: nodejs
 
-triggers:
-  - type: http
-    method: GET
-    path: /hello
+functions:
+  - name: api
+    entry: src/index.ts
+    triggers:
+      - type: http
+        method: GET
+        path: /hello

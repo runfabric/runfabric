@@ -14,16 +14,16 @@ Use this guide when you need more than a single default `handler`. Aligned with 
 
 ```yaml
 service: hello-api
-runtime: nodejs
-entry: src/index.ts
-
-providers:
-  - aws-lambda
-
-triggers:
-  - type: http
-    method: GET
-    path: /hello
+provider:
+  name: aws-lambda
+  runtime: nodejs
+functions:
+  - name: api
+    entry: src/index.ts
+    triggers:
+      - type: http
+        method: GET
+        path: /hello
 ```
 
 ```ts
@@ -40,18 +40,17 @@ export const handler: UniversalHandler = async (req) => ({
 
 ```yaml
 service: multi-api
-runtime: nodejs
-entry: src/index.ts
-
-providers:
-  - aws-lambda
-
-triggers:
-  - type: http
-    method: GET
-    path: /health
+provider:
+  name: aws-lambda
+  runtime: nodejs
 
 functions:
+  - name: api
+    entry: src/index.ts
+    triggers:
+      - type: http
+        method: GET
+        path: /health
   - name: public-api
     entry: src/public.ts
     triggers:
@@ -97,17 +96,24 @@ Framework wiring checklist:
 ## Scenario 4: Queue + Storage
 
 ```yaml
-triggers:
-  - type: queue
-    queue: arn:aws:sqs:us-east-1:123456789012:jobs
-  - type: storage
-    bucket: uploads
-    events:
-      - s3:ObjectCreated:*
+service: worker-app
+provider:
+  name: aws-lambda
+  runtime: nodejs
+functions:
+  - name: worker
+    entry: src/worker.ts
+    triggers:
+      - type: queue
+        queue: arn:aws:sqs:us-east-1:123456789012:jobs
+      - type: storage
+        bucket: uploads
+        events:
+          - s3:ObjectCreated:*
 ```
 
 ## Related Examples
 
-- `examples/handler-scenarios/README.md`
-- `examples/handler-scenarios/single-handler/runfabric.yml`
-- `examples/handler-scenarios/multi-handler/runfabric.yml`
+- `examples/node/handler-scenarios/README.md`
+- `examples/node/handler-scenarios/single-handler/runfabric.yml`
+- `examples/node/handler-scenarios/multi-handler/runfabric.yml`

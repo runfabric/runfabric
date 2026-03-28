@@ -1,7 +1,7 @@
 services:
   - name: hello-api
-    config: ./runfabric.quickstart.yml
+    config: ./runfabric.cloudflare-workers.yml
   - name: hello-worker
-    config: ./runfabric.quickstart.yml
+    config: ./runfabric.cloudflare-workers.yml
     dependsOn:
       - hello-api

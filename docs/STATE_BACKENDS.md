@@ -1,6 +1,6 @@
 # State Backends
 
-This document defines how runfabric state storage works, how to wire backend credentials, and minimum access requirements. Aligned with [upstream STATE_BACKENDS](https://github.com/runfabric/runfabric/blob/main/docs/STATE_BACKENDS.md). In this repo the Go engine supports both `backend` and `state` blocks in runfabric.yml; config is normalized so both map to the same backends.
+This document defines how runfabric state storage works, how to wire backend credentials, and minimum access requirements. Aligned with [upstream STATE_BACKENDS](https://github.com/runfabric/runfabric/blob/main/docs/STATE_BACKENDS.md). In this repo the canonical configuration is the `backend` block in `runfabric.yml`.
 
 Quick credentials matrix (providers + state backends): [CREDENTIALS.md](CREDENTIALS.md).
 
@@ -31,31 +31,19 @@ Current engine-accepted backend kinds:
 ## Schema
 
 ```yaml
-state:
-  backend: local | postgres | sqlite | s3 | dynamodb | gcs | azblob
-  keyPrefix: runfabric/state
-  lock:
-    enabled: true
-    timeoutSeconds: 30
-    heartbeatSeconds: 10
-    staleAfterSeconds: 60
-  local:
-    dir: ./.runfabric/state
-  postgres:
-    connectionStringEnv: RUNFABRIC_STATE_POSTGRES_URL
-    schema: public
-    table: runfabric_state
-  s3:
-    bucket: my-state-bucket
-    region: us-east-1
-    keyPrefix: runfabric/state
-    useLockfile: true
-  gcs:
-    bucket: my-state-bucket
-    prefix: runfabric/state
-  azblob:
-    container: runfabric-state
-    prefix: runfabric/state
+backend:
+  kind: local | postgres | sqlite | s3 | dynamodb | gcs | azblob
+  s3Bucket: my-state-bucket
+  s3Prefix: runfabric/state
+  lockTable: runfabric-locks
+  gcsBucket: my-state-bucket
+  gcsPrefix: runfabric/state
+  azblobContainer: runfabric-state
+  azblobPrefix: runfabric/state
+  postgresConnectionStringEnv: RUNFABRIC_STATE_POSTGRES_URL
+  postgresTable: runfabric_receipts
+  sqlitePath: .runfabric/state.db
+  receiptTable: runfabric-receipts
 ```
 
 You can use dynamic env bindings in these values:
@@ -71,7 +59,7 @@ You can use dynamic env bindings in these values:
 
 ### postgres (receipts)
 
-- Set connection string env named by `backend.postgresConnectionStringEnv` or `state.postgres.connectionStringEnv` (default `RUNFABRIC_STATE_POSTGRES_URL`).
+- Set connection string env named by `backend.postgresConnectionStringEnv` (default `RUNFABRIC_STATE_POSTGRES_URL`).
 - Table name: `backend.postgresTable` (default `runfabric_receipts`). Table is created automatically with columns `workspace_id`, `stage`, `data` (JSONB), `updated_at`.
 - Example: `export RUNFABRIC_STATE_POSTGRES_URL="postgres://user:pass@host:5432/dbname?sslmode=require"`
 
@@ -167,7 +155,7 @@ runfabric state migrate -c runfabric.yml --from local --to postgres --json
 ## Notes On Current Runtime Behavior
 
 - `local` uses `.runfabric/state/<service>/<stage>/<provider>.state.json`.
-- `postgres` uses a real table backend (`state.postgres.schema`.`state.postgres.table`) keyed by `<keyPrefix>/<service>/<stage>/<provider>.state.json`.
+- `postgres` uses a real table backend (`backend.postgresTable`) keyed by workspace root + stage.
 - `s3`, `gcs`, and `azblob` use real object storage backends keyed by `<prefix>/<service>/<stage>/<provider>.state.json`.
 - Locking is token-based with timeout, stale-lock recovery, and heartbeat renewal.
 

@@ -10,7 +10,7 @@
 
 - **Core engine and CLI** — Go code in `cmd/`, `internal/`, and `platform/`; build with `make build` → `bin/runfabric`, `bin/runfabricw`, and `bin/runfabricd`. **Packages** (Node CLI/SDK, Python, Go, Java, .NET) live under `packages/`. See [docs/FILE_STRUCTURE.md](docs/FILE_STRUCTURE.md) and [docs/LAYOUT.md](docs/LAYOUT.md).
 - **Deployment framework** — Not a cluster scheduler or standalone runtime; uses each provider’s managed serverless (Lambda, Cloud Run, Workers, etc.).
-- **Config** — `runfabric.yml` (not a drop-in replacement for `serverless.yml`; use `runfabric migrate` to convert).
+- **Config** — `runfabric.yml` (not a drop-in replacement for `serverless.yml`; follow [docs/MIGRATION.md](docs/MIGRATION.md) for manual migration guidance).
 - **Production path** — Node-first beta; other runtimes (Python, Go) are supported per provider.
 
 ## Why RunFabric
@@ -18,7 +18,7 @@
 - **One config, one CLI** — One `runfabric.yml` and the same `runfabric` commands across all supported providers.
 - **Portability** — Provider and trigger checks before deploy; switch clouds without rewriting your app.
 - **Validation** — `runfabric doctor` checks config and credentials.
-- **Alternative** — Use instead of or alongside [Serverless Framework](https://github.com/serverless/serverless); migrate with `runfabric migrate`.
+- **Alternative** — Use instead of or alongside [Serverless Framework](https://github.com/serverless/serverless); see [docs/MIGRATION.md](docs/MIGRATION.md) for migration guidance.
 
 ## Features
 
@@ -92,11 +92,7 @@ source .env
 set +a
 ```
 
-Migrate an existing Serverless Framework config (best-effort bootstrap):
-
-```bash
-runfabric migrate --input ./serverless.yml --output ./runfabric.yml --json
-```
+Migrate from an existing Serverless Framework config using the manual checklist in [docs/MIGRATION.md](docs/MIGRATION.md).
 
 Set provider credentials (provider-specific list):
 
@@ -148,7 +144,6 @@ The **Node SDK** (`@runfabric/sdk`, `packages/node/sdk`) lets you use a single h
 - `runfabric deploy fn <name>` | `runfabric deploy function <name>` | `runfabric deploy-function <name>` (single-function deploy)
 - `runfabric call-local`
 - `runfabric dev`
-- `runfabric migrate`
 - `runfabric invoke`
 - `runfabric logs`
 - `runfabric traces`

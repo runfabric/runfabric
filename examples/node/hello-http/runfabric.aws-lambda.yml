@@ -1,11 +1,12 @@
 service: hello-http
-runtime: nodejs
-entry: src/index.ts
+provider:
+  name: aws-lambda
+  runtime: nodejs
 
-providers:
-  - aws-lambda
-
-triggers:
-  - type: http
-    method: GET
-    path: /hello
+functions:
+  - name: api
+    entry: src/index.ts
+    triggers:
+      - type: http
+        method: GET
+        path: /hello

@@ -95,7 +95,7 @@ Install the corresponding provider adapter package in your project (for example 
 | State Backend | Required Credentials                                                                            |
 | ------------- | ----------------------------------------------------------------------------------------------- |
 | `local`       | none                                                                                            |
-| `postgres`    | `RUNFABRIC_STATE_POSTGRES_URL` (or custom env named by `state.postgres.connectionStringEnv`)    |
+| `postgres`    | `RUNFABRIC_STATE_POSTGRES_URL` (or custom env named by `backend.postgresConnectionStringEnv`)    |
 | `s3`          | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` (or equivalent AWS credential chain) |
 | `gcs`         | `GOOGLE_APPLICATION_CREDENTIALS` (or workload identity)                                         |
 | `azblob`      | `AZURE_STORAGE_CONNECTION_STRING` OR `AZURE_STORAGE_ACCOUNT` + `AZURE_STORAGE_KEY`              |

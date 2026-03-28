@@ -29,7 +29,7 @@ pnpm install
 
 ## Path A: Use Existing Hello HTTP Example
 
-Use `examples/node/hello-http/runfabric.quickstart.yml`.
+Use `examples/node/hello-http/runfabric.cloudflare-workers.yml`.
 
 Set Cloudflare credentials:
 
@@ -41,17 +41,17 @@ export CLOUDFLARE_ACCOUNT_ID="your-account-id"
 Run:
 
 ```bash
-pnpm run runfabric -- doctor -c examples/node/hello-http/runfabric.quickstart.yml
-pnpm run runfabric -- plan -c examples/node/hello-http/runfabric.quickstart.yml
-pnpm run runfabric -- build -c examples/node/hello-http/runfabric.quickstart.yml
-pnpm run runfabric -- deploy -c examples/node/hello-http/runfabric.quickstart.yml
+pnpm run runfabric -- doctor -c examples/node/hello-http/runfabric.cloudflare-workers.yml
+pnpm run runfabric -- plan -c examples/node/hello-http/runfabric.cloudflare-workers.yml
+pnpm run runfabric -- build -c examples/node/hello-http/runfabric.cloudflare-workers.yml
+pnpm run runfabric -- deploy -c examples/node/hello-http/runfabric.cloudflare-workers.yml
 ```
 
 Optional real Cloudflare API deployment:
 
 ```bash
 export RUNFABRIC_CLOUDFLARE_REAL_DEPLOY=1
-pnpm run runfabric -- deploy -c examples/node/hello-http/runfabric.quickstart.yml
+pnpm run runfabric -- deploy -c examples/node/hello-http/runfabric.cloudflare-workers.yml
 ```
 
 ## Path B: Scaffold New Project
@@ -66,7 +66,7 @@ Default service name is derived from the target directory (`my-api` here). Use `
 
 Interactive `init` prompts for:
 
-- template (`api`, `worker`, `queue`, `cron`, `storage`, `eventbridge`, `pubsub`)
+- template (`http`, `queue`, `cron`, `storage`, `eventbridge`, `pubsub`)
 - provider
 - state backend (`local`, `postgres`, `s3`, `gcs`, `azblob`) with default `local`
 - language (`ts` or `js`)
@@ -80,7 +80,7 @@ Interactive picker UX:
 
 Template scope note:
 
-- `init` only includes templates with at least one provider capability match: `api|worker|queue|cron|storage|eventbridge|pubsub`.
+- `init` only includes templates with at least one provider capability match: `http|queue|cron|storage|eventbridge|pubsub`.
 - `kafka` and `rabbitmq` remain valid trigger schema types but are hidden from `init` until at least one provider reports support.
 
 Provider IDs (copy/paste):
@@ -121,13 +121,13 @@ set +a
 Non-interactive example:
 
 ```bash
-pnpm run runfabric -- init --dir ./my-api --template api --provider aws-lambda --lang ts --skip-install
+pnpm run runfabric -- init --dir ./my-api --template http --provider aws-lambda --lang ts --skip-install
 ```
 
 Non-interactive with explicit state backend:
 
 ```bash
-pnpm run runfabric -- init --dir ./my-api --template api --provider aws-lambda --state-backend s3 --lang ts --skip-install
+pnpm run runfabric -- init --dir ./my-api --template http --provider aws-lambda --state-backend s3 --lang ts --skip-install
 ```
 
 If you used `--skip-install`, install project dependencies manually:
@@ -170,11 +170,7 @@ runfabric generate resource db --type database --connection-env DATABASE_URL --n
 
 Use `--dry-run` to preview, `--force` to overwrite an existing handler file. See [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md).
 
-Migrate existing `serverless.yml` (best-effort bootstrap):
-
-```bash
-pnpm run runfabric -- migrate --input ./serverless.yml --output ./runfabric.yml --json
-```
+Migrate an existing `serverless.yml` by following [MIGRATION.md](MIGRATION.md) and then validate with `doctor` + `plan`.
 
 Run lifecycle:
 
@@ -284,27 +280,21 @@ After deploy:
 Example state config in `runfabric.yml`:
 
 ```yaml
-state:
-  backend: s3
-  keyPrefix: runfabric/state
-  lock:
-    enabled: true
-    timeoutSeconds: 30
-  s3:
-    bucket: my-runfabric-state
-    region: us-east-1
-    keyPrefix: runfabric/state
+backend:
+  kind: s3
+  s3Bucket: my-runfabric-state
+  s3Prefix: runfabric/state
+  lockTable: my-runfabric-locks
 ```
 
 Dynamic environment bindings in `runfabric.yml` are supported:
 
 ```yaml
 service: ${env:RUNFABRIC_SERVICE_NAME,my-api}
-state:
-  backend: s3
-  s3:
-    bucket: ${env:RUNFABRIC_STATE_S3_BUCKET}
-    region: ${env:AWS_REGION,us-east-1}
+backend:
+  kind: s3
+  s3Bucket: ${env:RUNFABRIC_STATE_S3_BUCKET}
+  s3Prefix: ${env:RUNFABRIC_STATE_S3_PREFIX,runfabric/state}
 ```
 
 State operations:
@@ -368,24 +358,27 @@ Example `runfabric.yml` using queue + storage triggers, AWS IAM statements, and 
 
 ```yaml
 service: media-worker
-runtime: nodejs
-entry: src/index.ts
+provider:
+  name: aws-lambda
+  runtime: nodejs
 
-providers:
-  - aws-lambda
-
-triggers:
-  - type: queue
-    queue: arn:aws:sqs:us-east-1:123456789012:media-jobs
-    batchSize: 10
-    maximumBatchingWindowSeconds: 5
-    functionResponseType: ReportBatchItemFailures
-  - type: storage
-    bucket: media-uploads
-    events:
-      - s3:ObjectCreated:*
-    prefix: incoming/
-    suffix: .jpg
+functions:
+  - name: process-media
+    entry: src/process-media.ts
+    triggers:
+      - type: queue
+        queue: arn:aws:sqs:us-east-1:123456789012:media-jobs
+        batchSize: 10
+        maximumBatchingWindowSeconds: 5
+        functionResponseType: ReportBatchItemFailures
+      - type: storage
+        bucket: media-uploads
+        events:
+          - s3:ObjectCreated:*
+        prefix: incoming/
+        suffix: .jpg
+    env:
+      BUCKET: media-uploads
 
 extensions:
   aws-lambda:
@@ -400,12 +393,6 @@ extensions:
               - s3:PutObject
             resources:
               - arn:aws:s3:::media-uploads/*
-
-functions:
-  - name: process-media
-    entry: src/process-media.ts
-    env:
-      BUCKET: media-uploads
 ```
 
 When `RUNFABRIC_AWS_REAL_DEPLOY=1` and `RUNFABRIC_AWS_DEPLOY_CMD` is set (optional override), deploy passes these JSON payload env vars to that command:

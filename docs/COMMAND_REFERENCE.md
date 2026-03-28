@@ -37,7 +37,7 @@ Notes:
 
 ## Project setup and scaffolding
 
-- `runfabric init [--dir <path>] [--template <api|worker|queue|cron|storage|eventbridge|pubsub>] [--provider <name>] [--state-backend <local|postgres|s3|gcs|azblob>] [--lang <node|ts|js|python|go>] [--service <name>] [--pm <npm|pnpm|yarn|bun>] [--skip-install] [--call-local] [--with-build] [--with-ci <github-actions>] [--no-interactive]` — Use `--with-ci github-actions` to add `.github/workflows/deploy.yml` (doctor → plan → deploy on push). `init` currently scaffolds a subset of backends for simplicity.
+- `runfabric init [--dir <path>] [--template <http|queue|cron|storage|eventbridge|pubsub>] [--provider <name>] [--state-backend <local|postgres|s3|gcs|azblob>] [--lang <node|ts|js|python|go>] [--service <name>] [--pm <npm|pnpm|yarn|bun>] [--skip-install] [--call-local] [--with-build] [--with-ci <github-actions>] [--no-interactive]` — Use `--with-ci github-actions` to add `.github/workflows/deploy.yml` (doctor → plan → deploy on push). `init` currently scaffolds a subset of backends for simplicity.
 - `runfabric generate` — Scaffold artifacts in an existing project: `generate function`, `generate worker`, `generate resource`, `generate addon`, `generate provider-override`, `generate plugin`.
 - `runfabric generate function <name> [--trigger http|cron|queue] [--route <method>:<path>] [--schedule <cron>] [--queue-name <name>] [--provider <key>] [--lang js|ts|python|go] [--entry <path>] [--dry-run] [--force] [--no-backup] [--interactive|--no-interactive] [--json]` — Add a new function: creates handler file and patches runfabric.yml. Infers provider and language from config and project; use `--trigger` (default http), `--route` (e.g. GET:/hello), `--schedule`, `--queue-name`. Fails if function name already exists; `--force` overwrites handler file only.
 - `runfabric generate worker <name> [--trigger queue] [--queue-name <name>] [--provider <key>] [--lang js|ts|python|go] [--entry <path>] [--dry-run] [--force] [--no-backup] [--interactive|--no-interactive] [--json]` — Add a queue worker function. Equivalent to `runfabric generate function <name> --trigger queue` with queue trigger as the default.
@@ -87,7 +87,6 @@ Workflow runtime behavior notes:
 - `runfabric releases -c <config> [--json]` — Same as `runfabric deploy list`.
 - `runfabric list -c <config> [--stage <name>] [--json]` — List functions from runfabric.yml and deployment status (from receipt).
 - `runfabric inspect -c <config> [--stage <name>] [--json]` — Show lock, journal, and receipt state for the current backend.
-- `runfabric migrate --input <serverless.yml> [--output <runfabric.yml>] [--provider <id>] [--dry-run] [--force] [--json]`
 
 ## Local development and debugging
 
@@ -98,7 +97,7 @@ Workflow runtime behavior notes:
 
 ## Invocation, logs, and observability
 
-- `runfabric invoke run -c <config> [--stage <name>] [--provider <key>] --function <name> [--payload <text-or-json>] [--json]` — Use `--provider` when `runfabric.yml` has `providerOverrides` (multi-cloud). Orchestration targets are invoked with prefixes: `sfn:<name>` or `stepfunction:<name>` (AWS), `cwf:<name>` or `cloudworkflow:<name>` (GCP), and `durable:<name>` (Azure).
+- `runfabric invoke run -c <config> [--stage <name>] [--provider <key>] --function <name> [--payload <text-or-json>] [--json]` — Use `--provider` when `runfabric.yml` has `providerOverrides` (multi-cloud). Orchestration targets are invoked with prefixes: `sfn:<name>` (AWS), `cwf:<name>` (GCP), and `durable:<name>` (Azure).
 - `runfabric invoke logs -c <config> [--stage <name>] [--provider <key>] (--function <name> | --all) [--service <name>] [--json]` — Unified source: provider logs (AWS: CloudWatch; GCP: Cloud Logging, last 1h; Cloudflare: `wrangler tail` sample with Cloudflare API tail fallback) plus optional local files from `logs.path` in config (default `.runfabric/logs`: `<stage>.log`, `<function>_<stage>.log`). `--all` aggregates by service/stage; `--provider` for multi-cloud. When `--service` is provided, it must match `service` in `runfabric.yml`.
 - `runfabric invoke traces [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] ... [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS: X-Ray trace summaries (last 1h). GCP: Cloud Trace summaries (when available). Azure: Application Insights traces (when available). When `--service` is provided, it must match `service` in `runfabric.yml`.
 - `runfabric invoke metrics [--config <path>] [--stage <name>] [--provider <key>] [--all] [--service <name>] [--since <iso>] [--json]` — `--provider` from `providerOverrides` (multi-cloud). `--all` requests aggregation by service/stage. AWS Lambda: CloudWatch (Invocations, Errors, Duration, last 1h). GCP: Cloud Monitoring metrics (when available). Azure: Application Insights metrics (when available). When `--service` is provided, it must match `service` in `runfabric.yml`.
@@ -174,7 +173,7 @@ Auth URL resolution order: `--auth-url` -> `RUNFABRIC_AUTH_URL` -> `.runfabricrc
 - `runfabric router simulate [--requests <n>] [--down <provider>]... [--json]` — Local routing simulation with synthetic request distribution (no provider API calls). Useful for weighted steering and failure rehearsal.
 - `runfabric router chaos-verify [--requests <n>] [--json]` — Automated failover verification: runs one-endpoint-down and all-endpoints-down scenarios and reports pass/fail.
 - `runfabric router dns-sync [--dry-run] [--allow-prod-dns-sync] [--enforce-dns-sync-stage-rollout] [--zone-id <id>] [--account-id <id>] [--json]` — Apply the router routing contract to Cloudflare DNS and (optionally) Load Balancer idempotently.
-  Reads router API token from `RUNFABRIC_ROUTER_API_TOKEN` (preferred) or `CLOUDFLARE_API_TOKEN` (fallback). Additional sources: `extensions.router.credentials.apiTokenSecretRef` (resolved via top-level `secrets`) and file-backed secret envs (`RUNFABRIC_ROUTER_API_TOKEN_FILE` / `CLOUDFLARE_API_TOKEN_FILE`). Zone ID and Account ID may be passed via flags or env (`RUNFABRIC_ROUTER_ZONE_ID` / `RUNFABRIC_ROUTER_ACCOUNT_ID`, configurable via `extensions.router.credentials.*Env`).
+  Reads router API token from `RUNFABRIC_ROUTER_API_TOKEN`. Additional sources: `extensions.router.credentials.apiTokenSecretRef` (resolved via top-level `secrets`) and file-backed secret envs (`RUNFABRIC_ROUTER_API_TOKEN_FILE`). Zone ID and Account ID may be passed via flags or env (`RUNFABRIC_ROUTER_ZONE_ID` / `RUNFABRIC_ROUTER_ACCOUNT_ID`, configurable via `extensions.router.credentials.*Env`).
   - **DNS-only mode** (no Account ID): creates/updates a CNAME record at `hostname` pointing to the primary endpoint.
   - **Full LB mode** (Account ID present): also reconciles an HTTPS health-check monitor, an LB pool (origins = all router endpoints), and a zone-level load balancer with the configured steering policy (`dynamic_latency` | `off` | `random`).
   - Optional policy-as-code preflight (`extensions.router.mutationPolicy`) can require explicit approval for risky or high-volume mutations before apply.
@@ -192,7 +191,6 @@ Auth URL resolution order: `--auth-url` -> `RUNFABRIC_AUTH_URL` -> `.runfabricrc
   - Default restore target is previous applied snapshot (last-known-good before latest apply).
 - `runfabric router dns-history [--window <n>] [--json]` — Show router sync history analytics and trend summary from `.runfabric/router-sync-<stage>.json`.
 
-Compatibility: `runfabric fabric ...` remains available as an alias to `runfabric router ...`.
 Router backend selection: `extensions.routerPlugin` defaults to `cloudflare`. Built-ins also include `route53`, `ns1`, and `azure-traffic-manager` provider API reconcilers.
 CI rollout template: see [ROUTER_CI_TEMPLATE.md](ROUTER_CI_TEMPLATE.md) for a `dev -> staging -> prod` pipeline baseline.
 Operator runbook: [ROUTER_OPERATIONS_WORKFLOW.md](ROUTER_OPERATIONS_WORKFLOW.md).

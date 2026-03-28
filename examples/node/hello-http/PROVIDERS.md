@@ -3,7 +3,7 @@
 All example configs use the same handler (`src/index.ts`) and HTTP trigger.
 
 ## Config Files
-- `runfabric.quickstart.yml`: cloudflare-only minimal first run
+- `runfabric.cloudflare-workers.yml`: cloudflare-only minimal first run
 - `runfabric.aws-lambda.yml`
 - `runfabric.gcp-functions.yml`
 - `runfabric.azure-functions.yml`

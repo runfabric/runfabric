@@ -1,6 +1,6 @@
 # runfabric.yml Reference
 
-Canonical config reference for the current release train. Aligned with [upstream RUNFABRIC_YML_REFERENCE](https://github.com/runfabric/runfabric/blob/main/docs/RUNFABRIC_YML_REFERENCE.md). In this repo the Go engine normalizes reference format into `provider`/`backend`/`functions`. **JSON Schema:** [schemas/runfabric.schema.json](../schemas/runfabric.schema.json).
+Canonical config reference for the current release train. Aligned with [upstream RUNFABRIC_YML_REFERENCE](https://github.com/runfabric/runfabric/blob/main/docs/RUNFABRIC_YML_REFERENCE.md). RunFabric uses a canonical provider/function model (`provider`, optional `backend`/`state`, and `functions`). **JSON Schema:** [schemas/runfabric.schema.json](../schemas/runfabric.schema.json).
 
 ## Quick navigation
 
@@ -13,33 +13,30 @@ Canonical config reference for the current release train. Aligned with [upstream
 
 ```yaml
 service: hello-api
-runtime: nodejs
-entry: src/index.ts
-
-providers:
-  - aws-lambda
-
-triggers:
-  - type: http
-    method: GET
-    path: /hello
+provider:
+  name: aws-lambda
+  runtime: nodejs20.x
+functions:
+  - name: api
+    entry: src/index.ts
+    triggers:
+      - type: http
+        method: GET
+        path: /hello
 ```
 
 ## Top-Level Fields
 
 - **Core (required)**
   - `service` (`string`, required)
-  - `runtime` (`string`, required)
-  - `entry` (`string`, required)
-  - `providers` (`string[]`, required)
-  - `triggers` (`trigger[]`, required)
+  - `provider` (`object`, required)
+  - `functions` (`function[]`, required)
 
 - **App definition**
-  - `functions` (`function[]`, optional)
   - `env` (`Record<string,string>`, optional)
   - `params` (`Record<string,string>`, optional)
   - `resources` (`object`, optional) — Managed resource binding: declare DB/cache and inject `DATABASE_URL`, `REDIS_URL`, etc. into function env at deploy. See [Managed resource binding](#managed-resource-binding).
-  - `layers` (`Record<string, layer>`, optional) — First-class layer declarations. Key = logical name; value has `ref` (preferred provider-specific identifier) or deprecated `arn`, plus optional `name`/`version`. See [First-class layers](#first-class-layers) below.
+  - `layers` (`Record<string, layer>`, optional) — First-class layer declarations. Key = logical name; value has `ref` (provider-specific identifier), plus optional `name`/`version`. See [First-class layers](#first-class-layers) below.
 
 - **Extensions**
   - `addons` (`Record<string, addon>`, optional) — Add-on declarations (marketplace-style). See [Add-ons](#add-ons) and `runfabric extensions addons list`.
@@ -218,7 +215,7 @@ Real deploy is opt-in: set **`RUNFABRIC_REAL_DEPLOY=1`** or provider-specific **
 
 ## First-class layers
 
-Define layers once and reference them by name from functions. Use `ref` for the provider-specific layer identifier; `arn` remains supported as a deprecated AWS-oriented alias:
+Define layers once and reference them by name from functions. Use `ref` for the provider-specific layer identifier:
 
 ```yaml
 layers:
@@ -253,22 +250,20 @@ Example:
 
 ```yaml
 service: ${env:RUNFABRIC_SERVICE_NAME,my-service}
-runtime: nodejs
-entry: src/index.ts
-
-providers:
-  - aws-lambda
-
-state:
-  backend: s3
-  s3:
-    bucket: ${env:RUNFABRIC_STATE_S3_BUCKET}
-    region: ${env:AWS_REGION,us-east-1}
-
-triggers:
-  - type: http
-    method: GET
-    path: /hello
+provider:
+  name: aws-lambda
+  runtime: nodejs20.x
+  region: ${env:AWS_REGION,us-east-1}
+backend:
+  kind: s3
+  s3Bucket: ${env:RUNFABRIC_STATE_S3_BUCKET}
+functions:
+  - name: api
+    entry: src/index.ts
+    triggers:
+      - type: http
+        method: GET
+        path: /hello
 ```
 
 If `${env:VAR_NAME}` is used without a default and the variable is missing, config parsing fails with an explicit error.
@@ -338,7 +333,7 @@ Policy semantics:
 policies:
   mcp:
     providers:
-      aws:
+      aws-lambda:
         requiredRegion: us-east-1
         denyCrossRegion: true
         denyRegions: ["eu-*"]
@@ -362,7 +357,7 @@ Supported keys under `policies.mcp.providers.<provider>`:
 Environment-based overrides are also supported:
 
 - Global: `RUNFABRIC_MODEL_DEFAULT`, `RUNFABRIC_MODEL_AI_RETRIEVAL`, `RUNFABRIC_MODEL_AI_GENERATE`, `RUNFABRIC_MODEL_AI_STRUCTURED`, `RUNFABRIC_MODEL_AI_EVAL`
-- Provider-scoped: `RUNFABRIC_MODEL_<PROVIDER>_DEFAULT` and `RUNFABRIC_MODEL_<PROVIDER>_AI_{RETRIEVAL|GENERATE|STRUCTURED|EVAL}` (example: `RUNFABRIC_MODEL_AWS_AI_GENERATE`)
+- Provider-scoped: `RUNFABRIC_MODEL_<PROVIDER>_DEFAULT` and `RUNFABRIC_MODEL_<PROVIDER>_AI_{RETRIEVAL|GENERATE|STRUCTURED|EVAL}` (example: `RUNFABRIC_MODEL_AWS_LAMBDA_AI_GENERATE`)
 - Precedence: per-step `model` / `input.model` > `policies.mcp.providers.<provider>.models` > environment overrides > built-in provider fallback
 
 ## Deploy Policy
@@ -529,23 +524,29 @@ extensions:
 ## State Backends
 
 ```yaml
-state:
-  backend: local # local|postgres|sqlite|s3|dynamodb|gcs|azblob
-  keyPrefix: runfabric/state
-  lock:
-    enabled: true
-    timeoutSeconds: 30
-    heartbeatSeconds: 10
-    staleAfterSeconds: 60
+backend:
+  kind: local # local|postgres|sqlite|s3|dynamodb|gcs|azblob
+  s3Bucket: my-state-bucket # when kind=s3
+  s3Prefix: runfabric/state # when kind=s3
+  lockTable: runfabric-locks # when kind=s3 or kind=dynamodb
+  gcsBucket: my-state-bucket # when kind=gcs
+  gcsPrefix: runfabric/state # when kind=gcs
+  azblobContainer: runfabric-state # when kind=azblob
+  azblobPrefix: runfabric/state # when kind=azblob
+  postgresConnectionStringEnv: RUNFABRIC_STATE_POSTGRES_URL # when kind=postgres
+  postgresTable: runfabric_receipts # when kind=postgres
+  sqlitePath: .runfabric/state.db # when kind=sqlite
+  receiptTable: runfabric-receipts # when kind=dynamodb
 ```
 
 Backend-specific options:
 
-- `state.local.dir`
-- `state.postgres.connectionStringEnv`, `state.postgres.schema`, `state.postgres.table`
-- `state.s3.bucket`, `state.s3.region`, `state.s3.keyPrefix`, `state.s3.useLockfile`
-- `state.gcs.bucket`, `state.gcs.prefix`
-- `state.azblob.container`, `state.azblob.prefix`
+- `backend.s3Bucket`, `backend.s3Prefix`, `backend.lockTable`
+- `backend.gcsBucket`, `backend.gcsPrefix`
+- `backend.azblobContainer`, `backend.azblobPrefix`
+- `backend.postgresConnectionStringEnv`, `backend.postgresTable`
+- `backend.sqlitePath`
+- `backend.receiptTable`
 
 **DB-backed deploy state (receipts):** Set `backend.kind` to `postgres`, `sqlite`, or `dynamodb` (and the corresponding `backend.*` options) to store and fetch deploy receipts from a database. See [STATE_BACKENDS.md](STATE_BACKENDS.md).
 
@@ -648,9 +649,9 @@ Use `runfabric extensions addons list` to see the built-in catalog; if `addonCat
 
 When you want **active-active** deploy (same service in multiple regions or providers) with health checks and optional failover/latency routing, add a **`fabric`** block. It requires **`providerOverrides`**; each entry in `fabric.targets` is a provider key to deploy to.
 
-- **`targets`** (required): List of provider keys (e.g. `["aws-us", "aws-eu"]`) to deploy to. Use `runfabric fabric deploy` to deploy to all targets and record endpoints in `.runfabric/fabric-<stage>.json`.
+- **`targets`** (required): List of provider keys (e.g. `["aws-us", "aws-eu"]`) to deploy to. Use `runfabric router deploy` to deploy to all targets and record endpoints in `.runfabric/fabric-<stage>.json`.
 - **`healthCheck`** (optional): Same shape as `deploy.healthCheck`; used when running health checks on fabric endpoints.
-- **`routing`** (optional): `failover`, `latency`, or `round-robin` — for documentation and future use; configure your DNS/load balancer (e.g. Route53) with the endpoints from `runfabric fabric endpoints`.
+- **`routing`** (optional): `failover`, `latency`, or `round-robin` — for documentation and future use; configure your DNS/load balancer (e.g. Route53) with the endpoints from `runfabric router endpoints`.
 
 Example:
 
@@ -670,7 +671,7 @@ fabric:
   routing: latency
 ```
 
-Then run `runfabric fabric deploy` (deploys to both), `runfabric fabric status` (HTTP GET each endpoint, report healthy/fail), and `runfabric fabric endpoints` (list URLs for use with Route53 or other DNS/LB).
+Then run `runfabric router deploy` (deploys to both), `runfabric router status` (HTTP GET each endpoint, report healthy/fail), and `runfabric router endpoints` (list URLs for use with Route53 or other DNS/LB).
 
 ## Managed resource binding
 
@@ -708,7 +709,7 @@ At deploy, each function’s environment is merged with these bindings (then wit
 
 ## Validation
 
-See `internal/config/validate.go`: provider name and runtime required (after normalize); at least one function; backend kind and S3 fields when applicable; event/authorizer rules.
+See `platform/core/model/config/validate.go`: provider name/runtime required, at least one function, backend kind constraints, and event/authorizer rules.
 
 ## Integrations and policies
 
@@ -778,14 +779,12 @@ workflows:
           approvalRequest: "Review generated release actions"
       - id: deploy
         kind: code
-        function: deploy
 ```
 
-Compatibility notes:
+Step requirements:
 
-- `id` is the explicit step identifier. If omitted, runtime falls back to legacy `function`, then auto-generates `step-N`.
-- Legacy workflow fields (`function`, `next`, `retry`) remain valid.
-- Typed `kind` is forward-compatible and can be mixed with legacy fields as needed.
+- `id` is required and should be unique within a workflow.
+- `kind` is required for every step.
 - AI and approval kind-specific values are read from `steps[].input`.
 - `steps[].model` is a shorthand for `steps[].input.model` (for AI step kinds).
 

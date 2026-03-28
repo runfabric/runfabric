@@ -13,16 +13,15 @@ Use this checklist after scaffolding or editing example projects.
 
 If directory name follows `runfabric-<provider>-<trigger>-state-<backend>`, verify:
 
-- `<provider>` matches `providers[0]` in `runfabric.yml`.
-- `<trigger>` matches `triggers[0].type` in `runfabric.yml`.
-- `<backend>` matches `state.backend` in `runfabric.yml`.
+- `<provider>` matches `provider.name` in `runfabric.yml`.
+- `<trigger>` matches `functions[0].triggers[0].type` in `runfabric.yml`.
+- `<backend>` matches `backend.kind` in `runfabric.yml`.
 
 ## 2. Scaffold Template Coverage
 
 `init` scaffolds provider-supported trigger families:
 
-- `api`
-- `worker`
+- `http`
 - `queue`
 - `cron`
 - `storage`
@@ -35,7 +34,7 @@ If directory name follows `runfabric-<provider>-<trigger>-state-<backend>`, veri
 
 Use exact provider IDs (see [upstream list](https://github.com/runfabric/runfabric/blob/main/docs/EXAMPLE_VALIDATION.md) and `schemas/runfabric.schema.json`):
 
-- `aws-lambda` (this engine also accepts `aws` as alias)
+- `aws-lambda`
 - `gcp-functions`
 - `azure-functions`
 - `kubernetes`

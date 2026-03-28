@@ -11,10 +11,10 @@ Examples are grouped by runtime. Today this repo ships **Node/JS/TS** examples u
 From repo root:
 
 ```bash
-pnpm run runfabric -- doctor -c examples/node/hello-http/runfabric.quickstart.yml
-pnpm run runfabric -- plan -c examples/node/hello-http/runfabric.quickstart.yml
-pnpm run runfabric -- build -c examples/node/hello-http/runfabric.quickstart.yml
-pnpm run runfabric -- deploy -c examples/node/hello-http/runfabric.quickstart.yml
+pnpm run runfabric -- doctor -c examples/node/hello-http/runfabric.cloudflare-workers.yml
+pnpm run runfabric -- plan -c examples/node/hello-http/runfabric.cloudflare-workers.yml
+pnpm run runfabric -- build -c examples/node/hello-http/runfabric.cloudflare-workers.yml
+pnpm run runfabric -- deploy -c examples/node/hello-http/runfabric.cloudflare-workers.yml
 ```
 
 See `examples/node/hello-http/PROVIDERS.md` for provider-specific config files.

@@ -20,9 +20,9 @@ Analysis of [runfabric-example](https://github.com/runfabric/runfabric-example) 
 
 | Template | Use case | Scaffold equivalent |
 |----------|-----------|----------------------|
-| `api`    | HTTP API  | `--template http` (alias) |
+| `api`    | HTTP API  | `--template http` |
 | `queue`  | Queue worker (SQS, etc.) | `--template queue` |
-| `worker` | Storage / EventBridge / PubSub | Scaffold uses `--template storage`, `eventbridge`, or `pubsub` directly |
+| `worker` | Storage / EventBridge / PubSub | Use `--template queue` or explicit templates (`storage`, `eventbridge`, `pubsub`) directly |
 | `cron`   | Scheduled (cron) | `--template cron` |
 
 ### Provider × template matrix (from example.md)
@@ -52,7 +52,7 @@ Analysis of [runfabric-example](https://github.com/runfabric/runfabric-example) 
 From `engine/internal/cli/init.go`:
 
 - **Languages:** `js`, `ts`, `python`, `go` (no Java or .NET in init).
-- **Templates:** `http`, `cron`, `queue`, `storage`, `eventbridge`, `pubsub`. Aliases: `api` → `http`, `worker` → `queue`.
+- **Templates:** `http`, `cron`, `queue`, `storage`, `eventbridge`, `pubsub`.
 - **Flags:** `--dir`, `--template`, `--provider`, `--state-backend`, `--lang`, `--skip-install`, `--no-interactive`, `--with-build` (TS).
 
 ---
@@ -82,24 +82,24 @@ Optional: add `--with-build` for TypeScript (adds `tsconfig.json` and `build` sc
 
 ```bash
 # JavaScript
-runfabric init --dir runfabric-aws-lambda-http-state-local-js --template api --provider aws-lambda --state-backend local --lang js --skip-install --no-interactive
+runfabric init --dir runfabric-aws-lambda-http-state-local-js --template http --provider aws-lambda --state-backend local --lang js --skip-install --no-interactive
 
 # TypeScript (with build)
-runfabric init --dir runfabric-aws-lambda-http-state-local-ts --template api --provider aws-lambda --state-backend local --lang ts --with-build --skip-install --no-interactive
+runfabric init --dir runfabric-aws-lambda-http-state-local-ts --template http --provider aws-lambda --state-backend local --lang ts --with-build --skip-install --no-interactive
 
 # Python
-runfabric init --dir runfabric-aws-lambda-http-state-local-python --template api --provider aws-lambda --state-backend local --lang python --skip-install --no-interactive
+runfabric init --dir runfabric-aws-lambda-http-state-local-python --template http --provider aws-lambda --state-backend local --lang python --skip-install --no-interactive
 
 # Go
-runfabric init --dir runfabric-aws-lambda-http-state-local-go --template api --provider aws-lambda --state-backend local --lang go --skip-install --no-interactive
+runfabric init --dir runfabric-aws-lambda-http-state-local-go --template http --provider aws-lambda --state-backend local --lang go --skip-install --no-interactive
 ```
 
 ### Example: Cloudflare Workers HTTP + Cron, all languages
 
 ```bash
 # HTTP
-runfabric init --dir runfabric-cloudflare-http-state-local-ts --template api --provider cloudflare-workers --state-backend local --lang ts --skip-install --no-interactive
-runfabric init --dir runfabric-cloudflare-http-state-local-js --template api --provider cloudflare-workers --state-backend local --lang js --skip-install --no-interactive
+runfabric init --dir runfabric-cloudflare-http-state-local-ts --template http --provider cloudflare-workers --state-backend local --lang ts --skip-install --no-interactive
+runfabric init --dir runfabric-cloudflare-http-state-local-js --template http --provider cloudflare-workers --state-backend local --lang js --skip-install --no-interactive
 
 # Cron
 runfabric init --dir runfabric-cloudflare-cron-state-local-ts --template cron --provider cloudflare-workers --state-backend local --lang ts --skip-install --no-interactive
@@ -109,7 +109,7 @@ runfabric init --dir runfabric-cloudflare-cron-state-local-ts --template cron --
 
 ```bash
 # HTTP
-runfabric init --dir runfabric-gcp-http-state-local-ts --template api --provider gcp-functions --state-backend local --lang ts --skip-install --no-interactive
+runfabric init --dir runfabric-gcp-http-state-local-ts --template http --provider gcp-functions --state-backend local --lang ts --skip-install --no-interactive
 
 # Queue
 runfabric init --dir runfabric-gcp-queue-state-local-ts --template queue --provider gcp-functions --state-backend local --lang ts --skip-install --no-interactive
