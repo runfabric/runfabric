@@ -13,17 +13,17 @@ func TestBuildStepsFromConfiguredWorkflows_MapsStepModelOverride(t *testing.T) {
 			Name: "release-flow",
 			Steps: []config.WorkflowStep{
 				{
-					Function: "generate",
-					Kind:     controlplane.StepKindAIGenerate,
-					Model:    "top-level-model",
+					ID:    "generate",
+					Kind:  controlplane.StepKindAIGenerate,
+					Model: "top-level-model",
 					Input: map[string]any{
 						"prompt": "create release notes",
 					},
 				},
 				{
-					Function: "eval",
-					Kind:     controlplane.StepKindAIEval,
-					Model:    "top-level-eval-model",
+					ID:    "eval",
+					Kind:  controlplane.StepKindAIEval,
+					Model: "top-level-eval-model",
 					Input: map[string]any{
 						"score": 0.8,
 						"model": "input-model",
@@ -48,15 +48,14 @@ func TestBuildStepsFromConfiguredWorkflows_MapsStepModelOverride(t *testing.T) {
 	}
 }
 
-func TestBuildStepsFromConfiguredWorkflows_UsesIDBeforeLegacyFunction(t *testing.T) {
+func TestBuildStepsFromConfiguredWorkflows_UsesExplicitID(t *testing.T) {
 	workflows := []config.WorkflowConfig{
 		{
 			Name: "release-flow",
 			Steps: []config.WorkflowStep{
 				{
-					ID:       "plan",
-					Function: "legacy-function-name",
-					Kind:     controlplane.StepKindAIGenerate,
+					ID:   "plan",
+					Kind: controlplane.StepKindAIGenerate,
 					Input: map[string]any{
 						"prompt": "draft plan",
 					},
@@ -74,8 +73,5 @@ func TestBuildStepsFromConfiguredWorkflows_UsesIDBeforeLegacyFunction(t *testing
 	}
 	if steps[0].ID != "plan" {
 		t.Fatalf("expected explicit step id to win, got %q", steps[0].ID)
-	}
-	if got, _ := steps[0].Input["function"].(string); got != "legacy-function-name" {
-		t.Fatalf("expected legacy function to remain available in input, got %q", got)
 	}
 }

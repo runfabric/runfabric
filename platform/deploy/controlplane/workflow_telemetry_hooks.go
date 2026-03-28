@@ -123,11 +123,11 @@ func (h AzureMonitorHook) RecordStep(run *state.WorkflowRun, step state.Workflow
 // Falls back to NoopTelemetryHook for unknown or empty providers.
 func ProviderTelemetryHook(provider, region, project string) StepTelemetryHook {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "aws":
+	case "aws-lambda":
 		return AWSCloudWatchHook{Region: region}
-	case "gcp":
+	case "gcp-functions":
 		return GCPCloudMonitoringHook{Project: project, Region: region}
-	case "azure":
+	case "azure-functions":
 		return AzureMonitorHook{Region: region}
 	default:
 		return NoopTelemetryHook{}

@@ -31,7 +31,7 @@ func (AWSToolResultMapper) MapToolResult(server string, raw map[string]any) map[
 			}
 		}
 	}
-	out["provider"] = "aws"
+	out["provider"] = "aws-lambda"
 	return out
 }
 
@@ -49,7 +49,7 @@ func (GCPToolResultMapper) MapToolResult(server string, raw map[string]any) map[
 			out["name"] = name
 		}
 	}
-	out["provider"] = "gcp"
+	out["provider"] = "gcp-functions"
 	return out
 }
 
@@ -62,7 +62,7 @@ func (AzureToolResultMapper) MapToolResult(server string, raw map[string]any) ma
 	if content, ok := raw["content"].(string); ok {
 		out["result"] = content
 	}
-	out["provider"] = "azure"
+	out["provider"] = "azure-functions"
 	return out
 }
 
@@ -70,11 +70,11 @@ func (AzureToolResultMapper) MapToolResult(server string, raw map[string]any) ma
 // Falls back to NoopToolResultMapper for unknown providers.
 func ProviderToolResultMapper(provider string) ToolResultMapper {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "aws":
+	case "aws-lambda":
 		return AWSToolResultMapper{}
-	case "gcp":
+	case "gcp-functions":
 		return GCPToolResultMapper{}
-	case "azure":
+	case "azure-functions":
 		return AzureToolResultMapper{}
 	default:
 		return NoopToolResultMapper{}

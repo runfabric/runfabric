@@ -98,7 +98,7 @@ func TestResolve_LayerExpansion(t *testing.T) {
 		Service:  "svc",
 		Provider: ProviderConfig{Name: "aws-lambda", Runtime: "nodejs"},
 		Layers: map[string]LayerConfig{
-			"node-deps": {Arn: "arn:aws:lambda:us-east-1:123:layer:node-deps:1"},
+			"node-deps": {Ref: "arn:aws:lambda:us-east-1:123:layer:node-deps:1"},
 		},
 		Functions: map[string]FunctionConfig{
 			"api": {Handler: "h", Layers: []string{"node-deps", "arn:aws:lambda:us-east-1:456:layer:other:2"}},
@@ -127,7 +127,7 @@ func TestResolve_LayerVersionFromEnv(t *testing.T) {
 		Service:  "svc",
 		Provider: ProviderConfig{Name: "aws-lambda", Runtime: "nodejs"},
 		Layers: map[string]LayerConfig{
-			"node-deps": {Arn: "arn:aws:lambda:us-east-1:123:layer:node-deps:1", Version: "${env:LAYER_VER}"},
+			"node-deps": {Ref: "arn:aws:lambda:us-east-1:123:layer:node-deps:1", Version: "${env:LAYER_VER}"},
 		},
 		Functions: map[string]FunctionConfig{
 			"api": {Handler: "h", Layers: []string{"node-deps"}},

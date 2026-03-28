@@ -111,58 +111,7 @@ func Bootstrap(configPath, stage, providerOverride string) (*AppContext, error) 
 	}
 
 	rootDir := filepath.Dir(configPath)
-
-	backendKind := os.Getenv("RUNFABRIC_BACKEND")
-	s3Bucket := os.Getenv("RUNFABRIC_S3_BUCKET")
-	s3Prefix := os.Getenv("RUNFABRIC_S3_PREFIX")
-	dynamoTable := os.Getenv("RUNFABRIC_DYNAMODB_TABLE")
-
-	if cfg.Backend != nil {
-		if cfg.Backend.Kind != "" {
-			backendKind = cfg.Backend.Kind
-		}
-		if cfg.Backend.S3Bucket != "" {
-			s3Bucket = cfg.Backend.S3Bucket
-		}
-		if cfg.Backend.S3Prefix != "" {
-			s3Prefix = cfg.Backend.S3Prefix
-		}
-		if cfg.Backend.LockTable != "" {
-			dynamoTable = cfg.Backend.LockTable
-		}
-	}
-
-	postgresDSN := ""
-	postgresTable := ""
-	sqlitePath := ""
-	receiptTable := ""
-	if cfg.Backend != nil {
-		postgresTable = cfg.Backend.PostgresTable
-		if postgresTable == "" {
-			postgresTable = "runfabric_receipts"
-		}
-		sqlitePath = cfg.Backend.SqlitePath
-		if sqlitePath == "" {
-			sqlitePath = ".runfabric/state.db"
-		}
-		receiptTable = cfg.Backend.ReceiptTable
-		if cfg.Backend.Kind == "postgres" && cfg.Backend.PostgresConnectionStringEnv != "" {
-			postgresDSN = os.Getenv(cfg.Backend.PostgresConnectionStringEnv)
-		}
-	}
-
-	opts := backends.Options{
-		Kind:            backendKind,
-		Root:            rootDir,
-		AWSRegion:       cfg.Provider.Region,
-		S3Bucket:        s3Bucket,
-		S3Prefix:        s3Prefix,
-		DynamoTableName: dynamoTable,
-		PostgresDSN:     postgresDSN,
-		PostgresTable:   postgresTable,
-		SqlitePath:      sqlitePath,
-		ReceiptTable:    receiptTable,
-	}
+	opts := backendOptionsFromConfigAndEnv(cfg, rootDir, "")
 	bundle, err := backends.NewBundle(context.Background(), opts)
 	if err != nil {
 		return nil, err
@@ -186,8 +135,7 @@ func shouldAutoInstallExtensions(cfg *config.Config) bool {
 }
 
 func isTruthyEnv(k string) bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv(k)))
-	return v == "1" || v == "true" || v == "yes"
+	return external.EnvTruthy(k)
 }
 
 func providerResolutionOptions(cfg *config.Config) providerloader.LoadOptions {
@@ -347,6 +295,10 @@ func promptYesNo(q string) (bool, error) {
 // BackendOptionsForKind returns backends.Options built from ctx.Config and env, with Kind set to kindOverride (use "" for config default).
 // Used by state migrate to build source and target bundles.
 func BackendOptionsForKind(ctx *AppContext, kindOverride string) backends.Options {
+	return backendOptionsFromConfigAndEnv(ctx.Config, ctx.RootDir, kindOverride)
+}
+
+func backendOptionsFromConfigAndEnv(cfg *config.Config, rootDir, kindOverride string) backends.Options {
 	kind := os.Getenv("RUNFABRIC_BACKEND")
 	s3Bucket := os.Getenv("RUNFABRIC_S3_BUCKET")
 	s3Prefix := os.Getenv("RUNFABRIC_S3_PREFIX")
@@ -355,30 +307,36 @@ func BackendOptionsForKind(ctx *AppContext, kindOverride string) backends.Option
 	postgresTable := "runfabric_receipts"
 	sqlitePath := ".runfabric/state.db"
 	receiptTable := ""
-	if ctx.Config.Backend != nil {
-		if ctx.Config.Backend.Kind != "" {
-			kind = ctx.Config.Backend.Kind
+	awsRegion := ""
+
+	if cfg != nil {
+		awsRegion = cfg.Provider.Region
+	}
+
+	if cfg != nil && cfg.Backend != nil {
+		if cfg.Backend.Kind != "" {
+			kind = cfg.Backend.Kind
 		}
-		if ctx.Config.Backend.S3Bucket != "" {
-			s3Bucket = ctx.Config.Backend.S3Bucket
+		if cfg.Backend.S3Bucket != "" {
+			s3Bucket = cfg.Backend.S3Bucket
 		}
-		if ctx.Config.Backend.S3Prefix != "" {
-			s3Prefix = ctx.Config.Backend.S3Prefix
+		if cfg.Backend.S3Prefix != "" {
+			s3Prefix = cfg.Backend.S3Prefix
 		}
-		if ctx.Config.Backend.LockTable != "" {
-			dynamoTable = ctx.Config.Backend.LockTable
+		if cfg.Backend.LockTable != "" {
+			dynamoTable = cfg.Backend.LockTable
 		}
-		postgresTable = ctx.Config.Backend.PostgresTable
+		postgresTable = cfg.Backend.PostgresTable
 		if postgresTable == "" {
 			postgresTable = "runfabric_receipts"
 		}
-		sqlitePath = ctx.Config.Backend.SqlitePath
+		sqlitePath = cfg.Backend.SqlitePath
 		if sqlitePath == "" {
 			sqlitePath = ".runfabric/state.db"
 		}
-		receiptTable = ctx.Config.Backend.ReceiptTable
-		if ctx.Config.Backend.Kind == "postgres" && ctx.Config.Backend.PostgresConnectionStringEnv != "" {
-			postgresDSN = os.Getenv(ctx.Config.Backend.PostgresConnectionStringEnv)
+		receiptTable = cfg.Backend.ReceiptTable
+		if cfg.Backend.Kind == "postgres" && cfg.Backend.PostgresConnectionStringEnv != "" {
+			postgresDSN = os.Getenv(cfg.Backend.PostgresConnectionStringEnv)
 		}
 	}
 	if kindOverride != "" {
@@ -386,8 +344,8 @@ func BackendOptionsForKind(ctx *AppContext, kindOverride string) backends.Option
 	}
 	return backends.Options{
 		Kind:            kind,
-		Root:            ctx.RootDir,
-		AWSRegion:       ctx.Config.Provider.Region,
+		Root:            rootDir,
+		AWSRegion:       awsRegion,
 		S3Bucket:        s3Bucket,
 		S3Prefix:        s3Prefix,
 		DynamoTableName: dynamoTable,

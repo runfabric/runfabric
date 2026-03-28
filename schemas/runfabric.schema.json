@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://runfabric.dev/schemas/runfabric.schema.json",
   "title": "runfabric.yml",
-  "description": "RunFabric service configuration. Supports provider-based and reference-format configuration. See docs/RUNFABRIC_YML_REFERENCE.md.",
+  "description": "RunFabric service configuration. Canonical provider/function model. See docs/RUNFABRIC_YML_REFERENCE.md.",
   "type": "object",
   "required": [
     "service"
@@ -25,28 +25,6 @@
     },
     "backend": {
       "$ref": "#/$defs/BackendConfig"
-    },
-    "runtime": {
-      "type": "string",
-      "description": "Top-level runtime (reference format). Normalized into provider.runtime."
-    },
-    "entry": {
-      "type": "string",
-      "description": "Entry module (reference format). Used as default function handler when triggers are present."
-    },
-    "providers": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Provider list (reference format). First element becomes provider.name."
-    },
-    "triggers": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/TriggerRef"
-      },
-      "description": "Top-level triggers (reference format). Normalized into default function events."
     },
     "state": {
       "$ref": "#/$defs/StateConfig"
@@ -138,14 +116,14 @@
       "items": {
         "$ref": "#/$defs/FunctionOverrideConfig"
       },
-      "description": "Reference-format function overrides."
+      "description": "Function declarations."
     },
     "layers": {
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/LayerConfig"
       },
-      "description": "Named layer declarations. Use ref as the provider-specific layer identifier; arn is supported as a deprecated alias."
+      "description": "Named layer declarations. Use ref as the provider-specific layer identifier."
     },
     "stages": {
       "type": "object",
@@ -225,6 +203,18 @@
           "type": "string"
         },
         "s3Prefix": {
+          "type": "string"
+        },
+        "gcsBucket": {
+          "type": "string"
+        },
+        "gcsPrefix": {
+          "type": "string"
+        },
+        "azblobContainer": {
+          "type": "string"
+        },
+        "azblobPrefix": {
           "type": "string"
         },
         "lockTable": {
@@ -317,11 +307,7 @@
       "properties": {
         "ref": {
           "type": "string",
-          "description": "Preferred provider-specific layer identifier."
-        },
-        "arn": {
-          "type": "string",
-          "description": "Deprecated AWS-specific alias for ref."
+          "description": "Provider-specific layer identifier."
         },
         "name": {
           "type": "string"
@@ -334,11 +320,6 @@
         {
           "required": [
             "ref"
-          ]
-        },
-        {
-          "required": [
-            "arn"
           ]
         }
       ],
@@ -746,9 +727,7 @@
           "enum": [
             "local",
             "postgres",
-            "s3",
-            "gcs",
-            "azblob"
+            "s3"
           ]
         },
         "keyPrefix": {
@@ -763,7 +742,8 @@
             "dir": {
               "type": "string"
             }
-          }
+          },
+          "additionalProperties": false
         },
         "postgres": {
           "type": "object",
@@ -777,7 +757,8 @@
             "table": {
               "type": "string"
             }
-          }
+          },
+          "additionalProperties": false
         },
         "s3": {
           "type": "object",
@@ -794,31 +775,11 @@
             "useLockfile": {
               "type": "boolean"
             }
-          }
-        },
-        "gcs": {
-          "type": "object",
-          "properties": {
-            "bucket": {
-              "type": "string"
-            },
-            "prefix": {
-              "type": "string"
-            }
-          }
-        },
-        "azblob": {
-          "type": "object",
-          "properties": {
-            "container": {
-              "type": "string"
-            },
-            "prefix": {
-              "type": "string"
-            }
-          }
+          },
+          "additionalProperties": false
         }
-      }
+      },
+      "additionalProperties": false
     },
     "StateLockConfig": {
       "type": "object",
@@ -862,7 +823,7 @@
     },
     "WorkflowStepConfig": {
       "type": "object",
-      "description": "Workflow step. Legacy fields (function, next, retry) and typed kinds are both accepted for compatibility.",
+      "description": "Workflow step with explicit id and kind.",
       "properties": {
         "id": {
           "type": "string"
@@ -880,16 +841,7 @@
             "ai-eval",
             "human-approval"
           ],
-          "description": "Typed workflow step kind for AI/human-in-the-loop flows. Omit for legacy function-based steps."
-        },
-        "function": {
-          "type": "string"
-        },
-        "next": {
-          "type": "string"
-        },
-        "retry": {
-          "$ref": "#/$defs/WorkflowRetry"
+          "description": "Typed workflow step kind for AI/human-in-the-loop flows."
         },
         "with": {
           "type": "object",
@@ -920,7 +872,11 @@
           "$ref": "#/$defs/HumanApprovalConfig"
         }
       },
-      "additionalProperties": true
+      "required": [
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false
     },
     "WorkflowRetry": {
       "type": "object",

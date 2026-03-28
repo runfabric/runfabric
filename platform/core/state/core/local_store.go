@@ -22,27 +22,6 @@ type FunctionDeployment struct {
 	LayersHash         string            `json:"layersHash,omitempty"`
 }
 
-func (f *FunctionDeployment) UnmarshalJSON(data []byte) error {
-	type functionDeploymentAlias FunctionDeployment
-	type legacyFunctionDeployment struct {
-		functionDeploymentAlias
-		LambdaName string `json:"lambdaName,omitempty"`
-		LambdaARN  string `json:"lambdaArn,omitempty"`
-	}
-	var decoded legacyFunctionDeployment
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return err
-	}
-	*f = FunctionDeployment(decoded.functionDeploymentAlias)
-	if f.ResourceName == "" {
-		f.ResourceName = decoded.LambdaName
-	}
-	if f.ResourceIdentifier == "" {
-		f.ResourceIdentifier = decoded.LambdaARN
-	}
-	return nil
-}
-
 type Artifact struct {
 	Function        string `json:"function"`
 	Runtime         string `json:"runtime"`

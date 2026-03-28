@@ -11,7 +11,7 @@ import (
 )
 
 func TestProviderPromptRenderer_AWS(t *testing.T) {
-	r := ProviderPromptRenderer("aws")
+	r := ProviderPromptRenderer("aws-lambda")
 	out := r.Render(PromptRenderInput{
 		BasePrompt: "draft",
 		MCPPrompt:  "ctx",
@@ -24,7 +24,7 @@ func TestProviderPromptRenderer_AWS(t *testing.T) {
 }
 
 func TestProviderPromptRenderer_GCP(t *testing.T) {
-	r := ProviderPromptRenderer("gcp")
+	r := ProviderPromptRenderer("gcp-functions")
 	out := r.Render(PromptRenderInput{Step: state.WorkflowStepRun{StepID: "s1", Kind: StepKindAIGenerate}})
 	if !strings.Contains(out, "provider:vertex") {
 		t.Fatalf("expected gcp vertex prompt envelope, got %q", out)
@@ -32,7 +32,7 @@ func TestProviderPromptRenderer_GCP(t *testing.T) {
 }
 
 func TestProviderPromptRenderer_Azure(t *testing.T) {
-	r := ProviderPromptRenderer("azure")
+	r := ProviderPromptRenderer("azure-functions")
 	out := r.Render(PromptRenderInput{Step: state.WorkflowStepRun{StepID: "s1", Kind: StepKindAIGenerate}})
 	if !strings.Contains(out, "provider:azure-openai") {
 		t.Fatalf("expected azure prompt envelope, got %q", out)
@@ -40,21 +40,21 @@ func TestProviderPromptRenderer_Azure(t *testing.T) {
 }
 
 func TestProviderToolResultMapper_AWS(t *testing.T) {
-	m := ProviderToolResultMapper("aws")
+	m := ProviderToolResultMapper("aws-lambda")
 	out := m.MapToolResult("crm", map[string]any{
 		"toolResult": map[string]any{"content": []any{map[string]any{"text": "ok"}}},
 	})
-	if out["provider"] != "aws" || out["result"] != "ok" {
+	if out["provider"] != "aws-lambda" || out["result"] != "ok" {
 		t.Fatalf("unexpected mapped aws result: %+v", out)
 	}
 }
 
 func TestProviderToolResultMapper_GCP(t *testing.T) {
-	m := ProviderToolResultMapper("gcp")
+	m := ProviderToolResultMapper("gcp-functions")
 	out := m.MapToolResult("crm", map[string]any{
 		"functionResponse": map[string]any{"name": "lookup", "response": map[string]any{"id": "1"}},
 	})
-	if out["provider"] != "gcp" {
+	if out["provider"] != "gcp-functions" {
 		t.Fatalf("expected gcp provider, got %+v", out)
 	}
 	res, _ := out["result"].(map[string]any)
@@ -64,17 +64,17 @@ func TestProviderToolResultMapper_GCP(t *testing.T) {
 }
 
 func TestProviderToolResultMapper_Azure(t *testing.T) {
-	m := ProviderToolResultMapper("azure")
+	m := ProviderToolResultMapper("azure-functions")
 	out := m.MapToolResult("crm", map[string]any{"content": "done"})
-	if out["provider"] != "azure" || out["result"] != "done" {
+	if out["provider"] != "azure-functions" || out["result"] != "done" {
 		t.Fatalf("unexpected azure mapped response: %+v", out)
 	}
 }
 
 func TestProviderModelOutputShaper_AWS(t *testing.T) {
-	s := ProviderModelOutputShaper("aws")
+	s := ProviderModelOutputShaper("aws-lambda")
 	out := s.ShapeOutput(StepKindAIGenerate, "s1", map[string]any{"text": "hello", "model": "custom-model"})
-	if out["provider"] != "aws" || out["stopReason"] == nil {
+	if out["provider"] != "aws-lambda" || out["stopReason"] == nil {
 		t.Fatalf("expected aws-shaped output, got %+v", out)
 	}
 	if out["model"] != "custom-model" {
@@ -83,9 +83,9 @@ func TestProviderModelOutputShaper_AWS(t *testing.T) {
 }
 
 func TestProviderModelOutputShaper_GCP(t *testing.T) {
-	s := ProviderModelOutputShaper("gcp")
+	s := ProviderModelOutputShaper("gcp-functions")
 	out := s.ShapeOutput(StepKindAIGenerate, "s1", map[string]any{"text": "hello", "model": "custom-model"})
-	if out["provider"] != "gcp" || out["usageMetadata"] == nil {
+	if out["provider"] != "gcp-functions" || out["usageMetadata"] == nil {
 		t.Fatalf("expected gcp-shaped output, got %+v", out)
 	}
 	if out["model"] != "custom-model" {
@@ -94,9 +94,9 @@ func TestProviderModelOutputShaper_GCP(t *testing.T) {
 }
 
 func TestProviderModelOutputShaper_Azure(t *testing.T) {
-	s := ProviderModelOutputShaper("azure")
+	s := ProviderModelOutputShaper("azure-functions")
 	out := s.ShapeOutput(StepKindAIGenerate, "s1", map[string]any{"text": "hello", "model": "custom-model"})
-	if out["provider"] != "azure" || out["usage"] == nil {
+	if out["provider"] != "azure-functions" || out["usage"] == nil {
 		t.Fatalf("expected azure-shaped output, got %+v", out)
 	}
 	if out["model"] != "custom-model" {
@@ -110,9 +110,9 @@ func TestProviderTelemetryHook_NoError(t *testing.T) {
 	res := &StepExecutionResult{Output: map[string]any{}, Metadata: map[string]any{}}
 
 	hooks := []StepTelemetryHook{
-		ProviderTelemetryHook("aws", "us-east-1", ""),
-		ProviderTelemetryHook("gcp", "us-central1", "proj"),
-		ProviderTelemetryHook("azure", "eastus", ""),
+		ProviderTelemetryHook("aws-lambda", "us-east-1", ""),
+		ProviderTelemetryHook("gcp-functions", "us-central1", "proj"),
+		ProviderTelemetryHook("azure-functions", "eastus", ""),
 	}
 	for _, h := range hooks {
 		h.RecordStep(run, step, res, 50*time.Millisecond, nil)
@@ -121,7 +121,7 @@ func TestProviderTelemetryHook_NoError(t *testing.T) {
 }
 
 func TestProviderRetryStrategy_Behavior(t *testing.T) {
-	aws := ProviderRetryStrategy("aws")
+	aws := ProviderRetryStrategy("aws-lambda")
 	if !aws.ShouldRetry(1, errors.New("ThrottlingException")) {
 		t.Fatal("expected aws throttling retry")
 	}
@@ -129,12 +129,12 @@ func TestProviderRetryStrategy_Behavior(t *testing.T) {
 		t.Fatal("expected positive aws backoff")
 	}
 
-	gcp := ProviderRetryStrategy("gcp")
+	gcp := ProviderRetryStrategy("gcp-functions")
 	if !gcp.ShouldRetry(1, errors.New("RESOURCE_EXHAUSTED")) {
 		t.Fatal("expected gcp resource exhausted retry")
 	}
 
-	azure := ProviderRetryStrategy("azure")
+	azure := ProviderRetryStrategy("azure-functions")
 	if !azure.ShouldRetry(1, errors.New("429")) {
 		t.Fatal("expected azure rate-limit retry")
 	}
@@ -146,13 +146,13 @@ func TestProviderRetryStrategy_Behavior(t *testing.T) {
 }
 
 func TestProviderModelSelector_RoutesByProvider(t *testing.T) {
-	if got := ProviderModelSelector("aws").SelectModel(StepKindAIGenerate, "us-east-1"); !strings.Contains(got, "sonnet") {
+	if got := ProviderModelSelector("aws-lambda").SelectModel(StepKindAIGenerate, "us-east-1"); !strings.Contains(got, "sonnet") {
 		t.Fatalf("expected aws sonnet in supported region, got %q", got)
 	}
-	if got := ProviderModelSelector("gcp").SelectModel(StepKindAIRetrieval, ""); !strings.Contains(got, "flash") {
+	if got := ProviderModelSelector("gcp-functions").SelectModel(StepKindAIRetrieval, ""); !strings.Contains(got, "flash") {
 		t.Fatalf("expected gcp flash for retrieval, got %q", got)
 	}
-	if got := ProviderModelSelector("azure").SelectModel(StepKindAIGenerate, ""); got != "gpt-4o" {
+	if got := ProviderModelSelector("azure-functions").SelectModel(StepKindAIGenerate, ""); got != "gpt-4o" {
 		t.Fatalf("expected azure gpt-4o for generate, got %q", got)
 	}
 }
@@ -172,11 +172,11 @@ func TestWithModelSelectorOverrides_UsesOverridesAndFallsBack(t *testing.T) {
 
 func TestEnvModelSelectorOverrides_ProviderOverridesGlobal(t *testing.T) {
 	t.Setenv("RUNFABRIC_MODEL_AI_GENERATE", "global-generate")
-	t.Setenv("RUNFABRIC_MODEL_AWS_AI_GENERATE", "aws-generate")
+	t.Setenv("RUNFABRIC_MODEL_AWS_LAMBDA_AI_GENERATE", "aws-generate")
 	t.Setenv("RUNFABRIC_MODEL_DEFAULT", "global-default")
-	t.Setenv("RUNFABRIC_MODEL_AWS_DEFAULT", "aws-default")
+	t.Setenv("RUNFABRIC_MODEL_AWS_LAMBDA_DEFAULT", "aws-default")
 
-	overrides := EnvModelSelectorOverrides("aws")
+	overrides := EnvModelSelectorOverrides("aws-lambda")
 	if got := overrides[StepKindAIGenerate]; got != "aws-generate" {
 		t.Fatalf("expected provider-scoped ai-generate override, got %q", got)
 	}
@@ -186,14 +186,14 @@ func TestEnvModelSelectorOverrides_ProviderOverridesGlobal(t *testing.T) {
 }
 
 func TestProviderCacheKeyGenerator_StableScoped(t *testing.T) {
-	aws := ProviderCacheKeyGenerator("aws", "us-east-1", "", "")
+	aws := ProviderCacheKeyGenerator("aws-lambda", "us-east-1", "", "")
 	k1 := aws.CacheKey("crm", "tool", "lookup", map[string]any{"id": "1", "name": "a"})
 	k2 := aws.CacheKey("crm", "tool", "lookup", map[string]any{"name": "a", "id": "1"})
 	if k1 != k2 {
 		t.Fatalf("expected stable key regardless of arg ordering: %q vs %q", k1, k2)
 	}
 
-	gcp := ProviderCacheKeyGenerator("gcp", "", "proj-a", "")
+	gcp := ProviderCacheKeyGenerator("gcp-functions", "", "proj-a", "")
 	k3 := gcp.CacheKey("crm", "tool", "lookup", map[string]any{"id": "1"})
 	if k3 == k1 {
 		t.Fatalf("expected provider/project scoping to produce different keys: %q == %q", k3, k1)
@@ -202,9 +202,9 @@ func TestProviderCacheKeyGenerator_StableScoped(t *testing.T) {
 
 func TestProviderCostTracker_RecordsTotals(t *testing.T) {
 	trackers := []CostTracker{
-		ProviderCostTracker("aws"),
-		ProviderCostTracker("gcp"),
-		ProviderCostTracker("azure"),
+		ProviderCostTracker("aws-lambda"),
+		ProviderCostTracker("gcp-functions"),
+		ProviderCostTracker("azure-functions"),
 	}
 	for _, tr := range trackers {
 		tr.RecordCost("", "model", 1000, 500)
@@ -220,7 +220,7 @@ func TestProviderCostTracker_RecordsTotals(t *testing.T) {
 
 func TestNewTypedStepHandlerFromConfig_InjectsProviderComponents(t *testing.T) {
 	cfg := &config.Config{
-		Provider: config.ProviderConfig{Name: "aws", Region: "us-east-1"},
+		Provider: config.ProviderConfig{Name: "aws-lambda", Region: "us-east-1"},
 		Integrations: map[string]any{
 			"mcp": map[string]any{
 				"servers": map[string]any{
@@ -237,7 +237,7 @@ func TestNewTypedStepHandlerFromConfig_InjectsProviderComponents(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected default ai runner type, got %T", h.AIRunner)
 	}
-	if runner.MCPRuntime == nil || runner.MCPRuntime.Provider != "aws" || runner.MCPRuntime.ActiveRegion != "us-east-1" {
+	if runner.MCPRuntime == nil || runner.MCPRuntime.Provider != "aws-lambda" || runner.MCPRuntime.ActiveRegion != "us-east-1" {
 		t.Fatalf("expected aws provider context in runtime, got %+v", runner.MCPRuntime)
 	}
 	if _, ok := runner.PromptRenderer.(AWSBedrockPromptRenderer); !ok {
@@ -262,11 +262,11 @@ func TestNewTypedStepHandlerFromConfig_InjectsProviderComponents(t *testing.T) {
 
 func TestNewTypedStepHandlerFromConfig_AppliesProviderModelOverrides(t *testing.T) {
 	cfg := &config.Config{
-		Provider: config.ProviderConfig{Name: "aws", Region: "us-east-1"},
+		Provider: config.ProviderConfig{Name: "aws-lambda", Region: "us-east-1"},
 		Policies: map[string]any{
 			"mcp": map[string]any{
 				"providers": map[string]any{
-					"aws": map[string]any{
+					"aws-lambda": map[string]any{
 						"models": map[string]any{
 							"default":      "gpt-4.1-mini",
 							"ai-generate":  "gpt-4.1",
@@ -294,13 +294,13 @@ func TestNewTypedStepHandlerFromConfig_AppliesProviderModelOverrides(t *testing.
 }
 
 func TestNewTypedStepHandlerFromConfig_ModelOverridePrecedence_ConfigOverEnv(t *testing.T) {
-	t.Setenv("RUNFABRIC_MODEL_AWS_AI_GENERATE", "env-model")
+	t.Setenv("RUNFABRIC_MODEL_AWS_LAMBDA_AI_GENERATE", "env-model")
 	cfg := &config.Config{
-		Provider: config.ProviderConfig{Name: "aws", Region: "us-east-1"},
+		Provider: config.ProviderConfig{Name: "aws-lambda", Region: "us-east-1"},
 		Policies: map[string]any{
 			"mcp": map[string]any{
 				"providers": map[string]any{
-					"aws": map[string]any{
+					"aws-lambda": map[string]any{
 						"models": map[string]any{
 							"ai-generate": "config-model",
 						},

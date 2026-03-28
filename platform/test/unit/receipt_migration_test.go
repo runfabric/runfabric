@@ -8,7 +8,7 @@ import (
 
 func TestReceiptMigration(t *testing.T) {
 	r := &state.Receipt{
-		Version: 0,
+		Version: state.CurrentReceiptVersion,
 		Service: "svc",
 		Stage:   "dev",
 	}
@@ -30,12 +30,8 @@ func TestReceiptMigration_Version1(t *testing.T) {
 		Stage:   "dev",
 	}
 
-	out, err := state.MigrateReceipt(r)
-	if err != nil {
-		t.Fatalf("migrate failed: %v", err)
-	}
-
-	if out.Version != state.CurrentReceiptVersion {
-		t.Fatalf("expected version=%d got=%d", state.CurrentReceiptVersion, out.Version)
+	_, err := state.MigrateReceipt(r)
+	if err == nil {
+		t.Fatal("expected legacy receipt version 1 to be rejected")
 	}
 }

@@ -127,11 +127,11 @@ func (t *AzureCostTracker) RecordCost(_, model string, inputTokens, outputTokens
 // Falls back to NoopCostTracker for unknown providers.
 func ProviderCostTracker(provider string) CostTracker {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "aws":
+	case "aws-lambda":
 		return &AWSCostTracker{}
-	case "gcp":
+	case "gcp-functions":
 		return &GCPCostTracker{}
-	case "azure":
+	case "azure-functions":
 		return &AzureCostTracker{}
 	default:
 		return NoopCostTracker{}

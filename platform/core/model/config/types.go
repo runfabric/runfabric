@@ -11,11 +11,7 @@ type Config struct {
 	// ProviderOverrides: multi-cloud. Key = logical name for --provider (e.g. aws, gcp). When set and CLI passes --provider X, Provider is replaced by ProviderOverrides[X].
 	ProviderOverrides map[string]ProviderConfig `yaml:"providerOverrides,omitempty"`
 
-	// Reference-format fields (see docs runfabric.yml reference). When set, Normalize() fills Provider/Backend/Functions.
-	Runtime    string            `yaml:"runtime,omitempty"`
-	Entry      string            `yaml:"entry,omitempty"`
-	Providers  []string          `yaml:"providers,omitempty"`
-	Triggers   []TriggerRef      `yaml:"triggers,omitempty"`
+	// State provides detail blocks for legacy/state-engine paths.
 	State      *StateConfig      `yaml:"state,omitempty"`
 	Deploy     *DeployConfig     `yaml:"deploy,omitempty"`
 	Extensions map[string]any    `yaml:"extensions,omitempty"`
@@ -28,7 +24,7 @@ type Config struct {
 	Integrations map[string]any   `yaml:"integrations,omitempty"`
 	Policies     map[string]any   `yaml:"policies,omitempty"`
 	Workflows    []WorkflowConfig `yaml:"workflows,omitempty"`
-	// FunctionsConfig stores reference-format function overrides. Normalize() resolves them into Functions.
+	// FunctionsConfig stores function declarations from YAML.
 	FunctionsConfig []FunctionOverrideConfig  `yaml:"functions,omitempty"`
 	Functions       map[string]FunctionConfig `yaml:"-"` // resolved by Normalize(); use this everywhere
 	Stages          map[string]StageConfig    `yaml:"stages,omitempty"`
@@ -80,10 +76,9 @@ type AddonConfig struct {
 	Secrets map[string]string `yaml:"secrets,omitempty"` // env var name -> secret ref (${env:VAR} or key in top-level secrets)
 }
 
-// LayerConfig defines a named layer. Ref is the provider-specific layer identifier; Arn is a deprecated AWS-specific compatibility key.
+// LayerConfig defines a named layer. Ref is the provider-specific layer identifier.
 type LayerConfig struct {
 	Ref     string `yaml:"ref,omitempty"`
-	Arn     string `yaml:"arn,omitempty"`
 	Name    string `yaml:"name,omitempty"`
 	Version string `yaml:"version,omitempty"`
 }
@@ -122,7 +117,7 @@ type TriggerHTTP struct {
 	Path   string `yaml:"path"`
 }
 
-// StateConfig is the reference-format state backend (state.backend, state.s3, state.lock, etc.).
+// StateConfig captures backend detail blocks for legacy/state-engine paths.
 type StateConfig struct {
 	Backend   string           `yaml:"backend,omitempty"`
 	KeyPrefix string           `yaml:"keyPrefix,omitempty"`
@@ -130,8 +125,6 @@ type StateConfig struct {
 	Local     *StateLocal      `yaml:"local,omitempty"`
 	Postgres  *StatePostgres   `yaml:"postgres,omitempty"`
 	S3        *StateS3         `yaml:"s3,omitempty"`
-	GCS       *StateGCS        `yaml:"gcs,omitempty"`
-	Azblob    *StateAzblob     `yaml:"azblob,omitempty"`
 }
 
 type StateLockConfig struct {
@@ -156,16 +149,6 @@ type StateS3 struct {
 	Region      string `yaml:"region,omitempty"`
 	KeyPrefix   string `yaml:"keyPrefix,omitempty"`
 	UseLockfile bool   `yaml:"useLockfile,omitempty"`
-}
-
-type StateGCS struct {
-	Bucket string `yaml:"bucket,omitempty"`
-	Prefix string `yaml:"prefix,omitempty"`
-}
-
-type StateAzblob struct {
-	Container string `yaml:"container,omitempty"`
-	Prefix    string `yaml:"prefix,omitempty"`
 }
 
 // DeployConfig holds deploy policy (e.g. rollbackOnFailure), optional health check, scaling defaults, and canary/blue-green strategy.
@@ -197,25 +180,17 @@ type WorkflowConfig struct {
 }
 
 type WorkflowStep struct {
-	// ID is the explicit step identifier. Preferred over legacy function-as-id semantics.
+	// ID is the explicit step identifier.
 	ID string `yaml:"id,omitempty"`
-	Function string `yaml:"function,omitempty"`
-	// Kind sets the step execution kind: code|ai-generate|ai-retrieval|ai-structured|ai-eval|human-approval (default: code).
+	// Kind sets the step execution kind: code|ai-generate|ai-retrieval|ai-structured|ai-eval|human-approval.
 	Kind string `yaml:"kind,omitempty"`
 	// Model overrides model selection for this specific step.
 	// Equivalent to setting input.model for AI step kinds.
 	Model string `yaml:"model,omitempty"`
 	// Timeout sets the per-step timeout in seconds (0 = no timeout).
-	Timeout int    `yaml:"timeout,omitempty"`
-	Next    string `yaml:"next,omitempty"`
+	Timeout int `yaml:"timeout,omitempty"`
 	// Input provides kind-specific typed step input fields (e.g. prompt, query, schema, score, mcp block).
 	Input map[string]any `yaml:"input,omitempty"`
-	Retry *WorkflowRetry `yaml:"retry,omitempty"`
-}
-
-type WorkflowRetry struct {
-	Attempts       int `yaml:"attempts,omitempty"`
-	BackoffSeconds int `yaml:"backoffSeconds,omitempty"`
 }
 
 // FunctionOverrideConfig is the reference-format function (array element: name, entry, runtime, triggers, env, addons).
@@ -238,10 +213,14 @@ type ProviderConfig struct {
 }
 
 type BackendConfig struct {
-	Kind      string `yaml:"kind,omitempty"`
-	S3Bucket  string `yaml:"s3Bucket,omitempty"`
-	S3Prefix  string `yaml:"s3Prefix,omitempty"`
-	LockTable string `yaml:"lockTable,omitempty"`
+	Kind            string `yaml:"kind,omitempty"`
+	S3Bucket        string `yaml:"s3Bucket,omitempty"`
+	S3Prefix        string `yaml:"s3Prefix,omitempty"`
+	GCSBucket       string `yaml:"gcsBucket,omitempty"`
+	GCSPrefix       string `yaml:"gcsPrefix,omitempty"`
+	AzblobContainer string `yaml:"azblobContainer,omitempty"`
+	AzblobPrefix    string `yaml:"azblobPrefix,omitempty"`
+	LockTable       string `yaml:"lockTable,omitempty"`
 	// DB-backed deploy state (receipts): 1.5 / 1.6
 	PostgresConnectionStringEnv string `yaml:"postgresConnectionStringEnv,omitempty"` // env var for DSN when kind=postgres
 	PostgresTable               string `yaml:"postgresTable,omitempty"`               // table name for receipts (default runfabric_receipts)

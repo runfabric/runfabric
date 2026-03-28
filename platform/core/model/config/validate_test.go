@@ -127,7 +127,7 @@ func TestValidate_BackendPostgresDefaults(t *testing.T) {
 	}
 }
 
-func TestValidate_BackendGCSRequiresStateFields(t *testing.T) {
+func TestValidate_BackendGCSRequiresBackendFields(t *testing.T) {
 	cfg := &Config{
 		Service:   "svc",
 		Provider:  ProviderConfig{Name: "gcp-functions", Runtime: "nodejs"},
@@ -135,19 +135,17 @@ func TestValidate_BackendGCSRequiresStateFields(t *testing.T) {
 		Backend:   &BackendConfig{Kind: "gcs"},
 	}
 	if err := Validate(cfg); err == nil {
-		t.Fatal("expected error for gcs without state.gcs config")
+		t.Fatal("expected error for gcs without backend.gcsBucket/backend.gcsPrefix")
 	}
 
-	cfg.State = &StateConfig{
-		Backend: "gcs",
-		GCS:     &StateGCS{Bucket: "state-bucket", Prefix: "rf/state"},
-	}
+	cfg.Backend.GCSBucket = "state-bucket"
+	cfg.Backend.GCSPrefix = "rf/state"
 	if err := Validate(cfg); err != nil {
-		t.Fatalf("expected gcs backend to validate when state.gcs configured: %v", err)
+		t.Fatalf("expected gcs backend to validate when backend.gcsBucket/backend.gcsPrefix are configured: %v", err)
 	}
 }
 
-func TestValidate_BackendAzblobRequiresStateFields(t *testing.T) {
+func TestValidate_BackendAzblobRequiresBackendFields(t *testing.T) {
 	cfg := &Config{
 		Service:   "svc",
 		Provider:  ProviderConfig{Name: "azure-functions", Runtime: "nodejs"},
@@ -155,15 +153,13 @@ func TestValidate_BackendAzblobRequiresStateFields(t *testing.T) {
 		Backend:   &BackendConfig{Kind: "azblob"},
 	}
 	if err := Validate(cfg); err == nil {
-		t.Fatal("expected error for azblob without state.azblob config")
+		t.Fatal("expected error for azblob without backend.azblobContainer/backend.azblobPrefix")
 	}
 
-	cfg.State = &StateConfig{
-		Backend: "azblob",
-		Azblob:  &StateAzblob{Container: "runfabric-state", Prefix: "rf/state"},
-	}
+	cfg.Backend.AzblobContainer = "runfabric-state"
+	cfg.Backend.AzblobPrefix = "rf/state"
 	if err := Validate(cfg); err != nil {
-		t.Fatalf("expected azblob backend to validate when state.azblob configured: %v", err)
+		t.Fatalf("expected azblob backend to validate when backend.azblobContainer/backend.azblobPrefix are configured: %v", err)
 	}
 }
 
@@ -281,5 +277,35 @@ func TestValidate_WorkflowStepInputValidation_AcceptsTypedKinds(t *testing.T) {
 	}
 	if err := Validate(cfg); err != nil {
 		t.Fatalf("expected workflow typed kinds to validate, got: %v", err)
+	}
+}
+
+func TestValidate_WorkflowStepRequiresIDAndKind(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.Workflows = []WorkflowConfig{
+		{
+			Name: "wf",
+			Steps: []WorkflowStep{
+				{Kind: "code"},
+			},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected validation error when workflow step id is missing")
+	}
+
+	cfg.Workflows[0].Steps[0] = WorkflowStep{ID: "s1"}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected validation error when workflow step kind is missing")
+	}
+}
+
+func TestValidate_LayersRequireRef(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.Layers = map[string]LayerConfig{
+		"node-deps": {Name: "node-deps"},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected validation error when layers.<name>.ref is missing")
 	}
 }

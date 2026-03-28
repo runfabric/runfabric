@@ -109,7 +109,7 @@ func newLocalInvokeHandler(ctx *AppContext, simulatorID, fnName string) http.Han
 	fnCfg := ctx.Config.Functions[fnName]
 	runtime := fnCfg.Runtime
 	if runtime == "" {
-		runtime = ctx.Config.Runtime
+		runtime = ctx.Config.Provider.Runtime
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		body := make([]byte, 0)

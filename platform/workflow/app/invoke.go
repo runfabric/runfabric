@@ -46,7 +46,7 @@ func Invoke(configPath, stage, function, providerOverride string, payload []byte
 }
 
 func parseOrchestrationTarget(function string) (string, bool) {
-	prefixes := []string{"sfn:", "stepfunction:", "cwf:", "cloudworkflow:", "durable:"}
+	prefixes := []string{"sfn:", "cwf:", "durable:"}
 	trimmed := strings.TrimSpace(function)
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(trimmed, prefix) {

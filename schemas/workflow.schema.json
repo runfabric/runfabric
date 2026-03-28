@@ -29,11 +29,6 @@
           "minLength": 1,
           "description": "Explicit step identifier."
         },
-        "function": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Step identifier and legacy function field."
-        },
         "kind": {
           "type": "string",
           "enum": ["code", "ai-retrieval", "ai-generate", "ai-structured", "ai-eval", "human-approval"],
@@ -53,29 +48,9 @@
           "type": "object",
           "description": "Kind-specific step input (prompt/query/schema/score/mcp/approval payload).",
           "additionalProperties": true
-        },
-        "next": {
-          "type": "string",
-          "description": "Optional next step identifier or branch label."
-        },
-        "retry": {
-          "$ref": "#/$defs/WorkflowRetry"
         }
       },
-      "additionalProperties": false
-    },
-    "WorkflowRetry": {
-      "type": "object",
-      "properties": {
-        "attempts": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "backoffSeconds": {
-          "type": "integer",
-          "minimum": 0
-        }
-      },
+      "required": ["id", "kind"],
       "additionalProperties": false
     }
   }

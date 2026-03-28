@@ -44,7 +44,7 @@ func TestLoadResolveAndValidate(t *testing.T) {
 	}
 }
 
-func TestLoadReferenceFormat(t *testing.T) {
+func TestLoadRejectsLegacyTopLevelReferenceFields(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "runfabric.yml")
 	content := `
@@ -61,28 +61,9 @@ triggers:
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("load failed: %v", err)
-	}
-	if cfg.Provider.Name != "aws-lambda" {
-		t.Errorf("expected provider.name aws-lambda, got %q", cfg.Provider.Name)
-	}
-	if cfg.Provider.Runtime != "nodejs" {
-		t.Errorf("expected provider.runtime nodejs, got %q", cfg.Provider.Runtime)
-	}
-	if len(cfg.Functions) != 1 {
-		t.Fatalf("expected 1 function, got %d", len(cfg.Functions))
-	}
-	fn, ok := cfg.Functions["api"]
-	if !ok {
-		t.Fatalf("expected function %q", "api")
-	}
-	if fn.Handler != "src/index.ts" {
-		t.Errorf("expected handler src/index.ts, got %q", fn.Handler)
-	}
-	if len(fn.Events) != 1 || fn.Events[0].HTTP == nil || fn.Events[0].HTTP.Method != "GET" || fn.Events[0].HTTP.Path != "/hello" {
-		t.Errorf("expected one http event GET /hello, got %+v", fn.Events)
+	_, err := config.Load(path)
+	if err == nil {
+		t.Fatal("expected load to fail for legacy top-level reference fields")
 	}
 }
 
@@ -129,16 +110,12 @@ func TestValidateBackendKinds(t *testing.T) {
 			cfg.Backend.LockTable = "my-lock-table"
 		}
 		if kind == "gcs" {
-			cfg.State = &config.StateConfig{
-				Backend: "gcs",
-				GCS:     &config.StateGCS{Bucket: "my-bucket", Prefix: "runfabric/state"},
-			}
+			cfg.Backend.GCSBucket = "my-bucket"
+			cfg.Backend.GCSPrefix = "runfabric/state"
 		}
 		if kind == "azblob" {
-			cfg.State = &config.StateConfig{
-				Backend: "azblob",
-				Azblob:  &config.StateAzblob{Container: "runfabric-state", Prefix: "runfabric/state"},
-			}
+			cfg.Backend.AzblobContainer = "runfabric-state"
+			cfg.Backend.AzblobPrefix = "runfabric/state"
 		}
 		if err := config.Validate(&cfg); err != nil {
 			t.Errorf("backend.kind %q should be valid: %v", kind, err)

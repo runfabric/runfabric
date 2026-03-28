@@ -22,8 +22,8 @@ type AWSBedrockOutputShaper struct{}
 
 func (AWSBedrockOutputShaper) ShapeOutput(kind, stepID string, raw map[string]any) map[string]any {
 	out := copyMap(raw)
-	out["provider"] = "aws"
-	out["model"] = resolvedModelForOutput(kind, raw, bedrockModelForKind)
+	out["provider"] = "aws-lambda"
+	out["model"] = resolvedModelForOutput(raw, genericModelFallback)
 	if _, ok := out["usage"]; !ok {
 		out["usage"] = map[string]any{
 			"inputTokens":  estimateTokens(raw),
@@ -40,8 +40,8 @@ type GCPVertexOutputShaper struct{}
 
 func (GCPVertexOutputShaper) ShapeOutput(kind, stepID string, raw map[string]any) map[string]any {
 	out := copyMap(raw)
-	out["provider"] = "gcp"
-	out["model"] = resolvedModelForOutput(kind, raw, vertexModelForKind)
+	out["provider"] = "gcp-functions"
+	out["model"] = resolvedModelForOutput(raw, genericModelFallback)
 	if _, ok := out["usageMetadata"]; !ok {
 		inTok := estimateTokens(raw)
 		outTok := estimateOutputTokens(raw)
@@ -61,8 +61,8 @@ type AzureOpenAIOutputShaper struct{}
 
 func (AzureOpenAIOutputShaper) ShapeOutput(kind, stepID string, raw map[string]any) map[string]any {
 	out := copyMap(raw)
-	out["provider"] = "azure"
-	out["model"] = resolvedModelForOutput(kind, raw, azureModelForKind)
+	out["provider"] = "azure-functions"
+	out["model"] = resolvedModelForOutput(raw, genericModelFallback)
 	if _, ok := out["usage"]; !ok {
 		inTok := estimateTokens(raw)
 		outTok := estimateOutputTokens(raw)
@@ -76,56 +76,25 @@ func (AzureOpenAIOutputShaper) ShapeOutput(kind, stepID string, raw map[string]a
 	return out
 }
 
-// ProviderModelOutputShaper returns the appropriate ModelOutputShaper for a cloud provider.
+// ProviderModelOutputShaper returns the appropriate ModelOutputShaper for a provider id.
 // Falls back to DefaultModelOutputShaper for unknown providers.
 func ProviderModelOutputShaper(provider string) ModelOutputShaper {
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "aws":
-		return AWSBedrockOutputShaper{}
-	case "gcp":
-		return GCPVertexOutputShaper{}
-	case "azure":
-		return AzureOpenAIOutputShaper{}
-	default:
-		return DefaultModelOutputShaper{}
+	if policy, ok := providerModelPolicyFor(provider); ok && policy.shaper != nil {
+		return policy.shaper
 	}
+	return DefaultModelOutputShaper{}
 }
 
-func bedrockModelForKind(kind string) string {
-	switch kind {
-	case StepKindAIStructured, StepKindAIEval:
-		return "anthropic.claude-3-haiku-20240307-v1:0"
-	default:
-		return "anthropic.claude-3-sonnet-20240229-v1:0"
-	}
-}
-
-func vertexModelForKind(kind string) string {
-	switch kind {
-	case StepKindAIEval:
-		return "gemini-1.5-flash-001"
-	default:
-		return "gemini-1.5-pro-001"
-	}
-}
-
-func azureModelForKind(kind string) string {
-	switch kind {
-	case StepKindAIEval:
-		return "gpt-4o-mini"
-	default:
-		return "gpt-4o"
-	}
-}
-
-func resolvedModelForOutput(kind string, raw map[string]any, fallback func(string) string) string {
+func resolvedModelForOutput(raw map[string]any, fallback string) string {
 	if raw != nil {
 		if model, ok := raw["model"].(string); ok && strings.TrimSpace(model) != "" {
 			return strings.TrimSpace(model)
 		}
 	}
-	return fallback(kind)
+	return fallback
 }
+
+const genericModelFallback = "model-default"
 
 // estimateTokens returns a crude token estimate (4 chars ≈ 1 token) from string values in a map.
 func estimateTokens(raw map[string]any) int {

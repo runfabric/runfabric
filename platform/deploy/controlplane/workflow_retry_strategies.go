@@ -126,11 +126,11 @@ func (s AzureRetryStrategy) Backoff(attempt int) time.Duration {
 // Falls back to DefaultRetryStrategy for unknown providers.
 func ProviderRetryStrategy(provider string) RetryStrategy {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "aws":
+	case "aws-lambda":
 		return AWSRetryStrategy{}
-	case "gcp":
+	case "gcp-functions":
 		return GCPRetryStrategy{}
-	case "azure":
+	case "azure-functions":
 		return AzureRetryStrategy{}
 	default:
 		return DefaultRetryStrategy{}

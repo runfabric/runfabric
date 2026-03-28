@@ -70,11 +70,11 @@ func (g AzureCacheKeyGenerator) CacheKey(server, action, target string, args map
 // Falls back to DefaultCacheKeyGenerator for unknown providers.
 func ProviderCacheKeyGenerator(provider, region, project, subscription string) CacheKeyGenerator {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "aws":
+	case "aws-lambda":
 		return AWSCacheKeyGenerator{Region: region}
-	case "gcp":
+	case "gcp-functions":
 		return GCPCacheKeyGenerator{Project: project}
-	case "azure":
+	case "azure-functions":
 		return AzureCacheKeyGenerator{Subscription: subscription, Region: region}
 	default:
 		return DefaultCacheKeyGenerator{}

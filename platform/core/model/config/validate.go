@@ -143,6 +143,9 @@ func Validate(cfg *Config) error {
 	if err := validateWorkflows(cfg.Workflows); err != nil {
 		return err
 	}
+	if err := validateLayers(cfg.Layers); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -154,9 +157,13 @@ func validateWorkflows(workflows []WorkflowConfig) error {
 			return fmt.Errorf("workflows[%d].name is required", wi)
 		}
 		for si, step := range wf.Steps {
+			if strings.TrimSpace(step.ID) == "" {
+				return fmt.Errorf("workflows[%d].steps[%d].id is required", wi, si)
+			}
+
 			kind := strings.ToLower(strings.TrimSpace(step.Kind))
 			if kind == "" {
-				kind = "code"
+				return fmt.Errorf("workflows[%d].steps[%d].kind is required", wi, si)
 			}
 			input := step.Input
 			switch kind {
@@ -197,6 +204,15 @@ func validateWorkflows(workflows []WorkflowConfig) error {
 	return nil
 }
 
+func validateLayers(layers map[string]LayerConfig) error {
+	for name, layer := range layers {
+		if strings.TrimSpace(layer.Ref) == "" {
+			return fmt.Errorf("layers.%s.ref is required", name)
+		}
+	}
+	return nil
+}
+
 func readWorkflowStepString(input map[string]any, key string) string {
 	if input == nil {
 		return ""
@@ -229,17 +245,13 @@ func validateGCSBackend(cfg *Config) error {
 	if cfg == nil || cfg.Backend == nil {
 		return nil
 	}
-	var bucket string
-	var prefix string
-	if cfg.State != nil && cfg.State.GCS != nil {
-		bucket = strings.TrimSpace(cfg.State.GCS.Bucket)
-		prefix = strings.TrimSpace(cfg.State.GCS.Prefix)
-	}
+	bucket := strings.TrimSpace(cfg.Backend.GCSBucket)
+	prefix := strings.TrimSpace(cfg.Backend.GCSPrefix)
 	if bucket == "" {
-		return fmt.Errorf("state.gcs.bucket is required for backend.kind %q", cfg.Backend.Kind)
+		return fmt.Errorf("backend.gcsBucket is required for backend.kind %q", cfg.Backend.Kind)
 	}
 	if prefix == "" {
-		return fmt.Errorf("state.gcs.prefix is required for backend.kind %q", cfg.Backend.Kind)
+		return fmt.Errorf("backend.gcsPrefix is required for backend.kind %q", cfg.Backend.Kind)
 	}
 	return nil
 }
@@ -248,17 +260,13 @@ func validateAzblobBackend(cfg *Config) error {
 	if cfg == nil || cfg.Backend == nil {
 		return nil
 	}
-	var container string
-	var prefix string
-	if cfg.State != nil && cfg.State.Azblob != nil {
-		container = strings.TrimSpace(cfg.State.Azblob.Container)
-		prefix = strings.TrimSpace(cfg.State.Azblob.Prefix)
-	}
+	container := strings.TrimSpace(cfg.Backend.AzblobContainer)
+	prefix := strings.TrimSpace(cfg.Backend.AzblobPrefix)
 	if container == "" {
-		return fmt.Errorf("state.azblob.container is required for backend.kind %q", cfg.Backend.Kind)
+		return fmt.Errorf("backend.azblobContainer is required for backend.kind %q", cfg.Backend.Kind)
 	}
 	if prefix == "" {
-		return fmt.Errorf("state.azblob.prefix is required for backend.kind %q", cfg.Backend.Kind)
+		return fmt.Errorf("backend.azblobPrefix is required for backend.kind %q", cfg.Backend.Kind)
 	}
 	return nil
 }

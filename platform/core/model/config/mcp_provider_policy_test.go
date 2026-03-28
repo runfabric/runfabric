@@ -7,7 +7,7 @@ func TestParseMCPPolicy_ParsesProviderRules(t *testing.T) {
 		Policies: map[string]any{
 			"mcp": map[string]any{
 				"providers": map[string]any{
-					"AWS": map[string]any{
+					"AWS-LAMBDA": map[string]any{
 						"requiredRegion":  "us-east-1",
 						"requiredAuth":    "iam",
 						"denyCrossRegion": true,
@@ -27,9 +27,9 @@ func TestParseMCPPolicy_ParsesProviderRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseMCPPolicy returned error: %v", err)
 	}
-	rules, ok := policy.Providers["aws"]
+	rules, ok := policy.Providers["aws-lambda"]
 	if !ok {
-		t.Fatalf("expected provider policy for aws, got %+v", policy.Providers)
+		t.Fatalf("expected provider policy for aws-lambda, got %+v", policy.Providers)
 	}
 	if rules.RequiredRegion != "us-east-1" {
 		t.Fatalf("expected requiredRegion us-east-1, got %q", rules.RequiredRegion)

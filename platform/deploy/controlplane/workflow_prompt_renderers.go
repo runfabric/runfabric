@@ -80,11 +80,11 @@ func (AzureOpenAIPromptRenderer) Render(in PromptRenderInput) string {
 // Falls back to DeterministicPromptRenderer for unknown or empty providers.
 func ProviderPromptRenderer(provider string) PromptRenderer {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "aws":
+	case "aws-lambda":
 		return AWSBedrockPromptRenderer{}
-	case "gcp":
+	case "gcp-functions":
 		return GCPVertexPromptRenderer{}
-	case "azure":
+	case "azure-functions":
 		return AzureOpenAIPromptRenderer{}
 	default:
 		return DeterministicPromptRenderer{}

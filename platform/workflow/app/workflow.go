@@ -154,42 +154,22 @@ func buildStepsFromConfiguredWorkflows(workflows []config.WorkflowConfig, workfl
 		for i, step := range wf.Steps {
 			stepID := strings.TrimSpace(step.ID)
 			if stepID == "" {
-				stepID = strings.TrimSpace(step.Function)
-			}
-			if stepID == "" {
-				stepID = fmt.Sprintf("step-%d", i+1)
+				return nil, "", fmt.Errorf("workflow %q step %d: id is required", workflowName, i+1)
 			}
 
-			// Resolve step kind; default to code for backward compatibility.
 			kind := strings.TrimSpace(step.Kind)
 			if kind == "" {
-				kind = controlplane.StepKindCode
+				return nil, "", fmt.Errorf("workflow %q step %q: kind is required", workflowName, stepID)
 			}
 
-			// Seed input from YAML step.Input (typed kind-specific fields), then overlay
-			// legacy function/next fields so they remain available in the step context.
 			input := map[string]any{}
 			for k, v := range step.Input {
 				input[k] = v
-			}
-			if step.Function != "" {
-				input["function"] = step.Function
-			}
-			if step.Next != "" {
-				input["next"] = step.Next
 			}
 			copyInputIfAbsent(input, "model", strings.TrimSpace(step.Model))
 
 			maxAttempts := 1
 			backoff := time.Duration(0)
-			if step.Retry != nil {
-				if step.Retry.Attempts > 0 {
-					maxAttempts = step.Retry.Attempts
-				}
-				if step.Retry.BackoffSeconds > 0 {
-					backoff = time.Duration(step.Retry.BackoffSeconds) * time.Second
-				}
-			}
 
 			timeout := time.Duration(0)
 			if step.Timeout > 0 {

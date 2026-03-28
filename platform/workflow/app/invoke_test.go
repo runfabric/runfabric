@@ -9,12 +9,12 @@ func TestParseOrchestrationTarget(t *testing.T) {
 		ok    bool
 	}{
 		{input: "sfn:hello", want: "hello", ok: true},
-		{input: "stepfunction:hello", want: "hello", ok: true},
 		{input: "cwf:order-flow", want: "order-flow", ok: true},
-		{input: "cloudworkflow:order-flow", want: "order-flow", ok: true},
 		{input: "durable:process-order", want: "process-order", ok: true},
 		{input: "hello", want: "", ok: false},
 		{input: "durable:", want: "", ok: false},
+		{input: "stepfunction:hello", want: "", ok: false},
+		{input: "cloudworkflow:order-flow", want: "", ok: false},
 	}
 
 	for _, tc := range tests {

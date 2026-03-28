@@ -62,25 +62,25 @@ func CompileWorkflowGraphFromConfig(cfg *Config) (*aiflow.CompiledGraph, error) 
 		edges = append(edges, aiflow.EdgeInput{From: from, To: to})
 	}
 
-	for _, wf := range cfg.Workflows {
+	for wi, wf := range cfg.Workflows {
 		wfName := strings.TrimSpace(wf.Name)
 		if wfName == "" {
 			wfName = "workflow"
 		}
 		prev := ""
-		for i, step := range wf.Steps {
+		for si, step := range wf.Steps {
 			stepID := strings.TrimSpace(step.ID)
 			if stepID == "" {
-				stepID = strings.TrimSpace(step.Function)
+				return nil, fmt.Errorf("workflows[%d].steps[%d].id is required", wi, si)
 			}
-			if stepID == "" {
-				stepID = fmt.Sprintf("step-%d", i+1)
+			kind := strings.TrimSpace(step.Kind)
+			if kind == "" {
+				return nil, fmt.Errorf("workflows[%d].steps[%d].kind is required", wi, si)
 			}
 			nodeID := wfName + ":" + stepID
-			addNode(nodeID, "code", map[string]any{
+			addNode(nodeID, kind, map[string]any{
 				"workflow": wfName,
-				"function": step.Function,
-				"next":     step.Next,
+				"kind":     kind,
 			})
 			if entrypoint == "" {
 				entrypoint = nodeID
@@ -89,9 +89,6 @@ func CompileWorkflowGraphFromConfig(cfg *Config) (*aiflow.CompiledGraph, error) 
 				addEdge(prev, nodeID)
 			}
 			prev = nodeID
-			if strings.TrimSpace(step.Next) != "" {
-				addEdge(nodeID, wfName+":"+strings.TrimSpace(step.Next))
-			}
 		}
 	}
 

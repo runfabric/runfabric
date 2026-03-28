@@ -8,12 +8,6 @@ func MigrateReceipt(in *Receipt) (*Receipt, error) {
 	}
 
 	switch in.Version {
-	case 0:
-		in.Version = CurrentReceiptVersion
-		return in, nil
-	case 1:
-		in.Version = CurrentReceiptVersion
-		return in, nil
 	case CurrentReceiptVersion:
 		return in, nil
 	default:

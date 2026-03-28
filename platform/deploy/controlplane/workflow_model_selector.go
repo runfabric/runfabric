@@ -53,7 +53,7 @@ func EnvModelSelectorOverrides(provider string) map[string]string {
 	collectEnvModelOverride(overrides, StepKindAIEval, "RUNFABRIC_MODEL_AI_EVAL")
 
 	// Provider-scoped env keys override globals for that provider.
-	p := strings.ToUpper(strings.TrimSpace(provider))
+	p := providerEnvKey(provider)
 	if p != "" {
 		collectEnvModelOverride(overrides, "default", "RUNFABRIC_MODEL_"+p+"_DEFAULT")
 		collectEnvModelOverride(overrides, StepKindAIRetrieval, "RUNFABRIC_MODEL_"+p+"_AI_RETRIEVAL")
@@ -62,6 +62,16 @@ func EnvModelSelectorOverrides(provider string) map[string]string {
 		collectEnvModelOverride(overrides, StepKindAIEval, "RUNFABRIC_MODEL_"+p+"_AI_EVAL")
 	}
 	return overrides
+}
+
+func providerEnvKey(provider string) string {
+	p := strings.ToUpper(strings.TrimSpace(provider))
+	if p == "" {
+		return ""
+	}
+	p = strings.ReplaceAll(p, "-", "_")
+	p = strings.ReplaceAll(p, ".", "_")
+	return p
 }
 
 func collectEnvModelOverride(overrides map[string]string, kind, envKey string) {
@@ -132,17 +142,11 @@ func (AzureModelSelector) SelectModel(kind, _ string) string {
 	}
 }
 
-// ProviderModelSelector returns the appropriate ModelSelector for a cloud provider.
+// ProviderModelSelector returns the appropriate ModelSelector for a provider id.
 // Falls back to DefaultModelSelector for unknown providers.
 func ProviderModelSelector(provider string) ModelSelector {
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "aws":
-		return AWSModelSelector{}
-	case "gcp":
-		return GCPModelSelector{}
-	case "azure":
-		return AzureModelSelector{}
-	default:
-		return DefaultModelSelector{}
+	if policy, ok := providerModelPolicyFor(provider); ok && policy.selector != nil {
+		return policy.selector
 	}
+	return DefaultModelSelector{}
 }

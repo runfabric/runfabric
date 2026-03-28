@@ -21,7 +21,8 @@ type MCPPolicyRuleSet struct {
 }
 
 // MCPProviderPolicyRule holds provider-context enforcement rules for MCP policy.
-// Rules are keyed by provider name (aws, gcp, azure) under policies.mcp.providers.
+// Rules are keyed by normalized provider id (e.g. aws-lambda, gcp-functions, azure-functions)
+// under policies.mcp.providers.
 type MCPProviderPolicyRule struct {
 	// RequiredRegion, if set, denies MCP calls when the active region does not match.
 	RequiredRegion string
@@ -41,7 +42,7 @@ type MCPPolicyConfig struct {
 	DefaultDeny bool
 	Allow       MCPPolicyRuleSet
 	Deny        MCPPolicyRuleSet
-	// Providers holds provider-context rules keyed by provider name (aws, gcp, azure).
+	// Providers holds provider-context rules keyed by normalized provider id.
 	Providers map[string]MCPProviderPolicyRule
 }
 
@@ -133,7 +134,10 @@ func ParseMCPPolicy(cfg *Config) (MCPPolicyConfig, error) {
 		}
 		out.Providers = make(map[string]MCPProviderPolicyRule, len(providersObj))
 		for provName, provRaw := range providersObj {
-			normalizedProvider := strings.ToLower(strings.TrimSpace(provName))
+			normalizedProvider, err := normalizeMCPProviderPolicyKey(provName)
+			if err != nil {
+				return out, err
+			}
 			if normalizedProvider == "" {
 				return out, fmt.Errorf("policies.mcp.providers contains empty provider name")
 			}
@@ -178,6 +182,24 @@ func ParseMCPPolicy(cfg *Config) (MCPPolicyConfig, error) {
 		}
 	}
 	return out, nil
+}
+
+func normalizeMCPProviderPolicyKey(raw string) (string, error) {
+	provider := strings.ToLower(strings.TrimSpace(raw))
+	switch provider {
+	case "":
+		return "", nil
+	case "aws":
+		return "", fmt.Errorf("policies.mcp.providers.%s is not supported; use %q", raw, "aws-lambda")
+	case "gcp":
+		return "", fmt.Errorf("policies.mcp.providers.%s is not supported; use %q", raw, "gcp-functions")
+	case "azure":
+		return "", fmt.Errorf("policies.mcp.providers.%s is not supported; use %q", raw, "azure-functions")
+	case "aws-lambda", "gcp-functions", "azure-functions":
+		return provider, nil
+	default:
+		return provider, nil
+	}
 }
 
 func ValidateMCPConfig(cfg *Config) error {

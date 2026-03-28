@@ -2,14 +2,14 @@ package config
 
 import "testing"
 
-func TestCompileWorkflowGraphFromConfig_PrefersStepIDOverLegacyFunction(t *testing.T) {
+func TestCompileWorkflowGraphFromConfig_UsesOrderedStepEdges(t *testing.T) {
 	cfg := &Config{
 		Workflows: []WorkflowConfig{
 			{
 				Name: "release-flow",
 				Steps: []WorkflowStep{
-					{ID: "plan", Function: "legacy-plan", Next: "approve"},
-					{ID: "approve"},
+					{ID: "plan", Kind: "code"},
+					{ID: "approve", Kind: "human-approval"},
 				},
 			},
 		},
@@ -37,3 +37,20 @@ func TestCompileWorkflowGraphFromConfig_PrefersStepIDOverLegacyFunction(t *testi
 	}
 }
 
+func TestCompileWorkflowGraphFromConfig_RequiresStepKind(t *testing.T) {
+	cfg := &Config{
+		Workflows: []WorkflowConfig{
+			{
+				Name: "release-flow",
+				Steps: []WorkflowStep{
+					{ID: "plan"},
+				},
+			},
+		},
+	}
+
+	_, err := CompileWorkflowGraphFromConfig(cfg)
+	if err == nil {
+		t.Fatal("expected missing step kind to fail compile")
+	}
+}

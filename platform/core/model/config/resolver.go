@@ -70,6 +70,22 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+		b.GCSBucket, err = resolveValue(b.GCSBucket)
+		if err != nil {
+			return nil, err
+		}
+		b.GCSPrefix, err = resolveValue(b.GCSPrefix)
+		if err != nil {
+			return nil, err
+		}
+		b.AzblobContainer, err = resolveValue(b.AzblobContainer)
+		if err != nil {
+			return nil, err
+		}
+		b.AzblobPrefix, err = resolveValue(b.AzblobPrefix)
+		if err != nil {
+			return nil, err
+		}
 		b.LockTable, err = resolveValue(b.LockTable)
 		if err != nil {
 			return nil, err
@@ -80,11 +96,7 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 	if out.Layers != nil {
 		resolvedLayers := make(map[string]LayerConfig, len(out.Layers))
 		for k, v := range out.Layers {
-			refSource := v.Ref
-			if refSource == "" {
-				refSource = v.Arn
-			}
-			ref, err := resolveValue(refSource)
+			ref, err := resolveValue(v.Ref)
 			if err != nil {
 				return nil, err
 			}
@@ -195,11 +207,7 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 				ref := layer
 				if out.Layers != nil {
 					if lc, ok := out.Layers[layer]; ok {
-						if lc.Ref != "" {
-							ref = lc.Ref
-						} else if lc.Arn != "" {
-							ref = lc.Arn
-						}
+						ref = lc.Ref
 					}
 				}
 				s, e := resolveValue(ref)
@@ -302,6 +310,30 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 				}
 				if stageCfg.Backend.S3Prefix != "" {
 					out.Backend.S3Prefix, err = resolveValue(stageCfg.Backend.S3Prefix)
+					if err != nil {
+						return nil, err
+					}
+				}
+				if stageCfg.Backend.GCSBucket != "" {
+					out.Backend.GCSBucket, err = resolveValue(stageCfg.Backend.GCSBucket)
+					if err != nil {
+						return nil, err
+					}
+				}
+				if stageCfg.Backend.GCSPrefix != "" {
+					out.Backend.GCSPrefix, err = resolveValue(stageCfg.Backend.GCSPrefix)
+					if err != nil {
+						return nil, err
+					}
+				}
+				if stageCfg.Backend.AzblobContainer != "" {
+					out.Backend.AzblobContainer, err = resolveValue(stageCfg.Backend.AzblobContainer)
+					if err != nil {
+						return nil, err
+					}
+				}
+				if stageCfg.Backend.AzblobPrefix != "" {
+					out.Backend.AzblobPrefix, err = resolveValue(stageCfg.Backend.AzblobPrefix)
 					if err != nil {
 						return nil, err
 					}
