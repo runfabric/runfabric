@@ -1,7 +1,5 @@
 # TODO
 
-## Unified Backlog (Ordered)
-
 ## Deferred: Enterprise Production Readiness (Engine Track)
 
 - [ ] Define and freeze v1 engine stability contracts.
