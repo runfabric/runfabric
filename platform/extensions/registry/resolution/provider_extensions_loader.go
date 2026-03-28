@@ -9,12 +9,7 @@ import (
 func loadBuiltinProviders(reg *manifests.PluginRegistry) (*providers.Registry, map[string]struct{}) {
 	providerSet := providerpolicy.NewBuiltinProviderSet()
 	for _, provider := range providerSet.ManifestProviders {
-		reg.Register(&manifests.PluginManifest{
-			ID:          provider.ID,
-			Kind:        manifests.KindProvider,
-			Name:        provider.Name,
-			Description: provider.Description,
-		})
+		registerManifest(reg, manifests.KindProvider, provider.ID, provider.Name, provider.Description)
 	}
 	providersRegistry := providerSet.Registry
 	RegisterAPIProviders(providersRegistry)

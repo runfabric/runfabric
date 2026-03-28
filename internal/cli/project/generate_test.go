@@ -548,8 +548,11 @@ func TestGeneratePlugin_Success(t *testing.T) {
 		}
 	}
 	mainData, _ := os.ReadFile(filepath.Join(root, "main.go"))
-	if !strings.Contains(string(mainData), `sdkprovider.NewServer(`) || !strings.Contains(string(mainData), `type plugin struct`) || !strings.Contains(string(mainData), `defaultProviderCLICommand`) {
+	if !strings.Contains(string(mainData), `sdkprovider.NewServer(`) || !strings.Contains(string(mainData), `type plugin struct`) {
 		t.Fatalf("expected generated main.go to use typed provider SDK server, got: %s", string(mainData))
+	}
+	if strings.Contains(string(mainData), `defaultProviderCLICommand`) {
+		t.Fatalf("generated main.go must not include implicit defaultProviderCLICommand fallback, got: %s", string(mainData))
 	}
 	if strings.Contains(string(mainData), `github.com/runfabric/runfabric/platform/`) {
 		t.Fatalf("generated main.go must not import platform packages; plugins must depend on SDK only, got: %s", string(mainData))
@@ -562,8 +565,14 @@ func TestGeneratePlugin_Success(t *testing.T) {
 		t.Fatalf("generated go.mod must not reference platform modules; plugins must depend on SDK only, got: %s", string(goModData))
 	}
 	readmeData, _ := os.ReadFile(filepath.Join(root, "README.md"))
-	if !strings.Contains(string(readmeData), `ACME_PROVIDER_DEPLOY_CMD`) || !strings.Contains(string(readmeData), `defaultProviderCLICommand`) {
+	if !strings.Contains(string(readmeData), `ACME_PROVIDER_DEPLOY_CMD`) {
 		t.Fatalf("expected generated README to describe scaffold conventions, got: %s", string(readmeData))
+	}
+	if strings.Contains(string(readmeData), `defaultProviderCLICommand`) {
+		t.Fatalf("generated README must not mention defaultProviderCLICommand fallback, got: %s", string(readmeData))
+	}
+	if !strings.Contains(string(readmeData), `plugins/providers/`) {
+		t.Fatalf("expected generated README to use canonical plugins/providers path, got: %s", string(readmeData))
 	}
 }
 

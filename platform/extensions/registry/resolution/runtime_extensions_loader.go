@@ -6,14 +6,7 @@ import (
 )
 
 func loadBuiltinRuntimes(reg *manifests.PluginRegistry) providerpolicy.RuntimeRegistry {
-	for _, rt := range providerpolicy.BuiltinRuntimeManifests() {
-		reg.Register(&manifests.PluginManifest{
-			ID:          rt.ID,
-			Kind:        manifests.KindRuntime,
-			Name:        rt.Name,
-			Description: rt.Description,
-		})
-	}
+	registerPluginMetaManifests(reg, manifests.KindRuntime, providerpolicy.BuiltinRuntimeManifests())
 	return providerpolicy.NewBuiltinRuntimeRegistry()
 }
 

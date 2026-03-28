@@ -86,14 +86,34 @@ func TestInit_ProviderTemplateMatrixAccept(t *testing.T) {
 	dir := t.TempDir()
 	opts := &common.GlobalOptions{}
 	cmd := newInitCmd(opts)
-	cmd.SetArgs([]string{"--dir", dir, "--provider", "aws-lambda", "--template", "api", "--lang", "go", "--no-interactive"})
+	cmd.SetArgs([]string{"--dir", dir, "--provider", "aws-lambda", "--template", "http", "--lang", "go", "--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	if err := cmd.Execute(); err != nil {
-		t.Errorf("init provider=aws-lambda template=api lang=go should succeed: %v", err)
+		t.Errorf("init provider=aws-lambda template=http lang=go should succeed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "handler.go")); err != nil {
 		t.Errorf("handler.go not created: %v", err)
+	}
+}
+
+func TestInit_RejectsLegacyTemplateAliases(t *testing.T) {
+	for _, legacy := range []string{"api", "worker"} {
+		t.Run(legacy, func(t *testing.T) {
+			dir := t.TempDir()
+			opts := &common.GlobalOptions{}
+			cmd := newInitCmd(opts)
+			cmd.SetArgs([]string{"--dir", dir, "--provider", "aws-lambda", "--template", legacy, "--lang", "go", "--no-interactive"})
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+			err := cmd.Execute()
+			if err == nil {
+				t.Fatalf("expected %q template alias to be rejected", legacy)
+			}
+			if !strings.Contains(err.Error(), "is no longer supported") {
+				t.Fatalf("expected explicit legacy template error, got %v", err)
+			}
+		})
 	}
 }
 

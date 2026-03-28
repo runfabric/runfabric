@@ -421,18 +421,16 @@ func decodeSignatureValue(v string) ([]byte, error) {
 	}
 	// Common: base64.
 	if b, err := base64.StdEncoding.DecodeString(v); err == nil {
-		return b, nil
-	}
-	if b, err := base64.RawStdEncoding.DecodeString(v); err == nil {
-		return b, nil
-	}
-	// Fallback: hex.
-	if hb := strings.TrimPrefix(strings.ToLower(v), "0x"); len(hb) > 0 {
-		if b, err := hex.DecodeString(hb); err == nil {
+		if len(b) == ed25519.SignatureSize {
 			return b, nil
 		}
 	}
-	return nil, fmt.Errorf("signature value is not valid base64 or hex")
+	if b, err := base64.RawStdEncoding.DecodeString(v); err == nil {
+		if len(b) == ed25519.SignatureSize {
+			return b, nil
+		}
+	}
+	return nil, fmt.Errorf("signature value is not valid base64")
 }
 
 func trustedPublicKey(publicKeyID string) (ed25519.PublicKey, error) {

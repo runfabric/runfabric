@@ -16,6 +16,7 @@ import (
 const (
 	envHome           = "RUNFABRIC_HOME"
 	envPreferExternal = "RUNFABRIC_PREFER_EXTERNAL_PLUGINS"
+	pluginAPIVersion  = "runfabric.io/plugin/v1"
 )
 
 // HomeDir returns RUNFABRIC_HOME if set, otherwise "~/.runfabric".
@@ -37,7 +38,7 @@ type pluginYAML struct {
 	Name              string   `yaml:"name"`
 	Description       string   `yaml:"description"`
 	Version           string   `yaml:"version"`
-	PluginVer         any      `yaml:"pluginVersion"`
+	PluginVer         int      `yaml:"pluginVersion"`
 	Executable        string   `yaml:"executable"`
 	Capabilities      []string `yaml:"capabilities"`
 	SupportsRuntime   []string `yaml:"supportsRuntime"`
@@ -63,7 +64,7 @@ type DiscoverOptions struct {
 	// PreferExternal allows external manifests to override built-ins with the same ID.
 	PreferExternal bool
 	// PinnedVersions optionally pins a specific version per plugin ID.
-	// Version strings are directory names (e.g. "0.2.0" or "v0.2.0").
+	// Version strings are strict semver directory names (e.g. "0.2.0").
 	PinnedVersions map[string]string
 	// IncludeInvalid records invalid/skipped plugin entries in the returned report.
 	IncludeInvalid bool
@@ -92,7 +93,17 @@ func invalidateDiscoverCache() {
 }
 
 func PreferExternalFromEnv() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv(envPreferExternal)))
+	return EnvTruthy(envPreferExternal)
+}
+
+// EnvTruthy reports whether an environment variable is set to a truthy value.
+// Accepted values (case-insensitive, trimmed): 1, true, yes.
+func EnvTruthy(key string) bool {
+	return isTruthyValue(os.Getenv(key))
+}
+
+func isTruthyValue(raw string) bool {
+	v := strings.ToLower(strings.TrimSpace(raw))
 	return v == "1" || v == "true" || v == "yes"
 }
 
@@ -130,7 +141,7 @@ func Discover(opts DiscoverOptions) (DiscoverResult, error) {
 		manifests.KindSimulator,
 		manifests.KindRouter,
 	} {
-		found, invalid := discoverKindAcrossCompatDirs(root, kind, opts)
+		found, invalid := discoverKind(root, kind, opts)
 		res.Plugins = append(res.Plugins, found...)
 		if opts.IncludeInvalid {
 			res.Invalid = append(res.Invalid, invalid...)
@@ -198,53 +209,55 @@ func cloneDiscoverResult(in DiscoverResult) DiscoverResult {
 	return out
 }
 
-func discoverKindAcrossCompatDirs(root string, kind manifests.PluginKind, opts DiscoverOptions) ([]*manifests.PluginManifest, []InvalidPlugin) {
+func discoverKind(root string, kind manifests.PluginKind, opts DiscoverOptions) ([]*manifests.PluginManifest, []InvalidPlugin) {
 	bestByID := map[string]*manifests.PluginManifest{}
 	bestByIDSemver := map[string]string{}
 	var invalid []InvalidPlugin
 
-	for _, dir := range pluginKindDirs(kind) {
-		found, localInvalid, err := discoverKind(filepath.Join(root, dir), kind, opts)
-		if err != nil {
-			// Missing compatibility dir is fine.
-			if os.IsNotExist(err) {
-				continue
-			}
-			if opts.IncludeInvalid {
-				invalid = append(invalid, InvalidPlugin{
-					Kind:   kind,
-					Path:   filepath.Join(root, dir),
-					Reason: fmt.Sprintf("failed to scan kind directory: %v", err),
-				})
-			}
-			continue
+	kindDir := pluginKindDir(kind)
+	if kindDir == "" {
+		return nil, nil
+	}
+	found, localInvalid, err := discoverKindDir(filepath.Join(root, kindDir), kind, opts)
+	if err != nil {
+		// Missing kind dir is fine.
+		if os.IsNotExist(err) {
+			return nil, nil
 		}
 		if opts.IncludeInvalid {
-			invalid = append(invalid, localInvalid...)
+			invalid = append(invalid, InvalidPlugin{
+				Kind:   kind,
+				Path:   filepath.Join(root, kindDir),
+				Reason: fmt.Sprintf("failed to scan kind directory: %v", err),
+			})
 		}
-		for _, m := range found {
-			if m == nil {
-				continue
-			}
-			current, ok := bestByID[m.ID]
-			if !ok {
-				bestByID[m.ID] = m
-				bestByIDSemver[m.ID] = normalizeDirSemver(m.Version)
-				continue
-			}
-			prevNorm := bestByIDSemver[m.ID]
-			nextNorm := normalizeDirSemver(m.Version)
-			cmp := compareSemverNormalized(nextNorm, prevNorm)
-			if cmp > 0 {
-				bestByID[m.ID] = m
-				bestByIDSemver[m.ID] = nextNorm
-				continue
-			}
-			// Keep deterministic tie-breaker by primary directory preference.
-			if cmp == 0 && current.Path > m.Path {
-				bestByID[m.ID] = m
-				bestByIDSemver[m.ID] = nextNorm
-			}
+		return nil, invalid
+	}
+	if opts.IncludeInvalid {
+		invalid = append(invalid, localInvalid...)
+	}
+	for _, m := range found {
+		if m == nil {
+			continue
+		}
+		current, ok := bestByID[m.ID]
+		if !ok {
+			bestByID[m.ID] = m
+			bestByIDSemver[m.ID] = normalizedDirSemver(m.Version)
+			continue
+		}
+		prevNorm := bestByIDSemver[m.ID]
+		nextNorm := normalizedDirSemver(m.Version)
+		cmp := compareSemverNormalized(nextNorm, prevNorm)
+		if cmp > 0 {
+			bestByID[m.ID] = m
+			bestByIDSemver[m.ID] = nextNorm
+			continue
+		}
+		// Keep deterministic tie-breaker by path.
+		if cmp == 0 && current.Path > m.Path {
+			bestByID[m.ID] = m
+			bestByIDSemver[m.ID] = nextNorm
 		}
 	}
 
@@ -256,7 +269,7 @@ func discoverKindAcrossCompatDirs(root string, kind manifests.PluginKind, opts D
 	return out, invalid
 }
 
-func discoverKind(kindRoot string, kind manifests.PluginKind, opts DiscoverOptions) ([]*manifests.PluginManifest, []InvalidPlugin, error) {
+func discoverKindDir(kindRoot string, kind manifests.PluginKind, opts DiscoverOptions) ([]*manifests.PluginManifest, []InvalidPlugin, error) {
 	entries, err := os.ReadDir(kindRoot)
 	if err != nil {
 		return nil, nil, err
@@ -358,10 +371,6 @@ func selectVersionDir(idPath string, pinned string) (version string, path string
 			if v.Name() == pinned {
 				return pinned, filepath.Join(idPath, pinned)
 			}
-			// allow pinned values that omit leading v
-			if normalizeDirSemver(v.Name()) == normalizeDirSemver(pinned) {
-				return v.Name(), filepath.Join(idPath, v.Name())
-			}
 		}
 		return "", ""
 	}
@@ -372,7 +381,7 @@ func selectVersionDir(idPath string, pinned string) (version string, path string
 			continue
 		}
 		raw := v.Name()
-		norm := normalizeDirSemver(raw)
+		norm := normalizedDirSemver(raw)
 		if norm == "" {
 			continue
 		}
@@ -385,18 +394,19 @@ func selectVersionDir(idPath string, pinned string) (version string, path string
 	return version, bestPath
 }
 
-func normalizeDirSemver(v string) string {
+func normalizedDirSemver(v string) string {
 	v = strings.TrimSpace(v)
 	if v == "" {
 		return ""
 	}
-	if !strings.HasPrefix(v, "v") {
-		v = "v" + v
-	}
-	if !semver.IsValid(v) {
+	if strings.HasPrefix(v, "v") {
 		return ""
 	}
-	return v
+	normalized := "v" + v
+	if !semver.IsValid(normalized) {
+		return ""
+	}
+	return normalized
 }
 
 func compareSemverNormalized(a, b string) int {
@@ -412,18 +422,18 @@ func compareSemverNormalized(a, b string) int {
 	return semver.Compare(a, b)
 }
 
-func pluginKindDirs(kind manifests.PluginKind) []string {
+func pluginKindDir(kind manifests.PluginKind) string {
 	switch kind {
 	case manifests.KindProvider:
-		return []string{"providers", "provider"}
+		return "providers"
 	case manifests.KindRuntime:
-		return []string{"runtimes", "runtime"}
+		return "runtimes"
 	case manifests.KindSimulator:
-		return []string{"simulators", "simulator"}
+		return "simulators"
 	case manifests.KindRouter:
-		return []string{"routers", "router"}
+		return "routers"
 	default:
-		return nil
+		return ""
 	}
 }
 
@@ -436,6 +446,9 @@ func readPluginYAML(dir string) (*pluginYAML, error) {
 	var m pluginYAML
 	if err := yaml.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", p, err)
+	}
+	if strings.TrimSpace(m.APIVersion) != pluginAPIVersion {
+		return nil, fmt.Errorf("unsupported plugin apiVersion %q", strings.TrimSpace(m.APIVersion))
 	}
 	m.Kind = string(manifests.NormalizePluginKind(m.Kind))
 	m.ID = strings.TrimSpace(m.ID)

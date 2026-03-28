@@ -46,7 +46,7 @@ func NewRootCmd() *cobra.Command {
 		newGuardCommand("debug"),
 		newGuardCommand("docs"),
 		newGuardCommand("releases"),
-		newGuardCommand("router", "fabric"),
+		newGuardCommand("router"),
 	)
 
 	return cmd

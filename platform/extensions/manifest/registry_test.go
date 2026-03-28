@@ -72,13 +72,11 @@ func TestNormalizePluginKind(t *testing.T) {
 		want PluginKind
 	}{
 		{in: "provider", want: KindProvider},
-		{in: "providers", want: KindProvider},
 		{in: "runtime", want: KindRuntime},
-		{in: "runtimes", want: KindRuntime},
 		{in: "simulator", want: KindSimulator},
-		{in: "simulators", want: KindSimulator},
 		{in: "router", want: KindRouter},
-		{in: "routers", want: KindRouter},
+		{in: "PROVIDER", want: KindProvider},
+		{in: "providers", want: "providers"},
 		{in: "unknown", want: "unknown"},
 	}
 

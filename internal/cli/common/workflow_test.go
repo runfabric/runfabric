@@ -20,8 +20,10 @@ functions:
 workflows:
   - name: hello-flow
     steps:
-      - function: s1
-      - function: s2
+      - id: s1
+        kind: code
+      - id: s2
+        kind: code
 `
 	cfgPath := writeConfig(t, dir, cfg)
 

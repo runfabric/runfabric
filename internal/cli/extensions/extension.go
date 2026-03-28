@@ -1,7 +1,6 @@
 package extensions
 
 import (
-	"encoding/json"
 	"fmt"
 	"text/tabwriter"
 
@@ -9,7 +8,6 @@ import (
 	"github.com/runfabric/runfabric/platform/extensions/application/external"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 	extRuntime "github.com/runfabric/runfabric/platform/extensions/registry/loader/runtime"
-	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 	"github.com/spf13/cobra"
 )
 
@@ -55,13 +53,6 @@ func newExtensionInstallCmd(opts *common.GlobalOptions) *cobra.Command {
 			if registryToken == "" && external.RegistryTokenFromEnv() == "" && rc.RegistryToken != "" {
 				registryToken = rc.RegistryToken
 			}
-			if registryToken == "" && external.RegistryTokenFromEnv() == "" && rc.RegistryToken == "" {
-				tok, terr := common.RegistryTokenFromAuthStore(c.Context(), "")
-				if terr != nil {
-					return terr
-				}
-				registryToken = tok
-			}
 			var res any
 			var err error
 			if source != "" {
@@ -95,9 +86,7 @@ func newExtensionInstallCmd(opts *common.GlobalOptions) *cobra.Command {
 				return err
 			}
 			if opts.JSONOutput {
-				enc := json.NewEncoder(c.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(res)
+				return writePrettyJSON(c.OutOrStdout(), res)
 			}
 			// Text output: best-effort for both install paths.
 			if ir, ok := res.(*external.InstallResult); ok && ir != nil && ir.Plugin != nil {
@@ -173,13 +162,6 @@ func newExtensionUpgradeCmd(opts *common.GlobalOptions) *cobra.Command {
 			if registryToken == "" && external.RegistryTokenFromEnv() == "" && rc.RegistryToken != "" {
 				registryToken = rc.RegistryToken
 			}
-			if registryToken == "" && external.RegistryTokenFromEnv() == "" && rc.RegistryToken == "" {
-				tok, terr := common.RegistryTokenFromAuthStore(c.Context(), "")
-				if terr != nil {
-					return terr
-				}
-				registryToken = tok
-			}
 			var res any
 			var err error
 			if source != "" {
@@ -210,9 +192,7 @@ func newExtensionUpgradeCmd(opts *common.GlobalOptions) *cobra.Command {
 				return err
 			}
 			if opts.JSONOutput {
-				enc := json.NewEncoder(c.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(res)
+				return writePrettyJSON(c.OutOrStdout(), res)
 			}
 			if ir, ok := res.(*external.InstallResult); ok && ir != nil && ir.Plugin != nil {
 				fmt.Fprintf(c.OutOrStdout(), "Upgraded %s (%s) to %s\n", ir.Plugin.ID, ir.Plugin.Kind, ir.Plugin.Version)
@@ -237,17 +217,10 @@ func newExtensionListCmd(opts *common.GlobalOptions) *cobra.Command {
 		Use:   "list",
 		Short: "List RunFabric plugins (providers, runtimes, simulators, routers)",
 		RunE: func(c *cobra.Command, args []string) error {
-			prefer := preferExternal || external.PreferExternalFromEnv()
-			catalog, err := resolution.DiscoverPluginCatalog(external.DiscoverOptions{
-				PreferExternal: prefer,
-				IncludeInvalid: showInvalid,
-				PinnedVersions: nil,
-			})
+			catalog, err := discoverPluginCatalog(preferExternal, showInvalid, nil)
 			reg := catalog.Registry
 			if showInvalid && opts.JSONOutput {
-				enc := json.NewEncoder(c.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(map[string]any{"plugins": reg.List(""), "invalid": catalog.Invalid})
+				return writePrettyJSON(c.OutOrStdout(), map[string]any{"plugins": reg.List(""), "invalid": catalog.Invalid})
 			}
 			var k manifests.PluginKind
 			switch {
@@ -262,10 +235,7 @@ func newExtensionListCmd(opts *common.GlobalOptions) *cobra.Command {
 			}
 			list := reg.List(k)
 			if opts.JSONOutput {
-				out := map[string]any{"plugins": list}
-				enc := json.NewEncoder(c.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(out)
+				return writePrettyJSON(c.OutOrStdout(), map[string]any{"plugins": list})
 			}
 			tw := tabwriter.NewWriter(c.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(tw, "ID\tKIND\tSOURCE\tVERSION\tDESCRIPTION")
@@ -317,41 +287,20 @@ func newExtensionInfoCmd(opts *common.GlobalOptions) *cobra.Command {
 				return fmt.Errorf("usage: runfabric extension info <id>")
 			}
 			id := args[0]
-			reg := manifests.NewPluginRegistry()
 			pins := map[string]string{}
 			if version != "" {
 				pins[id] = version
 			}
-			catalog, _ := resolution.DiscoverPluginCatalog(external.DiscoverOptions{
-				PreferExternal: preferExternal || external.PreferExternalFromEnv(),
-				PinnedVersions: pins,
-			})
-			reg = catalog.Registry
+			catalog, _ := discoverPluginCatalog(preferExternal, false, pins)
+			reg := catalog.Registry
 			m := reg.Get(id)
 			if m == nil {
 				return fmt.Errorf("plugin %q not found", id)
 			}
 			if opts.JSONOutput {
-				enc := json.NewEncoder(c.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(m)
+				return writePrettyJSON(c.OutOrStdout(), m)
 			}
-			fmt.Fprintf(c.OutOrStdout(), "id:          %s\n", m.ID)
-			fmt.Fprintf(c.OutOrStdout(), "kind:        %s\n", m.Kind)
-			fmt.Fprintf(c.OutOrStdout(), "name:        %s\n", m.Name)
-			fmt.Fprintf(c.OutOrStdout(), "description: %s\n", m.Description)
-			if m.Source != "" {
-				fmt.Fprintf(c.OutOrStdout(), "source:      %s\n", m.Source)
-			}
-			if m.Version != "" {
-				fmt.Fprintf(c.OutOrStdout(), "version:     %s\n", m.Version)
-			}
-			if m.Path != "" {
-				fmt.Fprintf(c.OutOrStdout(), "path:        %s\n", m.Path)
-			}
-			if m.Executable != "" {
-				fmt.Fprintf(c.OutOrStdout(), "executable:  %s\n", m.Executable)
-			}
+			renderPluginManifestInfo(c.OutOrStdout(), m)
 			return nil
 		},
 	}
@@ -370,15 +319,10 @@ func newExtensionSearchCmd(opts *common.GlobalOptions) *cobra.Command {
 			if len(args) > 0 {
 				query = args[0]
 			}
-			catalog, _ := resolution.DiscoverPluginCatalog(external.DiscoverOptions{
-				PreferExternal: preferExternal || external.PreferExternalFromEnv(),
-			})
+			catalog, _ := discoverPluginCatalog(preferExternal, false, nil)
 			list := catalog.Registry.Search(query)
 			if opts.JSONOutput {
-				out := map[string]any{"plugins": list}
-				enc := json.NewEncoder(c.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(out)
+				return writePrettyJSON(c.OutOrStdout(), map[string]any{"plugins": list})
 			}
 			for _, m := range list {
 				if m.Description != "" {

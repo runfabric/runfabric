@@ -10,6 +10,5 @@ import (
 func RegisterCommands(opts *common.GlobalOptions) []*cobra.Command {
 	return []*cobra.Command{
 		newStateCmd(opts),
-		newMigrateCmd(opts),
 	}
 }

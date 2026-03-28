@@ -6,13 +6,6 @@ import (
 )
 
 func loadBuiltinRouters(reg *manifests.PluginRegistry) providerpolicy.RouterRegistry {
-	for _, router := range providerpolicy.BuiltinRouterManifests() {
-		reg.Register(&manifests.PluginManifest{
-			ID:          router.ID,
-			Kind:        manifests.KindRouter,
-			Name:        router.Name,
-			Description: router.Description,
-		})
-	}
+	registerPluginMetaManifests(reg, manifests.KindRouter, providerpolicy.BuiltinRouterManifests())
 	return providerpolicy.NewBuiltinRouterRegistry()
 }

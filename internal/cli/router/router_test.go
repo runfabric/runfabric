@@ -128,7 +128,6 @@ func TestSelectedRouterPlugin_FromExtensions_NormalizesToLowerTrim(t *testing.T)
 
 func TestPrimeRouterAPIToken_FromCustomEnv(t *testing.T) {
 	t.Setenv("RUNFABRIC_ROUTER_API_TOKEN", "")
-	t.Setenv("CLOUDFLARE_API_TOKEN", "")
 	t.Setenv("CUSTOM_ROUTER_TOKEN_ENV", "token-from-custom-env")
 	policy := app.RouterDNSSyncPolicy{APITokenEnv: "CUSTOM_ROUTER_TOKEN_ENV"}
 	if err := primeRouterAPIToken(nil, policy); err != nil {
@@ -141,7 +140,6 @@ func TestPrimeRouterAPIToken_FromCustomEnv(t *testing.T) {
 
 func TestPrimeRouterAPIToken_FromTokenFileEnv(t *testing.T) {
 	t.Setenv("RUNFABRIC_ROUTER_API_TOKEN", "")
-	t.Setenv("CLOUDFLARE_API_TOKEN", "")
 	dir := t.TempDir()
 	tokenPath := filepath.Join(dir, "router-token.txt")
 	if err := os.WriteFile(tokenPath, []byte("token-from-file\n"), 0o600); err != nil {
@@ -159,7 +157,6 @@ func TestPrimeRouterAPIToken_FromTokenFileEnv(t *testing.T) {
 
 func TestPrimeRouterAPIToken_FromSecretRef(t *testing.T) {
 	t.Setenv("RUNFABRIC_ROUTER_API_TOKEN", "")
-	t.Setenv("CLOUDFLARE_API_TOKEN", "")
 	t.Setenv("CF_ROUTER_TOKEN", "token-from-secret-ref")
 	ctx := &app.AppContext{
 		Config: &modelconfig.Config{

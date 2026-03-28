@@ -21,7 +21,8 @@ functions:
 workflows:
   - name: hello-flow
     steps:
-      - function: api
+      - id: api-step
+        kind: code
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
@@ -54,7 +55,8 @@ functions:
 workflows:
   - name: hello-flow
     steps:
-      - function: api
+      - id: api-step
+        kind: code
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)

@@ -10,10 +10,18 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 )
+
+func TestDecodeSignatureValue_RejectsHexFallback(t *testing.T) {
+	sig := strings.Repeat("ab", ed25519.SignatureSize)
+	if _, err := decodeSignatureValue(sig); err == nil {
+		t.Fatal("expected hex signature value to be rejected")
+	}
+}
 
 func TestInstallFromRegistry_InstallsPluginWithGeneratedManifest(t *testing.T) {
 	home := t.TempDir()

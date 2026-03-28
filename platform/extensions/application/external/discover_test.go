@@ -69,7 +69,7 @@ func TestDiscoverLatest_SelectsLatestVersionPerID(t *testing.T) {
 	}
 }
 
-func TestDiscoverLatest_SupportsKindAliasesAndDirectoryAliases(t *testing.T) {
+func TestDiscoverLatest_RejectsPluralPluginKind(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv(envHome, tmp)
 
@@ -89,14 +89,8 @@ func TestDiscoverLatest_SupportsKindAliasesAndDirectoryAliases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DiscoverLatest error: %v", err)
 	}
-	if len(plugins) != 1 {
-		t.Fatalf("expected 1 plugin, got %d", len(plugins))
-	}
-	if plugins[0].Kind != "provider" {
-		t.Fatalf("expected normalized kind provider, got %q", plugins[0].Kind)
-	}
-	if plugins[0].ID != "alias-provider" {
-		t.Fatalf("expected alias-provider, got %q", plugins[0].ID)
+	if len(plugins) != 0 {
+		t.Fatalf("expected plural plugin kind to be rejected, got %d plugin(s)", len(plugins))
 	}
 }
 
@@ -178,6 +172,59 @@ func TestDiscover_ProviderMissingSupportsRuntime(t *testing.T) {
 	}
 	if len(res.Invalid) == 0 || !strings.Contains(res.Invalid[0].Reason, "must declare supportsRuntime") {
 		t.Fatalf("expected supportsRuntime validation error, got %#v", res.Invalid)
+	}
+}
+
+func TestDiscover_RejectsUnsupportedAPIVersion(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv(envHome, tmp)
+
+	writePlugin(t, filepath.Join(tmp, "plugins", "providers", "bad-api-version", "0.1.0"), pluginYAML{
+		APIVersion:       "runfabric.io/v1alpha1",
+		Kind:             "provider",
+		ID:               "bad-api-version",
+		Name:             "Bad API Version",
+		Version:          "0.1.0",
+		Executable:       "runfabric-provider-bad",
+		Capabilities:     []string{"deploy"},
+		SupportsTriggers: []string{"http"},
+		SupportsRuntime:  []string{"nodejs"},
+	})
+
+	res, err := Discover(DiscoverOptions{IncludeInvalid: true})
+	if err != nil {
+		t.Fatalf("Discover error: %v", err)
+	}
+	if len(res.Plugins) != 0 {
+		t.Fatalf("expected invalid plugin to be skipped, got %#v", res.Plugins)
+	}
+	if len(res.Invalid) == 0 || !strings.Contains(res.Invalid[0].Reason, "unsupported plugin apiVersion") {
+		t.Fatalf("expected unsupported apiVersion error, got %#v", res.Invalid)
+	}
+}
+
+func TestDiscover_RejectsVPrefixedVersionDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv(envHome, tmp)
+
+	writePlugin(t, filepath.Join(tmp, "plugins", "providers", "vprefix", "v1.2.3"), pluginYAML{
+		APIVersion:       "runfabric.io/plugin/v1",
+		Kind:             "provider",
+		ID:               "vprefix",
+		Name:             "VPrefixed",
+		Version:          "v1.2.3",
+		Executable:       "runfabric-provider-vprefix",
+		Capabilities:     []string{"deploy"},
+		SupportsTriggers: []string{"http"},
+		SupportsRuntime:  []string{"nodejs"},
+	})
+
+	plugins, err := DiscoverLatest()
+	if err != nil {
+		t.Fatalf("DiscoverLatest error: %v", err)
+	}
+	if len(plugins) != 0 {
+		t.Fatalf("expected v-prefixed version directory to be ignored, got %d plugin(s)", len(plugins))
 	}
 }
 

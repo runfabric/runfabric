@@ -1,7 +1,6 @@
 package extensions
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -290,11 +289,6 @@ func applyRegistryConfig(registry, token string) (string, string) {
 	}
 	if strings.TrimSpace(token) == "" && external.RegistryTokenFromEnv() == "" && strings.TrimSpace(rc.RegistryToken) != "" {
 		token = rc.RegistryToken
-	}
-	if strings.TrimSpace(token) == "" && external.RegistryTokenFromEnv() == "" && strings.TrimSpace(rc.RegistryToken) == "" {
-		if t, err := common.RegistryTokenFromAuthStore(context.Background(), ""); err == nil {
-			token = t
-		}
 	}
 	return strings.TrimSpace(registry), strings.TrimSpace(token)
 }

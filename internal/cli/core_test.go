@@ -84,7 +84,7 @@ provider:
   runtime: nodejs
 layers:
   node-deps:
-    arn: "arn:aws:lambda:us-east-1:123456789012:layer:node-deps:1"
+    ref: "arn:aws:lambda:us-east-1:123456789012:layer:node-deps:1"
     name: node-deps
     version: "1"
 functions:

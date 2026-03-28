@@ -357,8 +357,8 @@ func importAllowed(relPath, importPath string) (bool, string) {
 		return false, "Rule 2g: only plugin-sdk may import root extensions"
 	}
 
-	if strings.HasPrefix(relPath, "platform/extensions/external/testdata/") && strings.HasPrefix(importPath, modulePrefix+"platform/") {
-		return false, "Legacy boundary: testdata stubs must not import platform"
+	if strings.HasPrefix(relPath, "platform/extensions/application/external/testdata/") && strings.HasPrefix(importPath, modulePrefix+"platform/") {
+		return false, "Rule 2j: external plugin testdata stubs must not import platform"
 	}
 
 	if strings.HasPrefix(relPath, "platform/") && strings.HasPrefix(importPath, modulePrefix+"packages/") {

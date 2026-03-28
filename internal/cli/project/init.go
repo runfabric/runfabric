@@ -162,12 +162,8 @@ func runInit(o *initOpts) error {
 	if o.Template == "" {
 		o.Template = "http"
 	}
-	// Template aliases: api -> http, worker -> queue
-	if o.Template == "api" {
-		o.Template = "http"
-	}
-	if o.Template == "worker" {
-		o.Template = "queue"
+	if o.Template == "api" || o.Template == "worker" {
+		return fmt.Errorf("template %q is no longer supported; use http, cron, queue, storage, eventbridge, or pubsub", o.Template)
 	}
 	if o.Provider == "" {
 		o.Provider = "aws-lambda"
@@ -667,6 +663,12 @@ func generateRunfabricYAML(o *initOpts) string {
 			b.WriteString("  s3Bucket: ${env:RUNFABRIC_S3_BUCKET}\n")
 			b.WriteString("  s3Prefix: runfabric/dev\n")
 			b.WriteString("  lockTable: ${env:RUNFABRIC_DYNAMODB_TABLE}\n")
+		} else if o.StateBackend == "gcs" {
+			b.WriteString("  gcsBucket: ${env:RUNFABRIC_GCS_BUCKET}\n")
+			b.WriteString("  gcsPrefix: runfabric/dev\n")
+		} else if o.StateBackend == "azblob" {
+			b.WriteString("  azblobContainer: ${env:RUNFABRIC_AZBLOB_CONTAINER}\n")
+			b.WriteString("  azblobPrefix: runfabric/dev\n")
 		}
 		b.WriteString("\n")
 	}
@@ -822,8 +824,8 @@ var stateEnvVars = map[string][]string{
 	"local":    {},
 	"postgres": {"RUNFABRIC_STATE_POSTGRES_URL=postgres://user:pass@localhost:5432/runfabric"},
 	"s3":       {"RUNFABRIC_S3_BUCKET=", "RUNFABRIC_DYNAMODB_TABLE=", "# Uses AWS_* from provider if same account"},
-	"gcs":      {"GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json"},
-	"azblob":   {"AZURE_STORAGE_CONNECTION_STRING=", "# or AZURE_STORAGE_ACCOUNT= + AZURE_STORAGE_KEY="},
+	"gcs":      {"RUNFABRIC_GCS_BUCKET=", "GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json"},
+	"azblob":   {"RUNFABRIC_AZBLOB_CONTAINER=", "AZURE_STORAGE_CONNECTION_STRING=", "# or AZURE_STORAGE_ACCOUNT= + AZURE_STORAGE_KEY="},
 }
 
 func generateEnvExample(provider, stateBackend string) string {

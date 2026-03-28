@@ -20,10 +20,9 @@ import (
 
 func newRouteCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "router",
-		Aliases: []string{"fabric"},
-		Short:   "Runtime router: active-active deploy, health check, endpoints",
-		Long:    "When runfabric.yml has fabric.targets (provider keys from providerOverrides), deploy to multiple targets and run health checks. Use router deploy for active-active; router status to check endpoint health; router endpoints to list URLs (e.g. for failover/latency routing).",
+		Use:   "router",
+		Short: "Runtime router: active-active deploy, health check, endpoints",
+		Long:  "When runfabric.yml has fabric.targets (provider keys from providerOverrides), deploy to multiple targets and run health checks. Use router deploy for active-active; router status to check endpoint health; router endpoints to list URLs (e.g. for failover/latency routing).",
 	}
 	cmd.AddCommand(
 		newRouteDeployCmd(opts),
@@ -923,7 +922,7 @@ func previewRouterDNSSync(
 }
 
 func primeRouterAPIToken(ctx *app.AppContext, policy app.RouterDNSSyncPolicy) error {
-	if strings.TrimSpace(os.Getenv("RUNFABRIC_ROUTER_API_TOKEN")) != "" || strings.TrimSpace(os.Getenv("CLOUDFLARE_API_TOKEN")) != "" {
+	if strings.TrimSpace(os.Getenv("RUNFABRIC_ROUTER_API_TOKEN")) != "" {
 		return nil
 	}
 	apiTokenEnv := strings.TrimSpace(policy.APITokenEnv)

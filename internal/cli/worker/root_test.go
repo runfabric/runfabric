@@ -32,8 +32,8 @@ func TestWorkerRootCmd_Surface(t *testing.T) {
 	}
 
 	routerCmd := findTopLevelCommand(root, "router")
-	if routerCmd == nil || !routerCmd.HasAlias("fabric") {
-		t.Fatal("expected router guard command to preserve fabric alias")
+	if routerCmd == nil {
+		t.Fatal("expected router guard command to exist")
 	}
 }
 
@@ -45,7 +45,6 @@ func TestWorkerRootCmd_RejectsControlPlaneCommands(t *testing.T) {
 		{name: "deploy", args: []string{"deploy"}},
 		{name: "state list", args: []string{"state", "list"}},
 		{name: "router status", args: []string{"router", "status"}},
-		{name: "fabric status", args: []string{"fabric", "status"}},
 	}
 
 	for _, tc := range tests {
@@ -81,8 +80,10 @@ functions:
 workflows:
   - name: hello-flow
     steps:
-      - function: s1
-      - function: s2
+      - id: s1
+        kind: code
+      - id: s2
+        kind: code
 `
 	cfgPath := writeConfig(t, dir, cfg)
 

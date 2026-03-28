@@ -7,10 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/runfabric/runfabric/internal/cli/common"
-	extproviders "github.com/runfabric/runfabric/internal/provider/contracts"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
-	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/runfabric/runfabric/platform/workflow/lifecycle"
 	"github.com/spf13/cobra"
@@ -36,28 +34,18 @@ func newPluginCmd(opts *common.GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func builtinProviderRegistry() *extproviders.Registry {
-	b, err := providerloader.LoadBoundary(providerloader.LoadOptions{IncludeExternal: false})
-	if err != nil {
-		// IncludeExternal=false should be deterministic; keep a safe fallback.
-		reg := extproviders.NewRegistry()
-		resolution.RegisterAPIProviders(reg)
-		return reg
-	}
-	return b.ProviderRegistry()
-}
-
 func newPluginListCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List provider plugins",
 		RunE: func(c *cobra.Command, args []string) error {
-			reg := manifests.NewPluginRegistry()
-			list := reg.List(manifests.KindProvider)
+			catalog, err := discoverPluginCatalog(false, false, nil)
+			if err != nil {
+				return err
+			}
+			list := catalog.Registry.List(manifests.KindProvider)
 			if opts.JSONOutput {
-				enc := json.NewEncoder(c.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(map[string]any{"plugins": list})
+				return writePrettyJSON(c.OutOrStdout(), map[string]any{"plugins": list})
 			}
 			for _, m := range list {
 				fmt.Fprintf(c.OutOrStdout(), "%s\n", m.ID)
@@ -76,42 +64,30 @@ func newPluginInfoCmd(opts *common.GlobalOptions) *cobra.Command {
 				return fmt.Errorf("usage: runfabric plugin info <name>")
 			}
 			name := args[0]
-			boundary, berr := providerloader.LoadBoundary(providerloader.LoadOptions{IncludeExternal: true})
-			reg := manifests.NewPluginRegistry()
-			if berr == nil {
-				reg = boundary.PluginRegistry()
-			}
-			m := reg.Get(name)
-			if m == nil || m.Kind != manifests.KindProvider {
-				// fallback: might be registered under different id
-				reg2 := builtinProviderRegistry()
-				if berr == nil {
-					reg2 = boundary.ProviderRegistry()
+			catalog, _ := discoverPluginCatalog(false, false, nil)
+			if m := catalog.Registry.Get(name); m != nil && m.Kind == manifests.KindProvider {
+				if opts.JSONOutput {
+					return writePrettyJSON(c.OutOrStdout(), m)
 				}
-				if p, ok := reg2.Get(name); ok {
-					meta := p.Meta()
-					if opts.JSONOutput {
-						enc := json.NewEncoder(c.OutOrStdout())
-						enc.SetIndent("", "  ")
-						return enc.Encode(meta)
-					}
-					fmt.Fprintf(c.OutOrStdout(), "name:   %s\n", meta.Name)
-					fmt.Fprintf(c.OutOrStdout(), "version: %s\n", meta.Version)
-					fmt.Fprintf(c.OutOrStdout(), "capabilities: %v\n", meta.Capabilities)
-					return nil
+				renderPluginManifestInfo(c.OutOrStdout(), m)
+				return nil
+			}
+
+			boundary, err := providerloader.LoadBoundary(providerloader.LoadOptions{IncludeExternal: true})
+			if err != nil {
+				return fmt.Errorf("load provider boundary: %w", err)
+			}
+			if p, ok := boundary.ProviderRegistry().Get(name); ok {
+				meta := p.Meta()
+				if opts.JSONOutput {
+					return writePrettyJSON(c.OutOrStdout(), meta)
 				}
-				return fmt.Errorf("plugin %q not found", name)
+				fmt.Fprintf(c.OutOrStdout(), "name:   %s\n", meta.Name)
+				fmt.Fprintf(c.OutOrStdout(), "version: %s\n", meta.Version)
+				fmt.Fprintf(c.OutOrStdout(), "capabilities: %v\n", meta.Capabilities)
+				return nil
 			}
-			if opts.JSONOutput {
-				enc := json.NewEncoder(c.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(m)
-			}
-			fmt.Fprintf(c.OutOrStdout(), "id:   %s\n", m.ID)
-			fmt.Fprintf(c.OutOrStdout(), "kind: %s\n", m.Kind)
-			fmt.Fprintf(c.OutOrStdout(), "name: %s\n", m.Name)
-			fmt.Fprintf(c.OutOrStdout(), "description: %s\n", m.Description)
-			return nil
+			return fmt.Errorf("plugin %q not found", name)
 		},
 	}
 }
@@ -226,25 +202,7 @@ func newPluginCapabilitiesCmd(opts *common.GlobalOptions) *cobra.Command {
 			name := args[0]
 			boundary, err := providerloader.LoadBoundary(providerloader.LoadOptions{IncludeExternal: true})
 			if err != nil {
-				// Fallback keeps current behavior for built-ins and API providers.
-				reg := builtinProviderRegistry()
-				p, ok := reg.Get(name)
-				if !ok {
-					return fmt.Errorf("plugin %q not found", name)
-				}
-				meta := p.Meta()
-				if opts.JSONOutput {
-					enc := json.NewEncoder(c.OutOrStdout())
-					enc.SetIndent("", "  ")
-					return enc.Encode(meta)
-				}
-				fmt.Fprintf(c.OutOrStdout(), "name:              %s\n", meta.Name)
-				fmt.Fprintf(c.OutOrStdout(), "version:           %s\n", meta.Version)
-				fmt.Fprintf(c.OutOrStdout(), "capabilities:      %v\n", meta.Capabilities)
-				fmt.Fprintf(c.OutOrStdout(), "supportsRuntime:   %v\n", meta.SupportsRuntime)
-				fmt.Fprintf(c.OutOrStdout(), "supportsTriggers:  %v\n", meta.SupportsTriggers)
-				fmt.Fprintf(c.OutOrStdout(), "supportsResources: %v\n", meta.SupportsResources)
-				return nil
+				return fmt.Errorf("load provider boundary: %w", err)
 			}
 			reg := boundary.ProviderRegistry()
 			p, ok := reg.Get(name)
@@ -253,9 +211,7 @@ func newPluginCapabilitiesCmd(opts *common.GlobalOptions) *cobra.Command {
 			}
 			meta := p.Meta()
 			if opts.JSONOutput {
-				enc := json.NewEncoder(c.OutOrStdout())
-				enc.SetIndent("", "  ")
-				return enc.Encode(meta)
+				return writePrettyJSON(c.OutOrStdout(), meta)
 			}
 			fmt.Fprintf(c.OutOrStdout(), "name:              %s\n", meta.Name)
 			fmt.Fprintf(c.OutOrStdout(), "version:           %s\n", meta.Version)

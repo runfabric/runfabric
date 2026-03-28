@@ -25,7 +25,7 @@ func BenchmarkDiscover(b *testing.B) {
 			b.Fatalf("write executable: %v", err)
 		}
 		manifest := pluginYAML{
-			APIVersion: "runfabric.dev/v1",
+			APIVersion: "runfabric.io/plugin/v1",
 			Kind:       "provider",
 			ID:         id,
 			Name:       id,

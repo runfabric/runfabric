@@ -19,19 +19,19 @@ const (
 	KindRouter    PluginKind = "router"
 )
 
-// NormalizePluginKind normalizes singular/plural compatibility names to primary plugin kinds.
+// NormalizePluginKind normalizes plugin kind input to singular names.
 func NormalizePluginKind(raw string) PluginKind {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "provider", "providers":
+	case "provider":
 		return KindProvider
-	case "runtime", "runtimes":
+	case "runtime":
 		return KindRuntime
-	case "simulator", "simulators":
+	case "simulator":
 		return KindSimulator
-	case "router", "routers":
+	case "router":
 		return KindRouter
 	default:
-		return PluginKind(strings.TrimSpace(raw))
+		return PluginKind(strings.ToLower(strings.TrimSpace(raw)))
 	}
 }
 

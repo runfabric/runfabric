@@ -16,7 +16,7 @@ func writeExternalProvider(t *testing.T, home, id, version string) {
 	if err := os.WriteFile(execPath, []byte("#!/bin/sh\necho ok\n"), 0o755); err != nil {
 		t.Fatalf("write plugin executable: %v", err)
 	}
-	manifest := "apiVersion: runfabric.dev/v1\n" +
+	manifest := "apiVersion: runfabric.io/plugin/v1\n" +
 		"kind: provider\n" +
 		"id: " + id + "\n" +
 		"name: " + id + "\n" +
@@ -43,7 +43,7 @@ func writeExternalRouter(t *testing.T, home, id, version string) {
 	if err := os.WriteFile(execPath, []byte("#!/bin/sh\necho ok\n"), 0o755); err != nil {
 		t.Fatalf("write router plugin executable: %v", err)
 	}
-	manifest := "apiVersion: runfabric.dev/v1\n" +
+	manifest := "apiVersion: runfabric.io/plugin/v1\n" +
 		"kind: router\n" +
 		"id: " + id + "\n" +
 		"name: " + id + "\n" +

@@ -140,11 +140,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 }
 
 func pluginInstallDir(home string, kind manifests.PluginKind, id, version string) string {
-	kindDir := ""
-	dirs := pluginKindDirs(kind)
-	if len(dirs) > 0 {
-		kindDir = dirs[0]
-	}
+	kindDir := pluginKindDir(kind)
 	return filepath.Join(home, "plugins", kindDir, id, version)
 }
 

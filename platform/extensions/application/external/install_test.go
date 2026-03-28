@@ -52,7 +52,7 @@ func TestInstall_WithoutSource_ResolvesFromRegistry(t *testing.T) {
 				"id":         "provider-aws",
 				"name":       "AWS Provider",
 				"type":       "plugin",
-				"pluginKind": "providers",
+				"pluginKind": "provider",
 				"version":    "1.0.0",
 				"publisher": map[string]any{
 					"verified": true,
@@ -116,7 +116,7 @@ func TestInstallAndUninstall_FromLocalTarGz(t *testing.T) {
 
 	pluginRoot := t.TempDir()
 	pm := pluginYAML{
-		APIVersion:       "runfabric.io/v1alpha1",
+		APIVersion:       "runfabric.io/plugin/v1",
 		Kind:             "provider",
 		ID:               "stub",
 		Name:             "Stub Provider",
@@ -194,7 +194,7 @@ func TestInstall_FromLocalTarGz_RejectsProviderMissingCapabilities(t *testing.T)
 
 	pluginRoot := t.TempDir()
 	pm := pluginYAML{
-		APIVersion:       "runfabric.io/v1alpha1",
+		APIVersion:       "runfabric.io/plugin/v1",
 		Kind:             "provider",
 		ID:               "stub",
 		Name:             "Stub Provider",
@@ -235,7 +235,7 @@ func TestInstall_FromLocalTarGz_RejectsProviderMissingSupportsTriggers(t *testin
 
 	pluginRoot := t.TempDir()
 	pm := pluginYAML{
-		APIVersion:      "runfabric.io/v1alpha1",
+		APIVersion:      "runfabric.io/plugin/v1",
 		Kind:            "provider",
 		ID:              "stub",
 		Name:            "Stub Provider",
@@ -276,7 +276,7 @@ func TestInstall_FromLocalTarGz_RejectsProviderMissingSupportsRuntime(t *testing
 
 	pluginRoot := t.TempDir()
 	pm := pluginYAML{
-		APIVersion:       "runfabric.io/v1alpha1",
+		APIVersion:       "runfabric.io/plugin/v1",
 		Kind:             "provider",
 		ID:               "stub",
 		Name:             "Stub Provider",
