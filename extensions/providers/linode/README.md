@@ -16,7 +16,7 @@ go build -o bin/linode-plugin .
 Copy this folder to:
 
 ```text
-$RUNFABRIC_HOME/plugins/provider/linode/0.1.0/
+$RUNFABRIC_HOME/plugins/providers/linode/0.1.0/
 ```
 
 Make sure `plugin.yaml` executable points to `./bin/linode-plugin`.
@@ -41,8 +41,6 @@ This scaffold implements methods expected by the external provider adapter:
 
 - `LINODE_TOKEN` is used for `Doctor` and is forwarded to command-based operations.
 - You can override the token env name with `tokenEnv` in config, or provide `token` directly in config if needed.
-- `LINODE_CLI_BIN` optionally points to a non-default `linode-cli` binary path.
-- `appID` enables the built-in Linode deploy convention when paired with a function artifact.
 
 ## Runtime Behavior
 
@@ -50,10 +48,8 @@ This scaffold implements methods expected by the external provider adapter:
 - `Doctor` calls the Linode profile API at `https://api.linode.com/v4/profile` to verify credentials.
 - `Plan` inspects the RunFabric config and reports the functions that would be deployed.
 - `Invoke` can call a function URL directly when `invokeUrl` or `functions[].url` is configured.
-- `Deploy` has a built-in Linode convention when `appID` is set and each function resolves to an artifact zip.
 - Artifact resolution order is `functions[].artifact`, `functions[].outputPath`, `.runfabric/<name>.zip`, `dist/<name>.zip`, then `build/<name>.zip`.
-- The deploy convention exports `RUNFABRIC_ARTIFACT_PATH`, `RUNFABRIC_ARTIFACT_DIR`, `RUNFABRIC_ARTIFACT_BASENAME`, `RUNFABRIC_RUNTIME`, and `RUNFABRIC_LINODE_APP_ID`.
-- `Remove` and `Logs` have built-in `linode-cli` fallbacks when no explicit command is configured.
+- Command-based operations require explicit command wiring (`config.commands.*`, `<operation>Command`, or `LINODE_*_CMD` env vars).
 - Command-based `Invoke` still requires an explicit command when no function URL is configured.
 - `Deploy`, `Remove`, `Invoke`, and `Logs` can execute external commands so the plugin stays decoupled from engine internals and provider-specific CLIs.
 
@@ -66,24 +62,6 @@ Configure one or more of these environment variables, or set the equivalent conf
 - `LINODE_INVOKE_CMD` or `commands.invoke`
 - `LINODE_LOGS_CMD` or `commands.logs`
 
-If `LINODE_DEPLOY_CMD` is not set and `appID` plus an artifact are present, the plugin defaults to:
-
-```bash
-linode-cli functions action-create "$RUNFABRIC_SERVICE-$RUNFABRIC_STAGE-$RUNFABRIC_FUNCTION" --app-id "$RUNFABRIC_LINODE_APP_ID" --runtime "$RUNFABRIC_RUNTIME" --file "$RUNFABRIC_ARTIFACT_PATH"
-```
-
-If `LINODE_REMOVE_CMD` is not set, the plugin defaults to:
-
-```bash
-linode-cli functions action-delete "$RUNFABRIC_SERVICE-$RUNFABRIC_STAGE-$RUNFABRIC_FUNCTION"
-```
-
-If `LINODE_LOGS_CMD` is not set, the plugin defaults to:
-
-```bash
-linode-cli functions activation-list "$RUNFABRIC_SERVICE-$RUNFABRIC_STAGE-$RUNFABRIC_FUNCTION"
-```
-
 Each command runs through `/bin/sh -lc` and receives these environment variables:
 
 - `RUNFABRIC_PROVIDER`
@@ -92,9 +70,15 @@ Each command runs through `/bin/sh -lc` and receives these environment variables
 - `RUNFABRIC_ROOT`
 - `RUNFABRIC_FUNCTION`
 - `RUNFABRIC_PAYLOAD_BASE64`
+- `RUNFABRIC_RUNTIME`
+- `RUNFABRIC_ENTRY`
+- `RUNFABRIC_ARTIFACT_PATH`
+- `RUNFABRIC_ARTIFACT_DIR`
+- `RUNFABRIC_ARTIFACT_BASENAME`
 - `LINODE_TOKEN`
+- `RUNFABRIC_LINODE_APP_ID` (when `appID` is configured)
 
-If a command prints JSON matching the SDK result shape, the plugin will return that structured response. Otherwise stdout is returned as plain output.
+If a command prints JSON matching the SDK result shape, the plugin returns that structured response. Otherwise stdout is returned as plain output.
 
 ## Example
 

@@ -6,12 +6,20 @@ import (
 	"testing"
 )
 
-func TestResolveCloudflareAPIToken_PrefersRouterEnv(t *testing.T) {
+func TestResolveCloudflareAPIToken_UsesRouterEnv(t *testing.T) {
 	t.Setenv("RUNFABRIC_ROUTER_API_TOKEN", "router-token")
-	t.Setenv("CLOUDFLARE_API_TOKEN", "cloudflare-token")
 	got := resolveCloudflareAPIToken()
 	if got != "router-token" {
-		t.Fatalf("expected RUNFABRIC_ROUTER_API_TOKEN precedence, got %q", got)
+		t.Fatalf("expected RUNFABRIC_ROUTER_API_TOKEN value, got %q", got)
+	}
+}
+
+func TestResolveCloudflareAPIToken_IgnoresCloudflareEnvFallback(t *testing.T) {
+	t.Setenv("RUNFABRIC_ROUTER_API_TOKEN", "")
+	t.Setenv("CLOUDFLARE_API_TOKEN", "cloudflare-token")
+	got := resolveCloudflareAPIToken()
+	if got != "" {
+		t.Fatalf("expected CLOUDFLARE_API_TOKEN fallback to be ignored, got %q", got)
 	}
 }
 
@@ -27,7 +35,6 @@ func TestNewCloudflareSyncer_RejectsWhitespaceToken(t *testing.T) {
 
 func TestResolveCloudflareAPIToken_FromTokenFile(t *testing.T) {
 	t.Setenv("RUNFABRIC_ROUTER_API_TOKEN", "")
-	t.Setenv("CLOUDFLARE_API_TOKEN", "")
 	dir := t.TempDir()
 	tokenFile := filepath.Join(dir, "token.txt")
 	if err := os.WriteFile(tokenFile, []byte("token-from-file\n"), 0o600); err != nil {

@@ -20,7 +20,6 @@ import (
 const (
 	defaultLinodeAPIBaseURL = "https://api.linode.com/v4"
 	defaultTokenEnv         = "LINODE_TOKEN"
-	defaultCLIBinEnv        = "LINODE_CLI_BIN"
 	deployCommandEnv        = "LINODE_DEPLOY_CMD"
 	removeCommandEnv        = "LINODE_REMOVE_CMD"
 	invokeCommandEnv        = "LINODE_INVOKE_CMD"
@@ -410,34 +409,7 @@ func (p *plugin) resolveCommand(cfg sdkprovider.Config, operation string) string
 	if cmd := strings.TrimSpace(p.getenv(commandEnvForOperation(operation))); cmd != "" {
 		return cmd
 	}
-	return p.defaultLinodeCLICommand(cfg, operation)
-}
-
-func (p *plugin) defaultLinodeCLICommand(cfg sdkprovider.Config, operation string) string {
-	cliBin := shellQuote(p.resolveCLIBin(cfg))
-	switch operation {
-	case "deploy":
-		if strings.TrimSpace(asString(cfg["appID"])) == "" {
-			return ""
-		}
-		return cliBin + ` functions action-create "$RUNFABRIC_SERVICE-$RUNFABRIC_STAGE-$RUNFABRIC_FUNCTION" --app-id "$RUNFABRIC_LINODE_APP_ID" --runtime "$RUNFABRIC_RUNTIME" --file "$RUNFABRIC_ARTIFACT_PATH"`
-	case "remove":
-		return cliBin + ` functions action-delete "$RUNFABRIC_SERVICE-$RUNFABRIC_STAGE-$RUNFABRIC_FUNCTION"`
-	case "logs":
-		return cliBin + ` functions activation-list "$RUNFABRIC_SERVICE-$RUNFABRIC_STAGE-$RUNFABRIC_FUNCTION"`
-	default:
-		return ""
-	}
-}
-
-func (p *plugin) resolveCLIBin(cfg sdkprovider.Config) string {
-	if bin := strings.TrimSpace(asString(cfg["cliBin"])); bin != "" {
-		return bin
-	}
-	if bin := strings.TrimSpace(p.getenv(defaultCLIBinEnv)); bin != "" {
-		return bin
-	}
-	return "linode-cli"
+	return ""
 }
 
 func (p *plugin) executeOperation(ctx context.Context, root string, cfg sdkprovider.Config, operation, stage, function string, payload []byte) ([]byte, error) {
@@ -738,13 +710,6 @@ func dedupeStrings(values []string) []string {
 		out = append(out, trimmed)
 	}
 	return out
-}
-
-func shellQuote(value string) string {
-	if value == "" {
-		return "''"
-	}
-	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }
 
 func (p *plugin) resolveArtifactPath(root string, fn functionSpec) string {

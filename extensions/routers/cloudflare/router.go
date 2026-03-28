@@ -42,15 +42,11 @@ func (Router) Sync(ctx context.Context, req sdkrouter.RouterSyncRequest) (*sdkro
 }
 
 func resolveCloudflareAPIToken() string {
-	for _, key := range []string{"RUNFABRIC_ROUTER_API_TOKEN", "CLOUDFLARE_API_TOKEN"} {
-		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-			return value
-		}
+	if value := strings.TrimSpace(os.Getenv("RUNFABRIC_ROUTER_API_TOKEN")); value != "" {
+		return value
 	}
-	for _, fileKey := range []string{"RUNFABRIC_ROUTER_API_TOKEN_FILE", "CLOUDFLARE_API_TOKEN_FILE"} {
-		if value := readCloudflareAPITokenFile(fileKey); value != "" {
-			return value
-		}
+	if value := readCloudflareAPITokenFile("RUNFABRIC_ROUTER_API_TOKEN_FILE"); value != "" {
+		return value
 	}
 	return ""
 }

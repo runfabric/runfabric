@@ -347,7 +347,7 @@ func (s *cloudflareSyncer) collectLBDeleteCandidates(ctx context.Context, routin
 func auditCloudflareAPIToken(token string) error {
 	trimmed := strings.TrimSpace(token)
 	if trimmed == "" {
-		return fmt.Errorf("router API token is required (set RUNFABRIC_ROUTER_API_TOKEN/CLOUDFLARE_API_TOKEN or *_API_TOKEN_FILE)")
+		return fmt.Errorf("router API token is required (set RUNFABRIC_ROUTER_API_TOKEN or RUNFABRIC_ROUTER_API_TOKEN_FILE)")
 	}
 	if trimmed != token || strings.ContainsAny(token, " \t\r\n") {
 		return fmt.Errorf("router API token must not include whitespace")

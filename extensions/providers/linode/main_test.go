@@ -151,27 +151,18 @@ func TestDeployParsesCommandJSON(t *testing.T) {
 	}
 }
 
-func TestResolveCommandUsesBuiltInLinodeCLIFallbacks(t *testing.T) {
+func TestResolveCommandRequiresExplicitCommand(t *testing.T) {
 	p := newPlugin()
-	p.getenv = func(key string) string {
-		if key == defaultCLIBinEnv {
-			return "/opt/homebrew/bin/linode-cli"
-		}
-		return ""
+	p.getenv = func(string) string { return "" }
+	if cmd := p.resolveCommand(sdkprovider.Config{}, "remove"); cmd != "" {
+		t.Fatalf("expected remove command to require explicit config/env, got %q", cmd)
 	}
-
-	removeCmd := p.resolveCommand(sdkprovider.Config{}, "remove")
-	logsCmd := p.resolveCommand(sdkprovider.Config{}, "logs")
-
-	if !strings.Contains(removeCmd, "/opt/homebrew/bin/linode-cli") || !strings.Contains(removeCmd, "functions action-delete") {
-		t.Fatalf("unexpected remove fallback: %s", removeCmd)
-	}
-	if !strings.Contains(logsCmd, "/opt/homebrew/bin/linode-cli") || !strings.Contains(logsCmd, "functions activation-list") {
-		t.Fatalf("unexpected logs fallback: %s", logsCmd)
+	if cmd := p.resolveCommand(sdkprovider.Config{}, "logs"); cmd != "" {
+		t.Fatalf("expected logs command to require explicit config/env, got %q", cmd)
 	}
 }
 
-func TestPlanTreatsBuiltInCLICommandsAsAvailable(t *testing.T) {
+func TestPlanWarnsWhenCommandsAreNotConfigured(t *testing.T) {
 	p := newPlugin()
 	p.getenv = func(key string) string {
 		if key == defaultTokenEnv {
@@ -191,11 +182,11 @@ func TestPlanTreatsBuiltInCLICommandsAsAvailable(t *testing.T) {
 		t.Fatalf("plan failed: %v", err)
 	}
 	warnings := strings.Join(result.Warnings, "\n")
-	if strings.Contains(warnings, removeCommandEnv) {
-		t.Fatalf("expected remove warning to be suppressed by built-in fallback, got %v", result.Warnings)
+	if !strings.Contains(warnings, removeCommandEnv) {
+		t.Fatalf("expected remove warning when command is not configured, got %v", result.Warnings)
 	}
-	if strings.Contains(warnings, logsCommandEnv) {
-		t.Fatalf("expected logs warning to be suppressed by built-in fallback, got %v", result.Warnings)
+	if !strings.Contains(warnings, logsCommandEnv) {
+		t.Fatalf("expected logs warning when command is not configured, got %v", result.Warnings)
 	}
 	if !strings.Contains(warnings, deployCommandEnv) {
 		t.Fatalf("expected deploy warning to remain, got %v", result.Warnings)
@@ -225,8 +216,8 @@ func TestPlanUsesDeployConventionWhenAppIDAndArtifactExist(t *testing.T) {
 		t.Fatalf("plan failed: %v", err)
 	}
 	warnings := strings.Join(result.Warnings, "\n")
-	if strings.Contains(warnings, deployCommandEnv) {
-		t.Fatalf("expected deploy warning to be suppressed, got %v", result.Warnings)
+	if !strings.Contains(warnings, deployCommandEnv) {
+		t.Fatalf("expected deploy warning when command is not configured, got %v", result.Warnings)
 	}
 	planMap := result.Plan.(map[string]any)
 	actions := planMap["actions"].([]map[string]any)
