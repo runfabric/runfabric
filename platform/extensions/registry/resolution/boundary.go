@@ -7,11 +7,13 @@ import (
 	"strings"
 
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	routercontracts "github.com/runfabric/runfabric/platform/core/contracts/router"
+	runtimecontracts "github.com/runfabric/runfabric/platform/core/contracts/runtime"
+	simulatorcontracts "github.com/runfabric/runfabric/platform/core/contracts/simulators"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/extensions/application/external"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
-	sdkruntime "github.com/runfabric/runfabric/plugin-sdk/go/runtime"
-	sdksimulator "github.com/runfabric/runfabric/plugin-sdk/go/simulator"
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )
 
 // Boundary is the engine extension resolution boundary for provider/runtime resolution.
@@ -19,9 +21,9 @@ import (
 // this type instead of constructing provider/runtime registries ad hoc.
 type Boundary struct {
 	providers          *providers.Registry
-	runtimes           *RuntimeRegistry
-	simulators         *SimulatorRegistry
-	routers            *RouterRegistry
+	runtimes           providerpolicy.RuntimeRegistry
+	simulators         providerpolicy.SimulatorRegistry
+	routers            providerpolicy.RouterRegistry
 	plugins            *manifests.PluginRegistry
 	internalProviderID map[string]struct{}
 	apiProviderID      map[string]struct{}
@@ -104,11 +106,11 @@ func (b *Boundary) ResolveRuntime(runtime string) (*manifests.PluginManifest, er
 	return m, nil
 }
 
-func (b *Boundary) ResolveRuntimePlugin(runtime string) (RuntimePlugin, error) {
+func (b *Boundary) ResolveRuntimePlugin(runtime string) (runtimecontracts.Runtime, error) {
 	return b.runtimes.Get(runtime)
 }
 
-func (b *Boundary) ResolveSimulator(simulatorID string) (SimulatorPlugin, error) {
+func (b *Boundary) ResolveSimulator(simulatorID string) (simulatorcontracts.Simulator, error) {
 	id := strings.TrimSpace(simulatorID)
 	if id == "" {
 		return nil, fmt.Errorf("simulator id is required")
@@ -116,7 +118,7 @@ func (b *Boundary) ResolveSimulator(simulatorID string) (SimulatorPlugin, error)
 	return b.simulators.Get(id)
 }
 
-func (b *Boundary) ResolveRouter(routerID string) (RouterPlugin, error) {
+func (b *Boundary) ResolveRouter(routerID string) (routercontracts.Router, error) {
 	id := strings.TrimSpace(routerID)
 	if id == "" {
 		return nil, fmt.Errorf("router id is required")
@@ -124,7 +126,7 @@ func (b *Boundary) ResolveRouter(routerID string) (RouterPlugin, error) {
 	return b.routers.Get(id)
 }
 
-func (b *Boundary) SyncRouter(ctx context.Context, routerID string, req RouterSyncRequest) (*RouterSyncResult, error) {
+func (b *Boundary) SyncRouter(ctx context.Context, routerID string, req routercontracts.SyncRequest) (*routercontracts.SyncResult, error) {
 	router, err := b.ResolveRouter(routerID)
 	if err != nil {
 		return nil, err
@@ -138,24 +140,16 @@ func (b *Boundary) BuildFunction(ctx context.Context, req RuntimeBuildRequest) (
 	if err != nil {
 		return nil, err
 	}
-	artifact, err := runtimePlugin.Build(ctx, sdkruntime.BuildRequest{
+	artifact, err := runtimePlugin.Build(ctx, runtimecontracts.BuildRequest{
 		Root:            req.Root,
 		FunctionName:    req.FunctionName,
-		Function:        sdkruntime.FunctionSpec{Handler: req.FunctionConfig.Handler, Runtime: req.FunctionConfig.Runtime},
+		FunctionConfig:  req.FunctionConfig,
 		ConfigSignature: req.ConfigSignature,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &providers.Artifact{
-		Function:        artifact.Function,
-		Runtime:         artifact.Runtime,
-		SourcePath:      artifact.SourcePath,
-		OutputPath:      artifact.OutputPath,
-		SHA256:          artifact.SHA256,
-		SizeBytes:       artifact.SizeBytes,
-		ConfigSignature: artifact.ConfigSignature,
-	}, nil
+	return artifact, nil
 }
 
 // Simulate resolves the simulator plugin and runs one local invoke request.
@@ -164,7 +158,7 @@ func (b *Boundary) Simulate(ctx context.Context, simulatorID string, req Simulat
 	if err != nil {
 		return nil, err
 	}
-	res, err := simulator.Simulate(ctx, sdksimulator.Request{
+	res, err := simulator.Simulate(ctx, simulatorcontracts.Request{
 		Service:    req.Service,
 		Stage:      req.Stage,
 		Function:   req.Function,
@@ -213,23 +207,33 @@ func (b *Boundary) RefreshExternal() error {
 		if b.plugins.Get(m.ID) == nil || (b.discoverOptions.PreferExternal && !(m.Kind == manifests.KindProvider && b.IsInternalProvider(m.ID))) {
 			b.plugins.Register(m)
 		}
-		if m.Kind != manifests.KindProvider || strings.TrimSpace(m.Executable) == "" {
+		if strings.TrimSpace(m.Executable) == "" {
 			continue
 		}
-		// Keep internal providers authoritative while contract stabilizes.
-		if b.IsInternalProvider(m.ID) {
-			continue
+		switch m.Kind {
+		case manifests.KindProvider:
+			// Keep internal providers authoritative while contract stabilizes.
+			if b.IsInternalProvider(m.ID) {
+				continue
+			}
+			if _, ok := b.providers.Get(m.ID); ok && !b.discoverOptions.PreferExternal {
+				continue
+			}
+			_ = b.providers.Register(external.NewExternalProviderAdapter(m.ID, m.Executable, providers.ProviderMeta{
+				Name:              m.ID,
+				Capabilities:      append([]string(nil), m.Capabilities...),
+				SupportsRuntime:   append([]string(nil), m.SupportsRuntime...),
+				SupportsTriggers:  append([]string(nil), m.SupportsTriggers...),
+				SupportsResources: append([]string(nil), m.SupportsResources...),
+			}))
+		case manifests.KindRouter:
+			if _, err := b.routers.Get(m.ID); err == nil && !b.discoverOptions.PreferExternal {
+				continue
+			}
+			_ = b.routers.Register(external.NewExternalRouterAdapter(m.ID, m.Executable, routercontracts.PluginMeta{
+				ID: m.ID, Name: m.Name, Version: m.Version, Description: m.Description,
+			}))
 		}
-		if _, ok := b.providers.Get(m.ID); ok && !b.discoverOptions.PreferExternal {
-			continue
-		}
-		_ = b.providers.Register(external.NewExternalProviderAdapter(m.ID, m.Executable, providers.ProviderMeta{
-			Name:              m.ID,
-			Capabilities:      append([]string(nil), m.Capabilities...),
-			SupportsRuntime:   append([]string(nil), m.SupportsRuntime...),
-			SupportsTriggers:  append([]string(nil), m.SupportsTriggers...),
-			SupportsResources: append([]string(nil), m.SupportsResources...),
-		}))
 	}
 	return nil
 }

@@ -1,0 +1,91 @@
+name: router-lifecycle
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_path:
+        description: "Path to runfabric config file"
+        required: true
+        default: "examples/router/runfabric.yml"
+      stage:
+        description: "Deployment stage"
+        required: true
+        default: "dev"
+      apply_sync:
+        description: "Apply router dns-sync (true) or keep dry-run only (false)"
+        required: true
+        default: "false"
+
+jobs:
+  router-lifecycle:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RUNFABRIC_ROUTER_API_TOKEN: ${{ secrets.RUNFABRIC_ROUTER_API_TOKEN }}
+      RUNFABRIC_ROUTER_ZONE_ID: ${{ secrets.RUNFABRIC_ROUTER_ZONE_ID }}
+      RUNFABRIC_ROUTER_ACCOUNT_ID: ${{ secrets.RUNFABRIC_ROUTER_ACCOUNT_ID }}
+      RUNFABRIC_DNS_SYNC_REASON: "ci:router-lifecycle"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Build runfabric binary
+        run: go build -o ./runfabric ./cmd/runfabric
+
+      - name: Validate config path
+        run: |
+          test -f "${{ github.event.inputs.config_path }}" || {
+            echo "Config not found: ${{ github.event.inputs.config_path }}"
+            exit 1
+          }
+
+      - name: Router deploy
+        run: |
+          ./runfabric router deploy \
+            -c "${{ github.event.inputs.config_path }}" \
+            --stage "${{ github.event.inputs.stage }}" \
+            --json
+
+      - name: Policy checks (dry-run sync)
+        run: |
+          PROD_FLAG=""
+          if [ "${{ github.event.inputs.stage }}" = "prod" ]; then
+            PROD_FLAG="--allow-prod-dns-sync"
+          fi
+          ./runfabric router dns-sync \
+            -c "${{ github.event.inputs.config_path }}" \
+            --stage "${{ github.event.inputs.stage }}" \
+            --dry-run \
+            --enforce-dns-sync-stage-rollout \
+            ${PROD_FLAG} \
+            --json
+
+      - name: Router dns-sync apply
+        if: ${{ github.event.inputs.apply_sync == 'true' }}
+        run: |
+          PROD_FLAG=""
+          if [ "${{ github.event.inputs.stage }}" = "prod" ]; then
+            PROD_FLAG="--allow-prod-dns-sync"
+          fi
+          ./runfabric router dns-sync \
+            -c "${{ github.event.inputs.config_path }}" \
+            --stage "${{ github.event.inputs.stage }}" \
+            --enforce-dns-sync-stage-rollout \
+            ${PROD_FLAG} \
+            --json
+
+      - name: Verification
+        run: |
+          ./runfabric router dns-reconcile \
+            -c "${{ github.event.inputs.config_path }}" \
+            --stage "${{ github.event.inputs.stage }}" \
+            --json
+          ./runfabric router dns-history \
+            -c "${{ github.event.inputs.config_path }}" \
+            --stage "${{ github.event.inputs.stage }}" \
+            --json

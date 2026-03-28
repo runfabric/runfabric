@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
+	sdkrouter "github.com/runfabric/runfabric/plugin-sdk/go/router"
 	sdkruntime "github.com/runfabric/runfabric/plugin-sdk/go/runtime"
 )
 
@@ -52,10 +53,10 @@ func (r *Registry) Get(runtimeID string) (sdkruntime.Plugin, error) {
 	return rt, nil
 }
 
-func (r *Registry) List() []sdkruntime.PluginMeta {
+func (r *Registry) List() []sdkrouter.PluginMeta {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]sdkruntime.PluginMeta, 0, len(r.runtimes))
+	out := make([]sdkrouter.PluginMeta, 0, len(r.runtimes))
 	for _, rt := range r.runtimes {
 		out = append(out, rt.Meta())
 	}
@@ -65,12 +66,8 @@ func (r *Registry) List() []sdkruntime.PluginMeta {
 func NormalizeRuntimeID(runtime string) string {
 	raw := strings.ToLower(strings.TrimSpace(runtime))
 	switch {
-	case raw == "runtime-node":
-		return "nodejs"
 	case strings.HasPrefix(raw, "nodejs"):
 		return "nodejs"
-	case raw == "runtime-python":
-		return "python"
 	case strings.HasPrefix(raw, "python"):
 		return "python"
 	default:
@@ -80,8 +77,8 @@ func NormalizeRuntimeID(runtime string) string {
 
 type nodeRuntime struct{}
 
-func (r nodeRuntime) Meta() sdkruntime.PluginMeta {
-	return sdkruntime.PluginMeta{ID: "nodejs", Name: "Node.js", Description: "Node.js runtime plugin (build/invoke)"}
+func (r nodeRuntime) Meta() sdkrouter.PluginMeta {
+	return sdkrouter.PluginMeta{ID: "nodejs", Name: "Node.js", Description: "Node.js runtime plugin (build/invoke)"}
 }
 
 func (r nodeRuntime) Build(_ context.Context, req sdkruntime.BuildRequest) (*sdkprovider.Artifact, error) {
@@ -98,8 +95,8 @@ func (r nodeRuntime) Invoke(_ context.Context, req sdkruntime.InvokeRequest) (*s
 
 type pythonRuntime struct{}
 
-func (r pythonRuntime) Meta() sdkruntime.PluginMeta {
-	return sdkruntime.PluginMeta{ID: "python", Name: "Python", Description: "Python runtime plugin (build/invoke)"}
+func (r pythonRuntime) Meta() sdkrouter.PluginMeta {
+	return sdkrouter.PluginMeta{ID: "python", Name: "Python", Description: "Python runtime plugin (build/invoke)"}
 }
 
 func (r pythonRuntime) Build(_ context.Context, req sdkruntime.BuildRequest) (*sdkprovider.Artifact, error) {
@@ -115,13 +112,10 @@ func (r pythonRuntime) Invoke(_ context.Context, req sdkruntime.InvokeRequest) (
 }
 
 // BuiltinRuntimeManifests returns runtime metadata entries used by extension manifest catalogs.
-// It includes both canonical runtime IDs and compatibility aliases accepted by NormalizeRuntimeID.
-func BuiltinRuntimeManifests() []sdkruntime.PluginMeta {
-	return []sdkruntime.PluginMeta{
+func BuiltinRuntimeManifests() []sdkrouter.PluginMeta {
+	return []sdkrouter.PluginMeta{
 		{ID: "nodejs", Name: "Node.js", Description: "Node.js runtime (build and invoke)"},
-		{ID: "runtime-node", Name: "Node.js", Description: "Node.js runtime (alias)"},
 		{ID: "python", Name: "Python", Description: "Python runtime (build and invoke)"},
-		{ID: "runtime-python", Name: "Python", Description: "Python runtime (alias)"},
 	}
 }
 

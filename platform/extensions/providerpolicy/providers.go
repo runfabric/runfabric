@@ -18,12 +18,11 @@ import (
 	builtinruntimes "github.com/runfabric/runfabric/extensions/runtimes"
 	builtinsimulators "github.com/runfabric/runfabric/extensions/simulators"
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	routercontracts "github.com/runfabric/runfabric/platform/core/contracts/router"
+	runtimecontracts "github.com/runfabric/runfabric/platform/core/contracts/runtime"
+	simulatorcontracts "github.com/runfabric/runfabric/platform/core/contracts/simulators"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
-	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
-	sdkrouter "github.com/runfabric/runfabric/plugin-sdk/go/router"
-	sdkruntime "github.com/runfabric/runfabric/plugin-sdk/go/runtime"
-	sdksimulator "github.com/runfabric/runfabric/plugin-sdk/go/simulator"
 )
 
 type APIDispatchProvider struct {
@@ -42,224 +41,196 @@ type BuiltinProviderSet struct {
 	APIProviderIDs    map[string]struct{}
 }
 
-type RuntimeRegistry = builtinruntimes.Registry
-type RuntimePlugin = sdkruntime.Plugin
-type RuntimePluginMeta = sdkruntime.PluginMeta
+// RuntimeRegistry is the runtime plugin lookup surface exposed outside this package.
+// providerpolicy remains the only package importing root extensions runtimes.
+type RuntimeRegistry interface {
+	Get(runtime string) (runtimecontracts.Runtime, error)
+}
 
-type SimulatorRegistry = builtinsimulators.Registry
-type SimulatorPlugin = sdksimulator.Plugin
-type SimulatorPluginMeta = sdksimulator.PluginMeta
+// SimulatorRegistry is the simulator plugin lookup surface exposed outside this package.
+// providerpolicy remains the only package importing root extensions simulators.
+type SimulatorRegistry interface {
+	Get(simulatorID string) (simulatorcontracts.Simulator, error)
+}
 
-type RouterRegistry = builtinrouters.Registry
-type RouterPlugin = sdkrouter.Router
-type RouterSyncRequest = sdkrouter.RouterSyncRequest
-type RouterSyncResult = sdkrouter.RouterSyncResult
-type RouterPluginMeta = sdkrouter.PluginMeta
+// RouterRegistry is the router plugin lookup/registration surface exposed outside this package.
+// providerpolicy remains the only package importing root extensions routers.
+type RouterRegistry interface {
+	Get(routerID string) (routercontracts.Router, error)
+	Register(router routercontracts.Router) error
+}
 
 var providerEntries = func() []catalog.ProviderPolicyEntry {
 	awsHooks := inprocess.APIDispatchHooks{
-		PrepareDevStream:      awsprovider.PrepareDevStreamPolicy,
-		FetchMetrics:          awsprovider.FetchMetricsPolicy,
-		FetchTraces:           awsprovider.FetchTracesPolicy,
-		Recover:               awsprovider.RecoverPolicy,
-		SyncOrchestrations:    awsprovider.SyncOrchestrationsPolicy,
-		RemoveOrchestrations:  awsprovider.RemoveOrchestrationsPolicy,
-		InvokeOrchestration:   awsprovider.InvokeOrchestrationPolicy,
-		InspectOrchestrations: awsprovider.InspectOrchestrationsPolicy,
+		PrepareDevStream:      adaptPrepareDevStream(awsprovider.PrepareDevStreamPolicy),
+		FetchMetrics:          adaptFetchMetrics(awsprovider.FetchMetricsPolicy),
+		FetchTraces:           adaptFetchTraces(awsprovider.FetchTracesPolicy),
+		Recover:               adaptRecover(awsprovider.RecoverPolicy),
+		SyncOrchestrations:    adaptSyncOrchestrations(awsprovider.SyncOrchestrationsPolicy),
+		RemoveOrchestrations:  adaptRemoveOrchestrations(awsprovider.RemoveOrchestrationsPolicy),
+		InvokeOrchestration:   adaptInvokeOrchestration(awsprovider.InvokeOrchestrationPolicy),
+		InspectOrchestrations: adaptInspectOrchestrations(awsprovider.InspectOrchestrationsPolicy),
 	}
 	awsOps := inprocess.APIOps{
-		Deploy: awsprovider.DeployAPIOps,
-		Remove: awsprovider.RemoveAPIOps,
-		Invoke: awsprovider.InvokeAPIOps,
-		Logs:   awsprovider.LogsAPIOps,
+		Deploy: adaptDeploy(awsprovider.DeployAPIOps),
+		Remove: adaptRemove(awsprovider.RemoveAPIOps),
+		Invoke: adaptInvoke(awsprovider.InvokeAPIOps),
+		Logs:   adaptLogs(awsprovider.LogsAPIOps),
 	}
 
 	gcpHooks := inprocess.APIDispatchHooks{
-		PrepareDevStream:      gcpprovider.PrepareDevStreamPolicy,
-		FetchMetrics:          gcpprovider.FetchMetricsPolicy,
-		FetchTraces:           gcpprovider.FetchTracesPolicy,
-		Recover:               gcpprovider.RecoverPolicy,
-		SyncOrchestrations:    gcpprovider.SyncOrchestrationsPolicy,
-		RemoveOrchestrations:  gcpprovider.RemoveOrchestrationsPolicy,
-		InvokeOrchestration:   gcpprovider.InvokeOrchestrationPolicy,
-		InspectOrchestrations: gcpprovider.InspectOrchestrationsPolicy,
+		PrepareDevStream:      adaptPrepareDevStream(gcpprovider.PrepareDevStreamPolicy),
+		FetchMetrics:          adaptFetchMetrics(gcpprovider.FetchMetricsPolicy),
+		FetchTraces:           adaptFetchTraces(gcpprovider.FetchTracesPolicy),
+		Recover:               adaptRecover(gcpprovider.RecoverPolicy),
+		SyncOrchestrations:    adaptSyncOrchestrations(gcpprovider.SyncOrchestrationsPolicy),
+		RemoveOrchestrations:  adaptRemoveOrchestrations(gcpprovider.RemoveOrchestrationsPolicy),
+		InvokeOrchestration:   adaptInvokeOrchestration(gcpprovider.InvokeOrchestrationPolicy),
+		InspectOrchestrations: adaptInspectOrchestrations(gcpprovider.InspectOrchestrationsPolicy),
 	}
 	gcpOps := inprocess.APIOps{
-		Deploy: (&gcpprovider.Runner{}).Deploy,
-		Remove: (&gcpprovider.Remover{}).Remove,
-		Invoke: (&gcpprovider.Invoker{}).Invoke,
-		Logs:   (&gcpprovider.Logger{}).Logs,
+		Deploy: adaptDeploy((&gcpprovider.Runner{}).Deploy),
+		Remove: adaptRemove((&gcpprovider.Remover{}).Remove),
+		Invoke: adaptInvoke((&gcpprovider.Invoker{}).Invoke),
+		Logs:   adaptLogs((&gcpprovider.Logger{}).Logs),
 	}
 
 	azureHooks := inprocess.APIDispatchHooks{
-		PrepareDevStream:      azureprovider.PrepareDevStreamPolicy,
-		FetchMetrics:          azureprovider.FetchMetricsPolicy,
-		FetchTraces:           azureprovider.FetchTracesPolicy,
-		Recover:               azureprovider.RecoverPolicy,
-		SyncOrchestrations:    azureprovider.SyncOrchestrationsPolicy,
-		RemoveOrchestrations:  azureprovider.RemoveOrchestrationsPolicy,
-		InvokeOrchestration:   azureprovider.InvokeOrchestrationPolicy,
-		InspectOrchestrations: azureprovider.InspectOrchestrationsPolicy,
+		PrepareDevStream:      adaptPrepareDevStream(azureprovider.PrepareDevStreamPolicy),
+		FetchMetrics:          adaptFetchMetrics(azureprovider.FetchMetricsPolicy),
+		FetchTraces:           adaptFetchTraces(azureprovider.FetchTracesPolicy),
+		Recover:               adaptRecover(azureprovider.RecoverPolicy),
+		SyncOrchestrations:    adaptSyncOrchestrations(azureprovider.SyncOrchestrationsPolicy),
+		RemoveOrchestrations:  adaptRemoveOrchestrations(azureprovider.RemoveOrchestrationsPolicy),
+		InvokeOrchestration:   adaptInvokeOrchestration(azureprovider.InvokeOrchestrationPolicy),
+		InspectOrchestrations: adaptInspectOrchestrations(azureprovider.InspectOrchestrationsPolicy),
 	}
 	azureOps := inprocess.APIOps{
-		Deploy: (&azureprovider.Runner{}).Deploy,
-		Remove: (&azureprovider.Remover{}).Remove,
-		Invoke: (&azureprovider.Invoker{}).Invoke,
-		Logs:   (&azureprovider.Logger{}).Logs,
+		Deploy: adaptDeploy((&azureprovider.Runner{}).Deploy),
+		Remove: adaptRemove((&azureprovider.Remover{}).Remove),
+		Invoke: adaptInvoke((&azureprovider.Invoker{}).Invoke),
+		Logs:   adaptLogs((&azureprovider.Logger{}).Logs),
 	}
 
-	alibabaHooks := inprocess.APIDispatchHooks{PrepareDevStream: alibabaprovider.PrepareDevStreamPolicy}
+	alibabaHooks := inprocess.APIDispatchHooks{PrepareDevStream: adaptPrepareDevStream(alibabaprovider.PrepareDevStreamPolicy)}
 	alibabaOps := inprocess.APIOps{
-		Deploy: (&alibabaprovider.Runner{}).Deploy,
-		Remove: (&alibabaprovider.Remover{}).Remove,
-		Invoke: (&alibabaprovider.Invoker{}).Invoke,
-		Logs:   (&alibabaprovider.Logger{}).Logs,
+		Deploy: adaptDeploy((&alibabaprovider.Runner{}).Deploy),
+		Remove: adaptRemove((&alibabaprovider.Remover{}).Remove),
+		Invoke: adaptInvoke((&alibabaprovider.Invoker{}).Invoke),
+		Logs:   adaptLogs((&alibabaprovider.Logger{}).Logs),
 	}
 
-	cfHooks := inprocess.APIDispatchHooks{PrepareDevStream: cfprovider.PrepareDevStreamPolicy}
+	cfHooks := inprocess.APIDispatchHooks{PrepareDevStream: adaptPrepareDevStream(cfprovider.PrepareDevStreamPolicy)}
 	cfOps := inprocess.APIOps{
-		Deploy: (&cfprovider.Runner{}).Deploy,
-		Remove: (&cfprovider.Remover{}).Remove,
-		Invoke: (&cfprovider.Invoker{}).Invoke,
-		Logs:   (&cfprovider.Logger{}).Logs,
+		Deploy: adaptDeploy((&cfprovider.Runner{}).Deploy),
+		Remove: adaptRemove((&cfprovider.Remover{}).Remove),
+		Invoke: adaptInvoke((&cfprovider.Invoker{}).Invoke),
+		Logs:   adaptLogs((&cfprovider.Logger{}).Logs),
 	}
 
-	doHooks := inprocess.APIDispatchHooks{PrepareDevStream: digitaloceanprovider.PrepareDevStreamPolicy}
+	doHooks := inprocess.APIDispatchHooks{PrepareDevStream: adaptPrepareDevStream(digitaloceanprovider.PrepareDevStreamPolicy)}
 	doOps := inprocess.APIOps{
-		Deploy: (&digitaloceanprovider.Runner{}).Deploy,
-		Remove: (&digitaloceanprovider.Remover{}).Remove,
-		Invoke: (&digitaloceanprovider.Invoker{}).Invoke,
-		Logs:   (&digitaloceanprovider.Logger{}).Logs,
+		Deploy: adaptDeploy((&digitaloceanprovider.Runner{}).Deploy),
+		Remove: adaptRemove((&digitaloceanprovider.Remover{}).Remove),
+		Invoke: adaptInvoke((&digitaloceanprovider.Invoker{}).Invoke),
+		Logs:   adaptLogs((&digitaloceanprovider.Logger{}).Logs),
 	}
 
-	flyHooks := inprocess.APIDispatchHooks{PrepareDevStream: flyprovider.PrepareDevStreamPolicy}
+	flyHooks := inprocess.APIDispatchHooks{PrepareDevStream: adaptPrepareDevStream(flyprovider.PrepareDevStreamPolicy)}
 	flyOps := inprocess.APIOps{
-		Deploy: (&flyprovider.Runner{}).Deploy,
-		Remove: (&flyprovider.Remover{}).Remove,
-		Invoke: (&flyprovider.Invoker{}).Invoke,
-		Logs:   (&flyprovider.Logger{}).Logs,
+		Deploy: adaptDeploy((&flyprovider.Runner{}).Deploy),
+		Remove: adaptRemove((&flyprovider.Remover{}).Remove),
+		Invoke: adaptInvoke((&flyprovider.Invoker{}).Invoke),
+		Logs:   adaptLogs((&flyprovider.Logger{}).Logs),
 	}
 
-	ibmHooks := inprocess.APIDispatchHooks{PrepareDevStream: ibmprovider.PrepareDevStreamPolicy}
+	ibmHooks := inprocess.APIDispatchHooks{PrepareDevStream: adaptPrepareDevStream(ibmprovider.PrepareDevStreamPolicy)}
 	ibmOps := inprocess.APIOps{
-		Deploy: (&ibmprovider.Runner{}).Deploy,
-		Remove: (&ibmprovider.Remover{}).Remove,
-		Invoke: (&ibmprovider.Invoker{}).Invoke,
-		Logs:   (&ibmprovider.Logger{}).Logs,
+		Deploy: adaptDeploy((&ibmprovider.Runner{}).Deploy),
+		Remove: adaptRemove((&ibmprovider.Remover{}).Remove),
+		Invoke: adaptInvoke((&ibmprovider.Invoker{}).Invoke),
+		Logs:   adaptLogs((&ibmprovider.Logger{}).Logs),
 	}
 
-	k8sHooks := inprocess.APIDispatchHooks{PrepareDevStream: kubernetesprovider.PrepareDevStreamPolicy}
+	k8sHooks := inprocess.APIDispatchHooks{PrepareDevStream: adaptPrepareDevStream(kubernetesprovider.PrepareDevStreamPolicy)}
 	k8sOps := inprocess.APIOps{
-		Deploy: (&kubernetesprovider.Runner{}).Deploy,
-		Remove: (&kubernetesprovider.Remover{}).Remove,
-		Invoke: (&kubernetesprovider.Invoker{}).Invoke,
-		Logs:   (&kubernetesprovider.Logger{}).Logs,
+		Deploy: adaptDeploy((&kubernetesprovider.Runner{}).Deploy),
+		Remove: adaptRemove((&kubernetesprovider.Remover{}).Remove),
+		Invoke: adaptInvoke((&kubernetesprovider.Invoker{}).Invoke),
+		Logs:   adaptLogs((&kubernetesprovider.Logger{}).Logs),
 	}
 
-	netlifyHooks := inprocess.APIDispatchHooks{PrepareDevStream: netlifyprovider.PrepareDevStreamPolicy}
+	netlifyHooks := inprocess.APIDispatchHooks{PrepareDevStream: adaptPrepareDevStream(netlifyprovider.PrepareDevStreamPolicy)}
 	netlifyOps := inprocess.APIOps{
-		Deploy: (&netlifyprovider.Runner{}).Deploy,
-		Remove: (&netlifyprovider.Remover{}).Remove,
-		Invoke: (&netlifyprovider.Invoker{}).Invoke,
-		Logs:   (&netlifyprovider.Logger{}).Logs,
+		Deploy: adaptDeploy((&netlifyprovider.Runner{}).Deploy),
+		Remove: adaptRemove((&netlifyprovider.Remover{}).Remove),
+		Invoke: adaptInvoke((&netlifyprovider.Invoker{}).Invoke),
+		Logs:   adaptLogs((&netlifyprovider.Logger{}).Logs),
 	}
 
-	vercelHooks := inprocess.APIDispatchHooks{PrepareDevStream: vercelprovider.PrepareDevStreamPolicy}
+	vercelHooks := inprocess.APIDispatchHooks{PrepareDevStream: adaptPrepareDevStream(vercelprovider.PrepareDevStreamPolicy)}
 	vercelOps := inprocess.APIOps{
-		Deploy: (&vercelprovider.Runner{}).Deploy,
-		Remove: (&vercelprovider.Remover{}).Remove,
-		Invoke: (&vercelprovider.Invoker{}).Invoke,
-		Logs:   (&vercelprovider.Logger{}).Logs,
+		Deploy: adaptDeploy((&vercelprovider.Runner{}).Deploy),
+		Remove: adaptRemove((&vercelprovider.Remover{}).Remove),
+		Invoke: adaptInvoke((&vercelprovider.Invoker{}).Invoke),
+		Logs:   adaptLogs((&vercelprovider.Logger{}).Logs),
 	}
 
 	return []catalog.ProviderPolicyEntry{
 		{
 			Descriptor: catalog.ProviderDescriptor{ID: "aws-lambda", Name: "AWS Lambda", Description: "Deploy and run functions on AWS Lambda", IncludeBuiltinManifest: true},
-			Factory: func() sdkprovider.Plugin {
-				return inprocess.NewAPIOpsTransportPlugin("aws-lambda", "AWS Lambda", awsOps, awsHooks)
-			},
-			Hooks: &awsHooks,
-			Ops:   awsOps,
+			Hooks:      &awsHooks,
+			Ops:        awsOps,
 		},
 		{
 			Descriptor: catalog.ProviderDescriptor{ID: "gcp-functions", Name: "GCP Cloud Functions", Description: "Deploy and run functions on GCP Cloud Functions Gen 2", IncludeBuiltinManifest: true},
-			Factory: func() sdkprovider.Plugin {
-				return inprocess.NewAPIOpsTransportPlugin("gcp-functions", "GCP Cloud Functions", gcpOps, gcpHooks)
-			},
-			Hooks: &gcpHooks,
-			Ops:   gcpOps,
+			Hooks:      &gcpHooks,
+			Ops:        gcpOps,
 		},
 		{
 			Descriptor: catalog.ProviderDescriptor{ID: "azure-functions", Name: "Azure Functions", Description: "Deploy and run functions on Azure Functions", IncludeBuiltinManifest: true},
-			Factory: func() sdkprovider.Plugin {
-				return inprocess.NewAPIOpsTransportPlugin("azure-functions", "Azure Functions", azureOps, azureHooks)
-			},
-			Hooks: &azureHooks,
-			Ops:   azureOps,
+			Hooks:      &azureHooks,
+			Ops:        azureOps,
 		},
 		{
 			Descriptor: catalog.ProviderDescriptor{ID: "alibaba-fc", Name: "Alibaba FC", Description: "Deploy and run functions on Alibaba Cloud Function Compute", IncludeBuiltinManifest: true},
-			Factory: func() sdkprovider.Plugin {
-				return inprocess.NewAPIOpsTransportPlugin("alibaba-fc", "Alibaba FC", alibabaOps, alibabaHooks)
-			},
-			Hooks: &alibabaHooks,
-			Ops:   alibabaOps,
+			Hooks:      &alibabaHooks,
+			Ops:        alibabaOps,
 		},
 		{
 			Descriptor: catalog.ProviderDescriptor{ID: "cloudflare-workers", Name: "Cloudflare Workers", Description: "Deploy and run functions on Cloudflare Workers", IncludeBuiltinManifest: true},
-			Factory: func() sdkprovider.Plugin {
-				return inprocess.NewAPIOpsTransportPlugin("cloudflare-workers", "Cloudflare Workers", cfOps, cfHooks)
-			},
-			Hooks: &cfHooks,
-			Ops:   cfOps,
+			Hooks:      &cfHooks,
+			Ops:        cfOps,
 		},
 		{
 			Descriptor: catalog.ProviderDescriptor{ID: "digitalocean-functions", Name: "DigitalOcean Functions", Description: "Deploy and run functions on DigitalOcean App Platform", IncludeBuiltinManifest: true},
-			Factory: func() sdkprovider.Plugin {
-				return inprocess.NewAPIOpsTransportPlugin("digitalocean-functions", "DigitalOcean Functions", doOps, doHooks)
-			},
-			Hooks: &doHooks,
-			Ops:   doOps,
+			Hooks:      &doHooks,
+			Ops:        doOps,
 		},
 		{
 			Descriptor: catalog.ProviderDescriptor{ID: "fly-machines", Name: "Fly.io Machines", Description: "Deploy and run functions on Fly.io Machines", IncludeBuiltinManifest: true},
-			Factory: func() sdkprovider.Plugin {
-				return inprocess.NewAPIOpsTransportPlugin("fly-machines", "Fly.io Machines", flyOps, flyHooks)
-			},
-			Hooks: &flyHooks,
-			Ops:   flyOps,
+			Hooks:      &flyHooks,
+			Ops:        flyOps,
 		},
 		{
 			Descriptor: catalog.ProviderDescriptor{ID: "ibm-openwhisk", Name: "IBM OpenWhisk", Description: "Deploy and run functions on IBM Cloud Functions (OpenWhisk)", IncludeBuiltinManifest: true},
-			Factory: func() sdkprovider.Plugin {
-				return inprocess.NewAPIOpsTransportPlugin("ibm-openwhisk", "IBM OpenWhisk", ibmOps, ibmHooks)
-			},
-			Hooks: &ibmHooks,
-			Ops:   ibmOps,
+			Hooks:      &ibmHooks,
+			Ops:        ibmOps,
 		},
 		{
 			Descriptor: catalog.ProviderDescriptor{ID: "kubernetes", Name: "Kubernetes", Description: "Deploy and run functions on Kubernetes", IncludeBuiltinManifest: true},
-			Factory: func() sdkprovider.Plugin {
-				return inprocess.NewAPIOpsTransportPlugin("kubernetes", "Kubernetes", k8sOps, k8sHooks)
-			},
-			Hooks: &k8sHooks,
-			Ops:   k8sOps,
+			Hooks:      &k8sHooks,
+			Ops:        k8sOps,
 		},
 		{
 			Descriptor: catalog.ProviderDescriptor{ID: "netlify", Name: "Netlify", Description: "Deploy and run functions on Netlify Functions", IncludeBuiltinManifest: true},
-			Factory: func() sdkprovider.Plugin {
-				return inprocess.NewAPIOpsTransportPlugin("netlify", "Netlify", netlifyOps, netlifyHooks)
-			},
-			Hooks: &netlifyHooks,
-			Ops:   netlifyOps,
+			Hooks:      &netlifyHooks,
+			Ops:        netlifyOps,
 		},
 		{
 			Descriptor: catalog.ProviderDescriptor{ID: "vercel", Name: "Vercel", Description: "Deploy and run functions on Vercel Serverless", IncludeBuiltinManifest: true},
-			Factory: func() sdkprovider.Plugin {
-				return inprocess.NewAPIOpsTransportPlugin("vercel", "Vercel", vercelOps, vercelHooks)
-			},
-			Hooks: &vercelHooks,
-			Ops:   vercelOps,
+			Hooks:      &vercelHooks,
+			Ops:        vercelOps,
 		},
 	}
 }()
@@ -325,17 +296,9 @@ func APIDispatchProviderIDs() []string {
 	return ids
 }
 
-// NewBuiltinProvidersRegistry returns a providers registry populated with all
-// built-in in-process provider implementations.
+// NewBuiltinProvidersRegistry returns the provider registry for built-ins.
 func NewBuiltinProvidersRegistry() *providers.Registry {
-	reg := providers.NewRegistry()
-	for _, e := range providerEntries {
-		if !e.Descriptor.BuiltinImplementation || e.Factory == nil {
-			continue
-		}
-		_ = reg.Register(inprocess.New(e.Factory()))
-	}
-	return reg
+	return providers.NewRegistry()
 }
 
 // NewBuiltinProviderSet returns the centralized built-in provider loading set.
@@ -361,28 +324,28 @@ func NewBuiltinProviderSet() *BuiltinProviderSet {
 	}
 }
 
-func BuiltinRuntimeManifests() []RuntimePluginMeta {
-	return builtinruntimes.BuiltinRuntimeManifests()
+func BuiltinRuntimeManifests() []routercontracts.PluginMeta {
+	return toPluginMetaList(builtinruntimes.BuiltinRuntimeManifests())
 }
 
-func BuiltinSimulatorManifests() []SimulatorPluginMeta {
-	return builtinsimulators.BuiltinSimulatorManifests()
+func BuiltinSimulatorManifests() []routercontracts.PluginMeta {
+	return toPluginMetaList(builtinsimulators.BuiltinSimulatorManifests())
 }
 
-func BuiltinRouterManifests() []RouterPluginMeta {
-	return builtinrouters.BuiltinRouterManifests()
+func BuiltinRouterManifests() []routercontracts.PluginMeta {
+	return toPluginMetaList(builtinrouters.BuiltinRouterManifests())
 }
 
-func NewBuiltinRuntimeRegistry() *RuntimeRegistry {
-	return builtinruntimes.NewBuiltinRegistry()
+func NewBuiltinRuntimeRegistry() RuntimeRegistry {
+	return newRuntimeRegistry(builtinruntimes.NewBuiltinRegistry())
 }
 
-func NewBuiltinSimulatorRegistry() *SimulatorRegistry {
-	return builtinsimulators.NewBuiltinRegistry()
+func NewBuiltinSimulatorRegistry() SimulatorRegistry {
+	return newSimulatorRegistry(builtinsimulators.NewBuiltinRegistry())
 }
 
-func NewBuiltinRouterRegistry() *RouterRegistry {
-	return builtinrouters.NewBuiltinRegistry()
+func NewBuiltinRouterRegistry() RouterRegistry {
+	return newRouterRegistry(builtinrouters.NewBuiltinRegistry())
 }
 
 func NormalizeRuntimeID(runtime string) string {

@@ -16,7 +16,7 @@ func TestExternalProviderAdapter_Doctor(t *testing.T) {
 	p := NewExternalProviderAdapter("stub", exe, providers.ProviderMeta{Name: "stub"})
 
 	cfg := &config.Config{Service: "svc"}
-	res, err := p.Doctor(context.Background(), providers.DoctorRequest{Config: (*providers.Config)(cfg), Stage: "dev"})
+	res, err := p.Doctor(context.Background(), providers.DoctorRequest{Config: cfg, Stage: "dev"})
 	if err != nil {
 		t.Fatalf("Doctor error: %v", err)
 	}

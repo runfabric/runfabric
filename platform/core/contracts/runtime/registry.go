@@ -55,12 +55,8 @@ func (r *Registry) List() []Meta {
 func NormalizeRuntimeID(runtime string) string {
 	raw := strings.ToLower(strings.TrimSpace(runtime))
 	switch {
-	case raw == "runtime-node":
-		return "nodejs"
 	case strings.HasPrefix(raw, "nodejs"):
 		return "nodejs"
-	case raw == "runtime-python":
-		return "python"
 	case strings.HasPrefix(raw, "python"):
 		return "python"
 	default:

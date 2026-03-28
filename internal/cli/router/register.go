@@ -6,11 +6,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// GlobalOptions is re-exported from common
-type GlobalOptions = common.GlobalOptions
-
 // RegisterCommands returns all router commands for registration with the root command
-func RegisterCommands(opts *GlobalOptions) []*cobra.Command {
+func RegisterCommands(opts *common.GlobalOptions) []*cobra.Command {
 	return []*cobra.Command{
 		newRouteCmd(opts),
 	}

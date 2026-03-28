@@ -15,6 +15,7 @@ type DashboardData struct {
 	HasDeployment    bool
 	WorkflowRunCount int
 	WorkflowCost     *state.WorkflowCostSummary
+	RouterHistory    *RouterSyncHistoryAnalytics
 }
 
 // Dashboard loads config and receipt for the given stage and returns data for the dashboard UI.
@@ -41,6 +42,10 @@ func Dashboard(configPath, stage string) (*DashboardData, error) {
 	if len(runs) > 0 {
 		s := state.WorkflowCostFromRuns(runs)
 		data.WorkflowCost = &s
+	}
+	if history, err := state.LoadRouterSyncHistory(ctx.RootDir, ctx.Stage); err == nil && len(history) > 0 {
+		analytics := AnalyzeRouterSyncHistory(history, 5)
+		data.RouterHistory = &analytics
 	}
 	return data, nil
 }

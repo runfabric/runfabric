@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	builtinrouters "github.com/runfabric/runfabric/extensions/routers"
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	routercontracts "github.com/runfabric/runfabric/platform/core/contracts/router"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 )
@@ -27,7 +27,7 @@ type ExtensionsConnector interface {
 	EnsureSimulator(simulatorID string) error
 	BuildFunction(ctx context.Context, req RuntimeBuildRequest) (*providers.Artifact, error)
 	Simulate(ctx context.Context, simulatorID string, req SimulatorInvokeRequest) (*SimulatorInvokeResult, error)
-	SyncRouter(ctx context.Context, routerID string, req RouterSyncRequest) (*builtinrouters.SyncResult, error)
+	SyncRouter(ctx context.Context, routerID string, req RouterSyncRequest) (*routercontracts.SyncResult, error)
 	RefreshExternal() error
 }
 
@@ -130,21 +130,21 @@ func (a *resolutionExtensionsAdapter) Simulate(ctx context.Context, simulatorID 
 	}, nil
 }
 
-func (a *resolutionExtensionsAdapter) SyncRouter(ctx context.Context, routerID string, req RouterSyncRequest) (*builtinrouters.SyncResult, error) {
+func (a *resolutionExtensionsAdapter) SyncRouter(ctx context.Context, routerID string, req RouterSyncRequest) (*routercontracts.SyncResult, error) {
 	if req.Routing == nil {
 		return nil, fmt.Errorf("routing config is nil")
 	}
-	endpoints := make([]builtinrouters.RoutingEndpoint, len(req.Routing.Endpoints))
+	endpoints := make([]routercontracts.RoutingEndpoint, len(req.Routing.Endpoints))
 	for i, ep := range req.Routing.Endpoints {
-		endpoints[i] = builtinrouters.RoutingEndpoint{
+		endpoints[i] = routercontracts.RoutingEndpoint{
 			Name:    ep.Name,
 			URL:     ep.URL,
 			Healthy: ep.Healthy,
 			Weight:  ep.Weight,
 		}
 	}
-	return a.boundary.SyncRouter(ctx, routerID, builtinrouters.SyncRequest{
-		Routing: &builtinrouters.RoutingConfig{
+	return a.boundary.SyncRouter(ctx, routerID, routercontracts.SyncRequest{
+		Routing: &routercontracts.RoutingConfig{
 			Contract:   req.Routing.Contract,
 			Service:    req.Routing.Service,
 			Stage:      req.Routing.Stage,

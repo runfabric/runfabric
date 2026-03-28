@@ -19,7 +19,7 @@ const (
 	KindRouter    PluginKind = "router"
 )
 
-// NormalizePluginKind normalizes singular/plural aliases to canonical plugin kinds.
+// NormalizePluginKind normalizes singular/plural compatibility names to primary plugin kinds.
 func NormalizePluginKind(raw string) PluginKind {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "provider", "providers":

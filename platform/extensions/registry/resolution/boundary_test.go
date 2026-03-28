@@ -1,8 +1,10 @@
 package resolution
 
 import (
+	"context"
 	"testing"
 
+	routercontracts "github.com/runfabric/runfabric/platform/core/contracts/router"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 )
 
@@ -78,5 +80,61 @@ func TestResolveRouter_Builtin(t *testing.T) {
 	}
 	if router.Meta().ID != wantID {
 		t.Fatalf("router id = %q, want %q", router.Meta().ID, wantID)
+	}
+}
+
+func TestResolveRouter_External(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("RUNFABRIC_HOME", home)
+	writeExternalRouter(t, home, "external-router", "0.1.0")
+
+	b, err := New(Options{IncludeExternal: true})
+	if err != nil {
+		t.Fatalf("new boundary with external plugins: %v", err)
+	}
+	router, err := b.ResolveRouter("external-router")
+	if err != nil {
+		t.Fatalf("resolve external router: %v", err)
+	}
+	if router.Meta().ID != "external-router" {
+		t.Fatalf("router id = %q, want external-router", router.Meta().ID)
+	}
+}
+
+func TestSyncRouter_UnknownRouterReturnsError(t *testing.T) {
+	b, err := New(Options{IncludeExternal: false})
+	if err != nil {
+		t.Fatalf("new boundary: %v", err)
+	}
+	_, err = b.SyncRouter(context.Background(), "missing-router", routercontracts.SyncRequest{})
+	if err == nil {
+		t.Fatal("expected sync router error for unknown router")
+	}
+}
+
+func TestSyncRouter_ExternalDispatchErrorBubblesUp(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("RUNFABRIC_HOME", home)
+	writeExternalRouter(t, home, "external-router", "0.1.0")
+
+	b, err := New(Options{IncludeExternal: true})
+	if err != nil {
+		t.Fatalf("new boundary with external plugins: %v", err)
+	}
+	_, err = b.SyncRouter(context.Background(), "external-router", routercontracts.SyncRequest{
+		Routing: &routercontracts.RoutingConfig{
+			Contract: "runfabric.fabric.routing.v1",
+			Service:  "svc",
+			Stage:    "dev",
+			Hostname: "svc.example.com",
+			Strategy: "round-robin",
+			Endpoints: []routercontracts.RoutingEndpoint{
+				{Name: "aws", URL: "https://aws.example.com", Weight: 100},
+			},
+		},
+		DryRun: true,
+	})
+	if err == nil {
+		t.Fatal("expected external router dispatch error for non-protocol executable")
 	}
 }

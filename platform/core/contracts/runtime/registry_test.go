@@ -11,11 +11,9 @@ import (
 
 func TestNormalizeRuntimeID(t *testing.T) {
 	cases := map[string]string{
-		"nodejs18.x":     "nodejs",
-		"nodejs20.x":     "nodejs",
-		"runtime-node":   "nodejs",
-		"python3.11":     "python",
-		"runtime-python": "python",
+		"nodejs18.x": "nodejs",
+		"nodejs20.x": "nodejs",
+		"python3.11": "python",
 	}
 	for in, want := range cases {
 		b, err := resolution.NewCached(resolution.Options{IncludeExternal: false})

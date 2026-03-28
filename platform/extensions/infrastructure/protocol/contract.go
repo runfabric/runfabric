@@ -1,4 +1,4 @@
-package wrapper
+package protocol
 
 type Handshake struct {
 	Version           string   `json:"version"`

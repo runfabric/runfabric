@@ -4,30 +4,20 @@
 package loader
 
 import (
-	"fmt"
-	"strings"
-
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
-	"github.com/runfabric/runfabric/platform/extensions/application/external"
+	runtimecontracts "github.com/runfabric/runfabric/platform/core/contracts/runtime"
+	simulatorcontracts "github.com/runfabric/runfabric/platform/core/contracts/simulators"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
+	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 )
 
 // ExtensionsLoader is the single consolidated entry point for loading all extensions.
-// It handles:
-// - Built-in providers (gcp-functions, kubernetes, etc.)
-// - API-backed providers (vercel, netlify, etc.)
-// - Built-in runtimes (nodejs, python, go, etc.)
-// - Built-in simulators (local, etc.)
-// - External plugins from RUNFABRIC_HOME/plugins/{providers,runtimes,simulators}
+// Implementation is delegated to the shared resolution boundary so extension loading
+// logic lives in one common place.
 type ExtensionsLoader struct {
-	providers         *providers.Registry
-	runtimes          *resolution.RuntimeRegistry
-	simulators        *resolution.SimulatorRegistry
-	plugins           *manifests.PluginRegistry
-	internalProviders map[string]struct{}
-	apiProviders      map[string]struct{}
-	discoverOptions   external.DiscoverOptions
+	boundary *resolution.Boundary
 }
 
 // LoaderOptions configures extension discovery behavior.
@@ -45,157 +35,88 @@ type LoaderOptions struct {
 // and simulators. If IncludeExternal is true, it also discovers plugins from
 // RUNFABRIC_HOME/plugins directories.
 func NewLoader(opts LoaderOptions) (*ExtensionsLoader, error) {
-	builtins := resolution.NewBuiltinSet()
-	loader := &ExtensionsLoader{
-		// Register all built-in registries
-		providers:         builtins.Providers,
-		runtimes:          builtins.Runtimes,
-		simulators:        builtins.Simulators,
-		plugins:           builtins.Plugins,
-		internalProviders: map[string]struct{}{},
-		apiProviders:      builtins.APIProviderIDs,
-		discoverOptions: external.DiscoverOptions{
-			PreferExternal: opts.PreferExternal,
-			PinnedVersions: opts.PinnedVersions,
-		},
+	boundary, err := providerloader.LoadBoundary(providerloader.LoadOptions{
+		IncludeExternal: opts.IncludeExternal,
+		PreferExternal:  opts.PreferExternal,
+		PinnedVersions:  opts.PinnedVersions,
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	// Load external plugins if requested
-	if opts.IncludeExternal {
-		if err := loader.refresh(); err != nil {
-			return nil, err
-		}
-	}
-
-	return loader, nil
+	return &ExtensionsLoader{boundary: boundary}, nil
 }
 
 // Providers returns the providers registry containing all built-in and (optionally) external providers.
 func (l *ExtensionsLoader) Providers() *providers.Registry {
-	return l.providers
+	return l.boundary.ProviderRegistry()
 }
 
 // Runtimes returns the runtimes registry containing all built-in runtime plugins.
-func (l *ExtensionsLoader) Runtimes() *resolution.RuntimeRegistry {
-	return l.runtimes
+func (l *ExtensionsLoader) Runtimes() providerpolicy.RuntimeRegistry {
+	return boundaryRuntimeRegistry{boundary: l.boundary}
 }
 
-// Simulators returns the simulators registry containing all built-in simulators.
-func (l *ExtensionsLoader) Simulators() *resolution.SimulatorRegistry {
-	return l.simulators
+// Simulators returns the simulators registry containing all built-in simulator plugins.
+func (l *ExtensionsLoader) Simulators() providerpolicy.SimulatorRegistry {
+	return boundarySimulatorRegistry{boundary: l.boundary}
 }
 
 // Plugins returns the plugin manifest registry containing metadata for all discovered plugins.
 func (l *ExtensionsLoader) Plugins() *manifests.PluginRegistry {
-	return l.plugins
+	return l.boundary.PluginRegistry()
 }
 
 // ResolveProvider returns a provider by name, or error if not found.
 func (l *ExtensionsLoader) ResolveProvider(name string) (providers.ProviderPlugin, error) {
-	id := strings.TrimSpace(name)
-	p, ok := l.providers.Get(id)
-	if !ok {
-		return nil, providers.ErrProviderNotFound(id)
-	}
-	return p, nil
+	return l.boundary.ResolveProvider(name)
 }
 
 // ResolveRuntime normalizes and resolves a runtime ID/version to a plugin manifest.
 // Examples: "nodejs20.x" → normalized to "nodejs"
 func (l *ExtensionsLoader) ResolveRuntime(runtime string) (*manifests.PluginManifest, error) {
-	raw := strings.TrimSpace(runtime)
-	if raw == "" {
-		return nil, fmt.Errorf("runtime is required")
-	}
-	id := resolution.NormalizeRuntimeID(raw)
-	m := l.plugins.Get(id)
-	if m == nil || m.Kind != manifests.KindRuntime {
-		return nil, fmt.Errorf("runtime plugin %q is not registered", raw)
-	}
-	return m, nil
+	return l.boundary.ResolveRuntime(runtime)
 }
 
 // ResolveRuntimePlugin returns a runtime by ID/version string.
-func (l *ExtensionsLoader) ResolveRuntimePlugin(runtime string) (resolution.RuntimePlugin, error) {
-	return l.runtimes.Get(runtime)
+func (l *ExtensionsLoader) ResolveRuntimePlugin(runtime string) (runtimecontracts.Runtime, error) {
+	return l.boundary.ResolveRuntimePlugin(runtime)
 }
 
 // ResolveSimulator returns a simulator by ID.
-func (l *ExtensionsLoader) ResolveSimulator(simulatorID string) (resolution.SimulatorPlugin, error) {
-	id := strings.TrimSpace(simulatorID)
-	if id == "" {
-		return nil, fmt.Errorf("simulator id is required")
-	}
-	return l.simulators.Get(id)
+func (l *ExtensionsLoader) ResolveSimulator(simulatorID string) (simulatorcontracts.Simulator, error) {
+	return l.boundary.ResolveSimulator(simulatorID)
 }
 
 // IsInternalProvider returns true if the provider is marked as internal (non-external).
 func (l *ExtensionsLoader) IsInternalProvider(name string) bool {
-	_, ok := l.internalProviders[strings.TrimSpace(name)]
-	return ok
+	return l.boundary.IsInternalProvider(name)
 }
 
 // IsAPIProvider returns true if the provider is API-backed (dispatches through deploy/api).
 func (l *ExtensionsLoader) IsAPIProvider(name string) bool {
-	_, ok := l.apiProviders[strings.TrimSpace(name)]
-	return ok
+	return l.boundary.IsAPIDispatchProvider(name)
 }
 
 // Refresh re-discovers external plugins and merges them into the loader registries.
 // Call this to hot-reload external plugins after installing/updating them.
 func (l *ExtensionsLoader) Refresh() error {
-	return l.refresh()
+	return l.boundary.RefreshExternal()
 }
 
-// refresh does the actual external plugin discovery and registration.
-func (l *ExtensionsLoader) refresh() error {
-	res, err := external.Discover(l.discoverOptions)
-	if err != nil {
-		return err
-	}
+type boundaryRuntimeRegistry struct {
+	boundary *resolution.Boundary
+}
 
-	// Register plugin manifests
-	for _, m := range res.Plugins {
-		if m == nil {
-			continue
-		}
-		// Built-in manifests keep precedence unless PreferExternal is enabled
-		if l.plugins.Get(m.ID) == nil || (l.discoverOptions.PreferExternal && !(m.Kind == manifests.KindProvider && l.IsInternalProvider(m.ID))) {
-			l.plugins.Register(m)
-		}
-	}
+func (r boundaryRuntimeRegistry) Get(runtime string) (runtimecontracts.Runtime, error) {
+	return r.boundary.ResolveRuntimePlugin(runtime)
+}
 
-	// Register provider adapters for external provider plugins
-	for _, m := range res.Plugins {
-		if m == nil || m.Kind != manifests.KindProvider || strings.TrimSpace(m.Executable) == "" {
-			continue
-		}
+type boundarySimulatorRegistry struct {
+	boundary *resolution.Boundary
+}
 
-		// Skip if marked as internal provider (non-external)
-		if l.IsInternalProvider(m.ID) {
-			continue
-		}
-
-		// Skip if already registered and not preferring external
-		if _, ok := l.providers.Get(m.ID); ok && !l.discoverOptions.PreferExternal {
-			continue
-		}
-
-		// Register external provider as subprocess adapter
-		_ = l.providers.Register(external.NewExternalProviderAdapter(
-			m.ID,
-			m.Executable,
-			providers.ProviderMeta{
-				Name:              m.ID,
-				Capabilities:      append([]string(nil), m.Capabilities...),
-				SupportsRuntime:   append([]string(nil), m.SupportsRuntime...),
-				SupportsTriggers:  append([]string(nil), m.SupportsTriggers...),
-				SupportsResources: append([]string(nil), m.SupportsResources...),
-			},
-		))
-	}
-
-	return nil
+func (r boundarySimulatorRegistry) Get(simulatorID string) (simulatorcontracts.Simulator, error) {
+	return r.boundary.ResolveSimulator(simulatorID)
 }
 
 // DefaultLoader creates a loader with external plugins enabled and no version pinning.

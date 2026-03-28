@@ -117,7 +117,7 @@ func GenerateRouterRoutingConfig(fabricState *state.FabricState, cfg *config.Con
 			URL:      endpoint.URL,
 			Healthy:  endpoint.Healthy,
 			Priority: i + 1, // failover priority
-			Weight:   100,   // equal weight by default
+			Weight:   100,   // equal weight by default before scoring/overrides
 		}
 		routingCfg.Endpoints = append(routingCfg.Endpoints, rEndpoint)
 	}
@@ -127,6 +127,8 @@ func GenerateRouterRoutingConfig(fabricState *state.FabricState, cfg *config.Con
 		}
 		return routingCfg.Endpoints[i].Name < routingCfg.Endpoints[j].Name
 	})
+	applyRouterQualityScoring(routingCfg, cfg)
+	applyRouterCanaryDefaults(routingCfg, cfg)
 
 	// Generate strategy-specific configurations
 	switch strategy {
@@ -221,7 +223,7 @@ func generateRoundRobinDNS(hostname string, ttl int, endpoints []RouterRoutingEn
 			Name:   hostname,
 			TTL:    ttl,
 			Values: []string{domain},
-			Weight: 100,
+			Weight: endpoint.Weight,
 			SetID:  endpoint.Name,
 		})
 	}
@@ -264,7 +266,7 @@ func generateLatencyLoadBalancer(endpoints []RouterRoutingEndpoint) *LoadBalance
 		upstreams = append(upstreams, LoadBalancerUpstream{
 			Name:   endpoint.Name,
 			URL:    endpoint.URL,
-			Weight: 100, // equal weight for latency-based
+			Weight: endpoint.Weight,
 		})
 	}
 
@@ -288,7 +290,7 @@ func generateRoundRobinLoadBalancer(endpoints []RouterRoutingEndpoint) *LoadBala
 		upstreams = append(upstreams, LoadBalancerUpstream{
 			Name:   endpoint.Name,
 			URL:    endpoint.URL,
-			Weight: 100,
+			Weight: endpoint.Weight,
 		})
 	}
 
@@ -357,9 +359,9 @@ func FormatRouterRoutingGuide(routingCfg *RouterRoutingConfig) string {
 
 	case "round-robin":
 		guide.WriteString("Round-robin Distribution:\n")
-		guide.WriteString("  - Distribute requests equally across all endpoints.\n")
+		guide.WriteString("  - Distribute requests by endpoint weights.\n")
 		guide.WriteString("  Configure your DNS with multiple A records or use a load balancer.\n")
-		guide.WriteString("  All endpoints receive equal traffic weight (100).\n")
+		guide.WriteString("  Weights can be tuned via router quality scoring/canary policies.\n")
 
 	default:
 		guide.WriteString("Strategy: " + routingCfg.Strategy + "\n")

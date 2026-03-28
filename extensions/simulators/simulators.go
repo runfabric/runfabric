@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	sdkrouter "github.com/runfabric/runfabric/plugin-sdk/go/router"
 	sdksimulator "github.com/runfabric/runfabric/plugin-sdk/go/simulator"
 )
 
@@ -47,10 +48,10 @@ func (r *Registry) Get(id string) (sdksimulator.Plugin, error) {
 	return sim, nil
 }
 
-func (r *Registry) List() []sdksimulator.PluginMeta {
+func (r *Registry) List() []sdkrouter.PluginMeta {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]sdksimulator.PluginMeta, 0, len(r.simulators))
+	out := make([]sdkrouter.PluginMeta, 0, len(r.simulators))
 	for _, sim := range r.simulators {
 		out = append(out, sim.Meta())
 	}
@@ -86,8 +87,8 @@ const path = require('path');
 
 type localSimulator struct{}
 
-func (s localSimulator) Meta() sdksimulator.PluginMeta {
-	return sdksimulator.PluginMeta{
+func (s localSimulator) Meta() sdkrouter.PluginMeta {
+	return sdkrouter.PluginMeta{
 		ID:          "local",
 		Name:        "Local Simulator",
 		Description: "Built-in local simulator for call-local/dev workflows",
@@ -206,8 +207,8 @@ func invokeNodeHandler(ctx context.Context, req sdksimulator.Request) (*sdksimul
 }
 
 // BuiltinSimulatorManifests returns simulator metadata entries used by extension manifest catalogs.
-func BuiltinSimulatorManifests() []sdksimulator.PluginMeta {
-	return []sdksimulator.PluginMeta{
+func BuiltinSimulatorManifests() []sdkrouter.PluginMeta {
+	return []sdkrouter.PluginMeta{
 		{ID: "local", Name: "Local Simulator", Description: "Built-in local simulator for call-local/dev"},
 	}
 }

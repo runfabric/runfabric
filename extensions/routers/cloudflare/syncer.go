@@ -1,4 +1,4 @@
-package routers
+package cloudflare
 
 import (
 	"context"
@@ -26,8 +26,8 @@ type cloudflareSyncer struct {
 }
 
 func newCloudflareSyncer(cfg cloudflareConfig, dryRun bool, out io.Writer) (*cloudflareSyncer, error) {
-	if cfg.APIToken == "" {
-		return nil, fmt.Errorf("CLOUDFLARE_API_TOKEN is required")
+	if err := auditCloudflareAPIToken(cfg.APIToken); err != nil {
+		return nil, err
 	}
 	if cfg.ZoneID == "" {
 		return nil, fmt.Errorf("CLOUDFLARE_ZONE_ID is required")
@@ -71,12 +71,23 @@ func (s *cloudflareSyncer) sync(ctx context.Context, routing *sdkrouter.RoutingC
 			return result, fmt.Errorf("sync load balancer: %w", err)
 		}
 		result.Actions = append(result.Actions, action)
+
+		candidates, err := s.collectLBDeleteCandidates(ctx, routing, monitorID, poolID)
+		if err != nil {
+			return result, fmt.Errorf("collect delete candidates: %w", err)
+		}
+		result.Actions = append(result.Actions, candidates...)
 	} else {
 		action, err := s.syncDNSRecord(ctx, routing)
 		if err != nil {
 			return result, fmt.Errorf("sync dns record: %w", err)
 		}
 		result.Actions = append(result.Actions, action)
+		candidates, err := s.collectDNSDeleteCandidates(ctx, routing)
+		if err != nil {
+			return result, fmt.Errorf("collect dns delete candidates: %w", err)
+		}
+		result.Actions = append(result.Actions, candidates...)
 	}
 
 	s.printSummary(result)
@@ -114,10 +125,6 @@ func (s *cloudflareSyncer) syncMonitor(ctx context.Context, routing *sdkrouter.R
 	}
 	desired := cloudflareLBMonitor{Type: "https", Path: healthPath, Description: managedByTag + " service=" + routing.Service, Interval: 60, Timeout: 5, Retries: 2}
 
-	if s.dryRun {
-		return "dry-run-monitor-id", sdkrouter.RouterSyncAction{Resource: "lb_monitor", Action: "create", Name: name, Detail: fmt.Sprintf("type=https path=%s interval=60s", healthPath)}, nil
-	}
-
 	existing, err := s.client.listMonitors(ctx)
 	if err != nil {
 		return "", sdkrouter.RouterSyncAction{}, err
@@ -127,6 +134,9 @@ func (s *cloudflareSyncer) syncMonitor(ctx context.Context, routing *sdkrouter.R
 			if m.Path == healthPath && m.Type == "https" {
 				return m.ID, sdkrouter.RouterSyncAction{Resource: "lb_monitor", Action: "no-op", Name: name}, nil
 			}
+			if s.dryRun {
+				return m.ID, sdkrouter.RouterSyncAction{Resource: "lb_monitor", Action: "update", Name: name, Detail: fmt.Sprintf("path updated to %s", healthPath)}, nil
+			}
 			updated, err := s.client.updateMonitor(ctx, m.ID, desired)
 			if err != nil {
 				return "", sdkrouter.RouterSyncAction{}, err
@@ -135,6 +145,9 @@ func (s *cloudflareSyncer) syncMonitor(ctx context.Context, routing *sdkrouter.R
 		}
 	}
 
+	if s.dryRun {
+		return "dry-run-monitor-id", sdkrouter.RouterSyncAction{Resource: "lb_monitor", Action: "create", Name: name, Detail: fmt.Sprintf("type=https path=%s interval=60s", healthPath)}, nil
+	}
 	created, err := s.client.createMonitor(ctx, desired)
 	if err != nil {
 		return "", sdkrouter.RouterSyncAction{}, err
@@ -147,10 +160,6 @@ func (s *cloudflareSyncer) syncPool(ctx context.Context, routing *sdkrouter.Rout
 	desiredOrigins := toOrigins(routing.Endpoints)
 	desired := cloudflareLBPool{Name: name, Description: managedByTag + " service=" + routing.Service + " stage=" + routing.Stage, Origins: desiredOrigins, Monitor: monitorID, Enabled: true}
 
-	if s.dryRun {
-		return "dry-run-pool-id", sdkrouter.RouterSyncAction{Resource: "lb_pool", Action: "create", Name: name, Detail: fmt.Sprintf("%d origins", len(desiredOrigins))}, nil
-	}
-
 	existing, err := s.client.listPools(ctx)
 	if err != nil {
 		return "", sdkrouter.RouterSyncAction{}, err
@@ -160,6 +169,9 @@ func (s *cloudflareSyncer) syncPool(ctx context.Context, routing *sdkrouter.Rout
 			if originsEqual(p.Origins, desiredOrigins) && p.Monitor == monitorID {
 				return p.ID, sdkrouter.RouterSyncAction{Resource: "lb_pool", Action: "no-op", Name: name}, nil
 			}
+			if s.dryRun {
+				return p.ID, sdkrouter.RouterSyncAction{Resource: "lb_pool", Action: "update", Name: name, Detail: fmt.Sprintf("%d origins", len(desiredOrigins))}, nil
+			}
 			updated, err := s.client.updatePool(ctx, p.ID, desired)
 			if err != nil {
 				return "", sdkrouter.RouterSyncAction{}, err
@@ -168,6 +180,9 @@ func (s *cloudflareSyncer) syncPool(ctx context.Context, routing *sdkrouter.Rout
 		}
 	}
 
+	if s.dryRun {
+		return "dry-run-pool-id", sdkrouter.RouterSyncAction{Resource: "lb_pool", Action: "create", Name: name, Detail: fmt.Sprintf("%d origins", len(desiredOrigins))}, nil
+	}
 	created, err := s.client.createPool(ctx, desired)
 	if err != nil {
 		return "", sdkrouter.RouterSyncAction{}, err
@@ -180,10 +195,6 @@ func (s *cloudflareSyncer) syncLoadBalancer(ctx context.Context, routing *sdkrou
 	steering := steeringPolicy(routing.Strategy)
 	desired := cloudflareLoadBalancer{Name: name, Description: managedByTag + " service=" + routing.Service + " stage=" + routing.Stage, FallbackPool: poolID, DefaultPools: []string{poolID}, SteeringPolicy: steering, TTL: routing.TTL, Proxied: true, Enabled: true}
 
-	if s.dryRun {
-		return sdkrouter.RouterSyncAction{Resource: "load_balancer", Action: "create", Name: name, Detail: fmt.Sprintf("strategy=%s steering=%s ttl=%d", routing.Strategy, steering, routing.TTL)}, nil
-	}
-
 	existing, err := s.client.listLoadBalancers(ctx)
 	if err != nil {
 		return sdkrouter.RouterSyncAction{}, err
@@ -194,6 +205,9 @@ func (s *cloudflareSyncer) syncLoadBalancer(ctx context.Context, routing *sdkrou
 			if poolUnchanged && lb.SteeringPolicy == steering && lb.TTL == routing.TTL {
 				return sdkrouter.RouterSyncAction{Resource: "load_balancer", Action: "no-op", Name: name}, nil
 			}
+			if s.dryRun {
+				return sdkrouter.RouterSyncAction{Resource: "load_balancer", Action: "update", Name: name, Detail: fmt.Sprintf("steering=%s ttl=%d", steering, routing.TTL)}, nil
+			}
 			if _, err := s.client.updateLoadBalancer(ctx, lb.ID, desired); err != nil {
 				return sdkrouter.RouterSyncAction{}, err
 			}
@@ -201,6 +215,9 @@ func (s *cloudflareSyncer) syncLoadBalancer(ctx context.Context, routing *sdkrou
 		}
 	}
 
+	if s.dryRun {
+		return sdkrouter.RouterSyncAction{Resource: "load_balancer", Action: "create", Name: name, Detail: fmt.Sprintf("strategy=%s steering=%s ttl=%d", routing.Strategy, steering, routing.TTL)}, nil
+	}
 	if _, err := s.client.createLoadBalancer(ctx, desired); err != nil {
 		return sdkrouter.RouterSyncAction{}, err
 	}
@@ -211,10 +228,6 @@ func (s *cloudflareSyncer) syncDNSRecord(ctx context.Context, routing *sdkrouter
 	target := stripScheme(routing.Endpoints[0].URL)
 	desired := cloudflareDNSRecord{Type: "CNAME", Name: routing.Hostname, Content: target, TTL: routing.TTL, Proxied: false, Comment: managedByTag}
 
-	if s.dryRun {
-		return sdkrouter.RouterSyncAction{Resource: "dns_record", Action: "create", Name: routing.Hostname, Detail: fmt.Sprintf("CNAME -> %s (TTL %d)", target, routing.TTL)}, nil
-	}
-
 	existing, err := s.client.listDNSRecords(ctx, routing.Hostname, "CNAME")
 	if err != nil {
 		return sdkrouter.RouterSyncAction{}, err
@@ -224,6 +237,9 @@ func (s *cloudflareSyncer) syncDNSRecord(ctx context.Context, routing *sdkrouter
 			if r.Content == target && r.TTL == routing.TTL {
 				return sdkrouter.RouterSyncAction{Resource: "dns_record", Action: "no-op", Name: routing.Hostname}, nil
 			}
+			if s.dryRun {
+				return sdkrouter.RouterSyncAction{Resource: "dns_record", Action: "update", Name: routing.Hostname, Detail: fmt.Sprintf("CNAME -> %s (TTL %d)", target, routing.TTL)}, nil
+			}
 			desired.Comment = r.Comment
 			if _, err := s.client.updateDNSRecord(ctx, r.ID, desired); err != nil {
 				return sdkrouter.RouterSyncAction{}, err
@@ -232,10 +248,123 @@ func (s *cloudflareSyncer) syncDNSRecord(ctx context.Context, routing *sdkrouter
 		}
 	}
 
+	if s.dryRun {
+		return sdkrouter.RouterSyncAction{Resource: "dns_record", Action: "create", Name: routing.Hostname, Detail: fmt.Sprintf("CNAME -> %s (TTL %d)", target, routing.TTL)}, nil
+	}
 	if _, err := s.client.createDNSRecord(ctx, desired); err != nil {
 		return sdkrouter.RouterSyncAction{}, err
 	}
 	return sdkrouter.RouterSyncAction{Resource: "dns_record", Action: "create", Name: routing.Hostname, Detail: fmt.Sprintf("CNAME -> %s (TTL %d)", target, routing.TTL)}, nil
+}
+
+func (s *cloudflareSyncer) collectDNSDeleteCandidates(ctx context.Context, routing *sdkrouter.RoutingConfig) ([]sdkrouter.RouterSyncAction, error) {
+	records, err := s.client.listDNSRecords(ctx, routing.Hostname, "CNAME")
+	if err != nil {
+		return nil, err
+	}
+	target := stripScheme(routing.Endpoints[0].URL)
+	managed := make([]cloudflareDNSRecord, 0, len(records))
+	for _, record := range records {
+		if record.Name != routing.Hostname {
+			continue
+		}
+		if strings.TrimSpace(record.Comment) != managedByTag {
+			continue
+		}
+		managed = append(managed, record)
+	}
+	if len(managed) <= 1 {
+		return nil, nil
+	}
+	keepIdx := 0
+	for i, record := range managed {
+		if record.Content == target {
+			keepIdx = i
+			break
+		}
+	}
+	out := make([]sdkrouter.RouterSyncAction, 0, len(managed)-1)
+	for i, record := range managed {
+		if i == keepIdx {
+			continue
+		}
+		out = append(out, sdkrouter.RouterSyncAction{
+			Resource: "dns_record",
+			Action:   "delete-candidate",
+			Name:     routing.Hostname,
+			Detail:   fmt.Sprintf("managed duplicate CNAME -> %s (TTL %d)", record.Content, record.TTL),
+		})
+	}
+	return out, nil
+}
+
+func (s *cloudflareSyncer) collectLBDeleteCandidates(ctx context.Context, routing *sdkrouter.RoutingConfig, monitorID, poolID string) ([]sdkrouter.RouterSyncAction, error) {
+	serviceTag := managedByTag + " service=" + routing.Service
+	out := make([]sdkrouter.RouterSyncAction, 0)
+
+	monitors, err := s.client.listMonitors(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, monitor := range monitors {
+		if monitor.ID == monitorID {
+			continue
+		}
+		if strings.TrimSpace(monitor.Description) != serviceTag {
+			continue
+		}
+		out = append(out, sdkrouter.RouterSyncAction{
+			Resource: "lb_monitor",
+			Action:   "delete-candidate",
+			Name:     monitorName(routing),
+			Detail:   fmt.Sprintf("managed monitor id=%s path=%s", monitor.ID, monitor.Path),
+		})
+	}
+
+	pools, err := s.client.listPools(ctx)
+	if err != nil {
+		return nil, err
+	}
+	poolDesc := managedByTag + " service=" + routing.Service + " stage=" + routing.Stage
+	for _, pool := range pools {
+		if pool.ID == poolID {
+			continue
+		}
+		if strings.TrimSpace(pool.Description) != poolDesc {
+			continue
+		}
+		out = append(out, sdkrouter.RouterSyncAction{
+			Resource: "lb_pool",
+			Action:   "delete-candidate",
+			Name:     poolName(routing),
+			Detail:   fmt.Sprintf("managed pool id=%s origins=%d", pool.ID, len(pool.Origins)),
+		})
+	}
+
+	return out, nil
+}
+
+func auditCloudflareAPIToken(token string) error {
+	trimmed := strings.TrimSpace(token)
+	if trimmed == "" {
+		return fmt.Errorf("router API token is required (set RUNFABRIC_ROUTER_API_TOKEN/CLOUDFLARE_API_TOKEN or *_API_TOKEN_FILE)")
+	}
+	if trimmed != token || strings.ContainsAny(token, " \t\r\n") {
+		return fmt.Errorf("router API token must not include whitespace")
+	}
+	if strings.Contains(trimmed, "***") {
+		return fmt.Errorf("router API token appears redacted; provide the full secret value")
+	}
+	lowered := strings.ToLower(trimmed)
+	for _, marker := range []string{"changeme", "replace_me", "replace-me", "replace-with", "your_token", "placeholder", "example", "dummy", "redacted"} {
+		if strings.Contains(lowered, marker) {
+			return fmt.Errorf("router API token appears to be a placeholder value")
+		}
+	}
+	if len(trimmed) < 20 {
+		return fmt.Errorf("router API token looks too short; use a real provider-issued token")
+	}
+	return nil
 }
 
 func (s *cloudflareSyncer) printSummary(result *sdkrouter.RouterSyncResult) {
@@ -310,12 +439,20 @@ func originsEqual(a, b []cloudflareLBOrigin) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	byName := make(map[string]string, len(a))
+	type originShape struct {
+		address string
+		weight  float64
+	}
+	byName := make(map[string]originShape, len(a))
 	for _, o := range a {
-		byName[o.Name] = o.Address
+		byName[o.Name] = originShape{address: o.Address, weight: o.Weight}
 	}
 	for _, o := range b {
-		if byName[o.Name] != o.Address {
+		item, ok := byName[o.Name]
+		if !ok {
+			return false
+		}
+		if item.address != o.Address || item.weight != o.Weight {
 			return false
 		}
 	}

@@ -75,6 +75,9 @@
           "type": "string",
           "description": "Optional router plugin ID for runfabric router commands. Defaults to cloudflare when omitted."
         },
+        "router": {
+          "$ref": "#/$defs/RouterExtensionConfig"
+        },
         "aws-lambda": {
           "$ref": "#/$defs/AWSLambdaExtensionConfig"
         }
@@ -954,6 +957,182 @@
           "items": {
             "type": "string"
           }
+        }
+      },
+      "additionalProperties": true
+    },
+    "RouterExtensionConfig": {
+      "type": "object",
+      "description": "Router extension settings for DNS/LB sync automation, approvals, and credential env wiring.",
+      "properties": {
+        "autoApply": {
+          "description": "Enable automatic post-deploy router DNS sync. Use boolean for all stages or object for stage-scoped policy.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/RouterAutoApplyConfig"
+            }
+          ]
+        },
+        "dryRun": {
+          "type": "boolean",
+          "description": "Default dry-run behavior for router DNS sync commands."
+        },
+        "allowProdSync": {
+          "type": "boolean",
+          "description": "Default equivalent of --allow-prod-dns-sync."
+        },
+        "enforceStageRollout": {
+          "type": "boolean",
+          "description": "Default equivalent of --enforce-dns-sync-stage-rollout."
+        },
+        "requireReason": {
+          "type": "boolean",
+          "description": "Require a change reason env var before DNS sync apply."
+        },
+        "reasonEnv": {
+          "type": "string",
+          "description": "Env var containing operator change reason (default RUNFABRIC_DNS_SYNC_REASON)."
+        },
+        "approvalEnvByStage": {
+          "type": "object",
+          "description": "Per-stage approval env var names (value must equal true).",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "mutationPolicy": {
+          "$ref": "#/$defs/RouterMutationPolicyConfig"
+        },
+        "credentialPolicy": {
+          "$ref": "#/$defs/RouterCredentialPolicyConfig"
+        },
+        "credentials": {
+          "$ref": "#/$defs/RouterCredentialsConfig"
+        },
+        "stages": {
+          "type": "object",
+          "description": "Stage-specific router policy overrides keyed by stage name.",
+          "additionalProperties": {
+            "$ref": "#/$defs/RouterExtensionConfig"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "RouterAutoApplyConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "stages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Stages where auto apply is allowed (e.g. [\"dev\", \"staging\", \"prod\"])."
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "allowProdSync": {
+          "type": "boolean"
+        },
+        "enforceStageRollout": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "RouterCredentialsConfig": {
+      "type": "object",
+      "properties": {
+        "zoneIDEnv": {
+          "type": "string",
+          "description": "Env var name for router zone id (default RUNFABRIC_ROUTER_ZONE_ID)."
+        },
+        "accountIDEnv": {
+          "type": "string",
+          "description": "Env var name for router account id (default RUNFABRIC_ROUTER_ACCOUNT_ID)."
+        },
+        "apiTokenEnv": {
+          "type": "string",
+          "description": "Env var name for router API token (default RUNFABRIC_ROUTER_API_TOKEN)."
+        },
+        "apiTokenFileEnv": {
+          "type": "string",
+          "description": "Env var name containing file path to router API token (default RUNFABRIC_ROUTER_API_TOKEN_FILE)."
+        },
+        "apiTokenSecretRef": {
+          "type": "string",
+          "description": "Secret reference key for router API token (resolved via ${secret:KEY} against top-level secrets and environment)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "RouterMutationPolicyConfig": {
+      "type": "object",
+      "description": "Policy-as-code guardrails for risky/high-volume router DNS mutations.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable mutation policy enforcement for apply operations."
+        },
+        "approvalEnv": {
+          "type": "string",
+          "description": "Env var that must equal true to approve risky/high-volume mutations."
+        },
+        "riskyResources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Resource kinds requiring approval when mutated (e.g. lb_monitor, lb_pool, load_balancer)."
+        },
+        "maxMutationsWithoutApproval": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum create/update mutations allowed without approval."
+        }
+      },
+      "additionalProperties": true
+    },
+    "RouterCredentialPolicyConfig": {
+      "type": "object",
+      "description": "Short-lived credential attestation policy for router sync apply operations.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable credential attestation checks before router sync."
+        },
+        "requireAttestation": {
+          "type": "boolean",
+          "description": "Require attestation env to equal true."
+        },
+        "attestationEnv": {
+          "type": "string",
+          "description": "Env var that must equal true when requireAttestation is enabled."
+        },
+        "issuedAtEnv": {
+          "type": "string",
+          "description": "Env var with token issued-at timestamp in RFC3339."
+        },
+        "expiresAtEnv": {
+          "type": "string",
+          "description": "Env var with token expiration timestamp in RFC3339."
+        },
+        "maxTTLSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum allowed token lifetime (expiresAt - issuedAt) in seconds."
+        },
+        "minRemainingSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum required remaining token lifetime at sync time."
         }
       },
       "additionalProperties": true

@@ -1,11 +1,13 @@
-package routers
+package cloudflare
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 )
@@ -28,36 +30,73 @@ func (c *cloudflareClient) apiBase() string {
 }
 
 func (c *cloudflareClient) do(ctx context.Context, method, path string, body any) ([]byte, int, error) {
-	var bodyReader io.Reader
+	var payload []byte
 	if body != nil {
-		b, err := json.Marshal(body)
+		var err error
+		payload, err = json.Marshal(body)
 		if err != nil {
 			return nil, 0, fmt.Errorf("marshal request body: %w", err)
 		}
-		bodyReader = bytes.NewReader(b)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, c.apiBase()+path, bodyReader)
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
 	}
 	cl := c.httpClient
 	if cl == nil {
 		cl = http.DefaultClient
 	}
-	resp, err := cl.Do(req)
-	if err != nil {
-		return nil, 0, err
+	var lastStatus int
+	var lastData []byte
+	const maxAttempts = 3
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		var bodyReader io.Reader
+		if body != nil {
+			bodyReader = bytes.NewReader(payload)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, c.apiBase()+path, bodyReader)
+		if err != nil {
+			return nil, 0, err
+		}
+		req.Header.Set("Authorization", "Bearer "+c.token)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, err := cl.Do(req)
+		if err != nil {
+			if attempt < maxAttempts && isRetryableTransportError(err) {
+				continue
+			}
+			return nil, 0, err
+		}
+		func() {
+			defer resp.Body.Close()
+			lastStatus = resp.StatusCode
+			lastData, err = io.ReadAll(resp.Body)
+		}()
+		if err != nil {
+			if attempt < maxAttempts {
+				continue
+			}
+			return nil, lastStatus, err
+		}
+		if attempt < maxAttempts && isRetryableHTTPStatus(lastStatus) {
+			continue
+		}
+		return lastData, lastStatus, nil
 	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, err
+	return lastData, lastStatus, nil
+}
+
+func isRetryableHTTPStatus(status int) bool {
+	return status == http.StatusTooManyRequests || status >= 500
+}
+
+func isRetryableTransportError(err error) bool {
+	if err == nil {
+		return false
 	}
-	return data, resp.StatusCode, nil
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
 
 func (c *cloudflareClient) listDNSRecords(ctx context.Context, name, recordType string) ([]cloudflareDNSRecord, error) {

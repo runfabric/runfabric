@@ -8,24 +8,16 @@ import (
 	sdkrouter "github.com/runfabric/runfabric/plugin-sdk/go/router"
 )
 
-type Meta = sdkrouter.PluginMeta
-type RoutingConfig = sdkrouter.RoutingConfig
-type RoutingEndpoint = sdkrouter.RoutingEndpoint
-type SyncAction = sdkrouter.RouterSyncAction
-type SyncRequest = sdkrouter.RouterSyncRequest
-type SyncResult = sdkrouter.RouterSyncResult
-type Router = sdkrouter.Router
-
 type Registry struct {
 	mu      sync.RWMutex
-	routers map[string]Router
+	routers map[string]sdkrouter.Router
 }
 
 func NewRegistry() *Registry {
-	return &Registry{routers: map[string]Router{}}
+	return &Registry{routers: map[string]sdkrouter.Router{}}
 }
 
-func (r *Registry) Register(router Router) error {
+func (r *Registry) Register(router sdkrouter.Router) error {
 	if router == nil {
 		return fmt.Errorf("router plugin is nil")
 	}
@@ -39,7 +31,7 @@ func (r *Registry) Register(router Router) error {
 	return nil
 }
 
-func (r *Registry) Get(id string) (Router, error) {
+func (r *Registry) Get(id string) (sdkrouter.Router, error) {
 	id = strings.TrimSpace(strings.ToLower(id))
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -50,10 +42,10 @@ func (r *Registry) Get(id string) (Router, error) {
 	return router, nil
 }
 
-func (r *Registry) List() []Meta {
+func (r *Registry) List() []sdkrouter.PluginMeta {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]Meta, 0, len(r.routers))
+	out := make([]sdkrouter.PluginMeta, 0, len(r.routers))
 	for _, rt := range r.routers {
 		out = append(out, rt.Meta())
 	}

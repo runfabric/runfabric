@@ -14,7 +14,7 @@ import (
 	"time"
 
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
-	"github.com/runfabric/runfabric/platform/extensions/infrastructure/wrapper"
+	"github.com/runfabric/runfabric/platform/extensions/infrastructure/protocol"
 	extRuntime "github.com/runfabric/runfabric/platform/extensions/registry/loader/runtime"
 )
 
@@ -323,7 +323,7 @@ func (p *ExternalProviderAdapter) handshakeLocked() error {
 		return fmt.Errorf("external plugin %s handshake failed: %s", p.executable, resp.Error.Message)
 	}
 
-	var hs wrapper.Handshake
+	var hs protocol.Handshake
 	b, err := json.Marshal(resp.Result)
 	if err != nil {
 		return fmt.Errorf("external plugin %s handshake malformed result: %w", p.executable, err)

@@ -130,7 +130,7 @@ func Discover(opts DiscoverOptions) (DiscoverResult, error) {
 		manifests.KindSimulator,
 		manifests.KindRouter,
 	} {
-		found, invalid := discoverKindAcrossAliases(root, kind, opts)
+		found, invalid := discoverKindAcrossCompatDirs(root, kind, opts)
 		res.Plugins = append(res.Plugins, found...)
 		if opts.IncludeInvalid {
 			res.Invalid = append(res.Invalid, invalid...)
@@ -198,7 +198,7 @@ func cloneDiscoverResult(in DiscoverResult) DiscoverResult {
 	return out
 }
 
-func discoverKindAcrossAliases(root string, kind manifests.PluginKind, opts DiscoverOptions) ([]*manifests.PluginManifest, []InvalidPlugin) {
+func discoverKindAcrossCompatDirs(root string, kind manifests.PluginKind, opts DiscoverOptions) ([]*manifests.PluginManifest, []InvalidPlugin) {
 	bestByID := map[string]*manifests.PluginManifest{}
 	bestByIDSemver := map[string]string{}
 	var invalid []InvalidPlugin
@@ -206,7 +206,7 @@ func discoverKindAcrossAliases(root string, kind manifests.PluginKind, opts Disc
 	for _, dir := range pluginKindDirs(kind) {
 		found, localInvalid, err := discoverKind(filepath.Join(root, dir), kind, opts)
 		if err != nil {
-			// Missing alias dir is fine.
+			// Missing compatibility dir is fine.
 			if os.IsNotExist(err) {
 				continue
 			}
@@ -240,7 +240,7 @@ func discoverKindAcrossAliases(root string, kind manifests.PluginKind, opts Disc
 				bestByIDSemver[m.ID] = nextNorm
 				continue
 			}
-			// Keep deterministic tie-breaker by canonical directory preference.
+			// Keep deterministic tie-breaker by primary directory preference.
 			if cmp == 0 && current.Path > m.Path {
 				bestByID[m.ID] = m
 				bestByIDSemver[m.ID] = nextNorm

@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	providercodec "github.com/runfabric/runfabric/internal/provider/codec"
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
-	sdkbridge "github.com/runfabric/runfabric/internal/provider/sdkbridge"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 	planner "github.com/runfabric/runfabric/platform/planner/engine"
-	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // APIDispatchProvider marks providers that should be executed through internal/deploy/api
@@ -20,7 +19,7 @@ type APIDispatchProvider interface {
 	APIDispatchProvider()
 }
 
-// apiProviderAdapter bridges API-dispatched providers into the provider registry so
+// apiProviderAdapter connects API-dispatched providers into the provider registry so
 // plan/doctor/lifecycle paths can resolve providers via a single boundary.
 type apiProviderAdapter struct {
 	name string
@@ -75,7 +74,7 @@ func (p *apiProviderAdapter) Logs(ctx context.Context, req providers.LogsRequest
 
 func (p *apiProviderAdapter) FetchMetrics(ctx context.Context, req providers.MetricsRequest) (*providers.MetricsResult, error) {
 	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.FetchMetrics != nil {
-		tc, err := sdkbridge.FromCoreConfig(req.Config)
+		tc, err := providercodec.FromCoreConfig(req.Config)
 		if err != nil {
 			return nil, err
 		}
@@ -90,7 +89,7 @@ func (p *apiProviderAdapter) FetchMetrics(ctx context.Context, req providers.Met
 
 func (p *apiProviderAdapter) FetchTraces(ctx context.Context, req providers.TracesRequest) (*providers.TracesResult, error) {
 	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.FetchTraces != nil {
-		tc, err := sdkbridge.FromCoreConfig(req.Config)
+		tc, err := providercodec.FromCoreConfig(req.Config)
 		if err != nil {
 			return nil, err
 		}
@@ -105,7 +104,7 @@ func (p *apiProviderAdapter) FetchTraces(ctx context.Context, req providers.Trac
 
 func (p *apiProviderAdapter) PrepareDevStream(ctx context.Context, req providers.DevStreamRequest) (*providers.DevStreamSession, error) {
 	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.PrepareDevStream != nil {
-		tc, err := sdkbridge.FromCoreConfig(req.Config)
+		tc, err := providercodec.FromCoreConfig(req.Config)
 		if err != nil {
 			return nil, err
 		}
@@ -123,41 +122,16 @@ func (p *apiProviderAdapter) Recover(ctx context.Context, req providers.Recovery
 	if h == nil || h.Recover == nil {
 		return nil, fmt.Errorf("provider %q does not support recovery", p.name)
 	}
-	tc, err := sdkbridge.FromCoreConfig(req.Config)
+	r, err := h.Recover(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	r, err := h.Recover(ctx, sdkprovider.RecoveryRequest{
-		Config: tc, Root: req.Root, Service: req.Service,
-		Stage: req.Stage, Region: req.Region, Mode: req.Mode, Journal: req.Journal,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &providers.RecoveryResult{
-		Recovered:  r.Recovered,
-		Mode:       r.Mode,
-		Status:     r.Status,
-		Message:    r.Message,
-		Metadata:   r.Metadata,
-		Errors:     r.Errors,
-		ResumeData: r.ResumeData,
-	}, nil
+	return r, nil
 }
 
 func (p *apiProviderAdapter) SyncOrchestrations(ctx context.Context, req providers.OrchestrationSyncRequest) (*providers.OrchestrationSyncResult, error) {
 	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.SyncOrchestrations != nil {
-		tc, err := sdkbridge.FromCoreConfig(req.Config)
-		if err != nil {
-			return nil, err
-		}
-		r, err := h.SyncOrchestrations(ctx, sdkprovider.OrchestrationSyncRequest{
-			Config: tc, Stage: req.Stage, Root: req.Root, FunctionResourceByName: req.FunctionResourceByName,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return &providers.OrchestrationSyncResult{Metadata: r.Metadata, Outputs: r.Outputs}, nil
+		return h.SyncOrchestrations(ctx, req)
 	}
 	if p.name != "azure-functions" {
 		return &providers.OrchestrationSyncResult{}, nil
@@ -167,17 +141,7 @@ func (p *apiProviderAdapter) SyncOrchestrations(ctx context.Context, req provide
 
 func (p *apiProviderAdapter) RemoveOrchestrations(ctx context.Context, req providers.OrchestrationRemoveRequest) (*providers.OrchestrationSyncResult, error) {
 	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.RemoveOrchestrations != nil {
-		tc, err := sdkbridge.FromCoreConfig(req.Config)
-		if err != nil {
-			return nil, err
-		}
-		r, err := h.RemoveOrchestrations(ctx, sdkprovider.OrchestrationRemoveRequest{
-			Config: tc, Stage: req.Stage, Root: req.Root,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return &providers.OrchestrationSyncResult{Metadata: r.Metadata, Outputs: r.Outputs}, nil
+		return h.RemoveOrchestrations(ctx, req)
 	}
 	if p.name != "azure-functions" {
 		return &providers.OrchestrationSyncResult{}, nil
@@ -187,20 +151,7 @@ func (p *apiProviderAdapter) RemoveOrchestrations(ctx context.Context, req provi
 
 func (p *apiProviderAdapter) InvokeOrchestration(ctx context.Context, req providers.OrchestrationInvokeRequest) (*providers.InvokeResult, error) {
 	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.InvokeOrchestration != nil {
-		tc, err := sdkbridge.FromCoreConfig(req.Config)
-		if err != nil {
-			return nil, err
-		}
-		r, err := h.InvokeOrchestration(ctx, sdkprovider.OrchestrationInvokeRequest{
-			Config: tc, Stage: req.Stage, Root: req.Root, Name: req.Name, Payload: req.Payload,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return &providers.InvokeResult{
-			Provider: r.Provider, Function: r.Function, Output: r.Output,
-			RunID: r.RunID, Workflow: r.Workflow,
-		}, nil
+		return h.InvokeOrchestration(ctx, req)
 	}
 	if p.name != "azure-functions" {
 		return nil, fmt.Errorf("provider %q does not support orchestration", p.name)
@@ -214,11 +165,7 @@ func (p *apiProviderAdapter) InvokeOrchestration(ctx context.Context, req provid
 
 func (p *apiProviderAdapter) InspectOrchestrations(ctx context.Context, req providers.OrchestrationInspectRequest) (map[string]any, error) {
 	if h := providerpolicy.GetAPIHooks(p.name); h != nil && h.InspectOrchestrations != nil {
-		tc, err := sdkbridge.FromCoreConfig(req.Config)
-		if err != nil {
-			return nil, err
-		}
-		return h.InspectOrchestrations(ctx, sdkprovider.OrchestrationInspectRequest{Config: tc, Stage: req.Stage, Root: req.Root})
+		return h.InspectOrchestrations(ctx, req)
 	}
 	if p.name != "azure-functions" {
 		return map[string]any{}, nil
