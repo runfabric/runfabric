@@ -73,25 +73,34 @@ func TestProviderToolResultMapper_Azure(t *testing.T) {
 
 func TestProviderModelOutputShaper_AWS(t *testing.T) {
 	s := ProviderModelOutputShaper("aws")
-	out := s.ShapeOutput(StepKindAIGenerate, "s1", map[string]any{"text": "hello"})
+	out := s.ShapeOutput(StepKindAIGenerate, "s1", map[string]any{"text": "hello", "model": "custom-model"})
 	if out["provider"] != "aws" || out["stopReason"] == nil {
 		t.Fatalf("expected aws-shaped output, got %+v", out)
+	}
+	if out["model"] != "custom-model" {
+		t.Fatalf("expected selected model override to be preserved, got %+v", out)
 	}
 }
 
 func TestProviderModelOutputShaper_GCP(t *testing.T) {
 	s := ProviderModelOutputShaper("gcp")
-	out := s.ShapeOutput(StepKindAIGenerate, "s1", map[string]any{"text": "hello"})
+	out := s.ShapeOutput(StepKindAIGenerate, "s1", map[string]any{"text": "hello", "model": "custom-model"})
 	if out["provider"] != "gcp" || out["usageMetadata"] == nil {
 		t.Fatalf("expected gcp-shaped output, got %+v", out)
+	}
+	if out["model"] != "custom-model" {
+		t.Fatalf("expected selected model override to be preserved, got %+v", out)
 	}
 }
 
 func TestProviderModelOutputShaper_Azure(t *testing.T) {
 	s := ProviderModelOutputShaper("azure")
-	out := s.ShapeOutput(StepKindAIGenerate, "s1", map[string]any{"text": "hello"})
+	out := s.ShapeOutput(StepKindAIGenerate, "s1", map[string]any{"text": "hello", "model": "custom-model"})
 	if out["provider"] != "azure" || out["usage"] == nil {
 		t.Fatalf("expected azure-shaped output, got %+v", out)
+	}
+	if out["model"] != "custom-model" {
+		t.Fatalf("expected selected model override to be preserved, got %+v", out)
 	}
 }
 
@@ -145,6 +154,34 @@ func TestProviderModelSelector_RoutesByProvider(t *testing.T) {
 	}
 	if got := ProviderModelSelector("azure").SelectModel(StepKindAIGenerate, ""); got != "gpt-4o" {
 		t.Fatalf("expected azure gpt-4o for generate, got %q", got)
+	}
+}
+
+func TestWithModelSelectorOverrides_UsesOverridesAndFallsBack(t *testing.T) {
+	selector := WithModelSelectorOverrides(DefaultModelSelector{}, map[string]string{
+		"ai-generate": "gpt-4.1",
+		"default":     "gpt-4.1-mini",
+	})
+	if got := selector.SelectModel(StepKindAIGenerate, ""); got != "gpt-4.1" {
+		t.Fatalf("expected ai-generate override, got %q", got)
+	}
+	if got := selector.SelectModel(StepKindAIEval, ""); got != "gpt-4.1-mini" {
+		t.Fatalf("expected default override for ai-eval, got %q", got)
+	}
+}
+
+func TestEnvModelSelectorOverrides_ProviderOverridesGlobal(t *testing.T) {
+	t.Setenv("RUNFABRIC_MODEL_AI_GENERATE", "global-generate")
+	t.Setenv("RUNFABRIC_MODEL_AWS_AI_GENERATE", "aws-generate")
+	t.Setenv("RUNFABRIC_MODEL_DEFAULT", "global-default")
+	t.Setenv("RUNFABRIC_MODEL_AWS_DEFAULT", "aws-default")
+
+	overrides := EnvModelSelectorOverrides("aws")
+	if got := overrides[StepKindAIGenerate]; got != "aws-generate" {
+		t.Fatalf("expected provider-scoped ai-generate override, got %q", got)
+	}
+	if got := overrides["default"]; got != "aws-default" {
+		t.Fatalf("expected provider-scoped default override, got %q", got)
 	}
 }
 
@@ -220,5 +257,67 @@ func TestNewTypedStepHandlerFromConfig_InjectsProviderComponents(t *testing.T) {
 	}
 	if _, ok := h.TelemetryHook.(AWSCloudWatchHook); !ok {
 		t.Fatalf("expected AWSCloudWatchHook, got %T", h.TelemetryHook)
+	}
+}
+
+func TestNewTypedStepHandlerFromConfig_AppliesProviderModelOverrides(t *testing.T) {
+	cfg := &config.Config{
+		Provider: config.ProviderConfig{Name: "aws", Region: "us-east-1"},
+		Policies: map[string]any{
+			"mcp": map[string]any{
+				"providers": map[string]any{
+					"aws": map[string]any{
+						"models": map[string]any{
+							"default":      "gpt-4.1-mini",
+							"ai-generate":  "gpt-4.1",
+							"ai-retrieval": "gpt-4.1-mini",
+						},
+					},
+				},
+			},
+		},
+	}
+	h, err := NewTypedStepHandlerFromConfig(cfg, fakeMCPClient{})
+	if err != nil {
+		t.Fatalf("NewTypedStepHandlerFromConfig returned error: %v", err)
+	}
+	runner, ok := h.AIRunner.(*DefaultAIStepRunner)
+	if !ok {
+		t.Fatalf("expected default ai runner type, got %T", h.AIRunner)
+	}
+	if got := runner.ModelSelector.SelectModel(StepKindAIGenerate, "us-east-1"); got != "gpt-4.1" {
+		t.Fatalf("expected ai-generate override model, got %q", got)
+	}
+	if got := runner.ModelSelector.SelectModel(StepKindAIEval, "us-east-1"); got != "gpt-4.1-mini" {
+		t.Fatalf("expected default override model for ai-eval, got %q", got)
+	}
+}
+
+func TestNewTypedStepHandlerFromConfig_ModelOverridePrecedence_ConfigOverEnv(t *testing.T) {
+	t.Setenv("RUNFABRIC_MODEL_AWS_AI_GENERATE", "env-model")
+	cfg := &config.Config{
+		Provider: config.ProviderConfig{Name: "aws", Region: "us-east-1"},
+		Policies: map[string]any{
+			"mcp": map[string]any{
+				"providers": map[string]any{
+					"aws": map[string]any{
+						"models": map[string]any{
+							"ai-generate": "config-model",
+						},
+					},
+				},
+			},
+		},
+	}
+	h, err := NewTypedStepHandlerFromConfig(cfg, fakeMCPClient{})
+	if err != nil {
+		t.Fatalf("NewTypedStepHandlerFromConfig returned error: %v", err)
+	}
+	runner, ok := h.AIRunner.(*DefaultAIStepRunner)
+	if !ok {
+		t.Fatalf("expected default ai runner type, got %T", h.AIRunner)
+	}
+	if got := runner.ModelSelector.SelectModel(StepKindAIGenerate, "us-east-1"); got != "config-model" {
+		t.Fatalf("expected config model to override env model, got %q", got)
 	}
 }

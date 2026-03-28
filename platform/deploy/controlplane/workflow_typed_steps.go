@@ -152,7 +152,10 @@ func NewTypedStepHandlerFromConfig(cfg *config.Config, mcp MCPClient) (*TypedSte
 			runner.PromptRenderer = ProviderPromptRenderer(provider)
 			runner.ToolMapper = ProviderToolResultMapper(provider)
 			runner.OutputShaper = ProviderModelOutputShaper(provider)
-			runner.ModelSelector = ProviderModelSelector(provider)
+			modelSelector := ProviderModelSelector(provider)
+			modelSelector = WithModelSelectorOverrides(modelSelector, EnvModelSelectorOverrides(provider))
+			modelSelector = WithModelSelectorOverrides(modelSelector, policy.Providers[provider].Models)
+			runner.ModelSelector = modelSelector
 			runner.RetryStrategy = ProviderRetryStrategy(provider)
 			runner.CostTracker = ProviderCostTracker(provider)
 		}

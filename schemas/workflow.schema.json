@@ -24,10 +24,35 @@
     "WorkflowStep": {
       "type": "object",
       "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Explicit step identifier."
+        },
         "function": {
           "type": "string",
           "minLength": 1,
-          "description": "Function name to execute for this step."
+          "description": "Step identifier and legacy function field."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["code", "ai-retrieval", "ai-generate", "ai-structured", "ai-eval", "human-approval"],
+          "description": "Workflow step kind."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional per-step model override for AI step kinds."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Per-step timeout in seconds."
+        },
+        "input": {
+          "type": "object",
+          "description": "Kind-specific step input (prompt/query/schema/score/mcp/approval payload).",
+          "additionalProperties": true
         },
         "next": {
           "type": "string",
@@ -37,7 +62,6 @@
           "$ref": "#/$defs/WorkflowRetry"
         }
       },
-      "required": ["function"],
       "additionalProperties": false
     },
     "WorkflowRetry": {

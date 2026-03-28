@@ -152,7 +152,10 @@ func buildStepsFromConfiguredWorkflows(workflows []config.WorkflowConfig, workfl
 		}
 		steps := make([]controlplane.WorkflowStepSpec, 0, len(wf.Steps))
 		for i, step := range wf.Steps {
-			stepID := strings.TrimSpace(step.Function)
+			stepID := strings.TrimSpace(step.ID)
+			if stepID == "" {
+				stepID = strings.TrimSpace(step.Function)
+			}
 			if stepID == "" {
 				stepID = fmt.Sprintf("step-%d", i+1)
 			}
@@ -175,6 +178,7 @@ func buildStepsFromConfiguredWorkflows(workflows []config.WorkflowConfig, workfl
 			if step.Next != "" {
 				input["next"] = step.Next
 			}
+			copyInputIfAbsent(input, "model", strings.TrimSpace(step.Model))
 
 			maxAttempts := 1
 			backoff := time.Duration(0)

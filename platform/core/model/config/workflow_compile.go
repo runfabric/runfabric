@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/runfabric/runfabric/platform/ai/aiflow"
+	"github.com/runfabric/runfabric/platform/workflow/core/aiflow"
 )
 
 // WorkflowCompileConfig holds input for compiling an AI workflow graph.
@@ -69,7 +69,10 @@ func CompileWorkflowGraphFromConfig(cfg *Config) (*aiflow.CompiledGraph, error) 
 		}
 		prev := ""
 		for i, step := range wf.Steps {
-			stepID := strings.TrimSpace(step.Function)
+			stepID := strings.TrimSpace(step.ID)
+			if stepID == "" {
+				stepID = strings.TrimSpace(step.Function)
+			}
 			if stepID == "" {
 				stepID = fmt.Sprintf("step-%d", i+1)
 			}

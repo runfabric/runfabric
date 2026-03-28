@@ -80,7 +80,7 @@ type AddonConfig struct {
 	Secrets map[string]string `yaml:"secrets,omitempty"` // env var name -> secret ref (${env:VAR} or key in top-level secrets)
 }
 
-// LayerConfig defines a named layer. Ref is the provider-specific layer identifier; Arn is a deprecated AWS-specific alias kept for compatibility.
+// LayerConfig defines a named layer. Ref is the provider-specific layer identifier; Arn is a deprecated AWS-specific compatibility key.
 type LayerConfig struct {
 	Ref     string `yaml:"ref,omitempty"`
 	Arn     string `yaml:"arn,omitempty"`
@@ -197,9 +197,14 @@ type WorkflowConfig struct {
 }
 
 type WorkflowStep struct {
+	// ID is the explicit step identifier. Preferred over legacy function-as-id semantics.
+	ID string `yaml:"id,omitempty"`
 	Function string `yaml:"function,omitempty"`
 	// Kind sets the step execution kind: code|ai-generate|ai-retrieval|ai-structured|ai-eval|human-approval (default: code).
 	Kind string `yaml:"kind,omitempty"`
+	// Model overrides model selection for this specific step.
+	// Equivalent to setting input.model for AI step kinds.
+	Model string `yaml:"model,omitempty"`
 	// Timeout sets the per-step timeout in seconds (0 = no timeout).
 	Timeout int    `yaml:"timeout,omitempty"`
 	Next    string `yaml:"next,omitempty"`

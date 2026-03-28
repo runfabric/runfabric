@@ -233,3 +233,53 @@ func TestValidate_SecretsMapValidation(t *testing.T) {
 		t.Fatal("expected validation error for empty secrets key")
 	}
 }
+
+func TestValidate_WorkflowStepKindValidation(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.Workflows = []WorkflowConfig{
+		{
+			Name: "wf",
+			Steps: []WorkflowStep{
+				{ID: "s1", Kind: "unknown"},
+			},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected validation error for unsupported workflow step kind")
+	}
+}
+
+func TestValidate_WorkflowStepInputValidation(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.Workflows = []WorkflowConfig{
+		{
+			Name: "wf",
+			Steps: []WorkflowStep{
+				{ID: "retrieve", Kind: "ai-retrieval", Input: map[string]any{}},
+			},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected validation error for ai-retrieval without input.query")
+	}
+}
+
+func TestValidate_WorkflowStepInputValidation_AcceptsTypedKinds(t *testing.T) {
+	cfg := minimalValidConfig()
+	cfg.Workflows = []WorkflowConfig{
+		{
+			Name: "wf",
+			Steps: []WorkflowStep{
+				{ID: "code", Kind: "code", Input: map[string]any{"function": "deploy"}},
+				{ID: "retrieve", Kind: "ai-retrieval", Input: map[string]any{"query": "risks"}},
+				{ID: "generate", Kind: "ai-generate", Input: map[string]any{"prompt": "summarize"}},
+				{ID: "structured", Kind: "ai-structured", Input: map[string]any{"schema": map[string]any{"type": "object"}}},
+				{ID: "eval", Kind: "ai-eval", Input: map[string]any{"score": 0.8, "threshold": 0.5}},
+				{ID: "approve", Kind: "human-approval", Input: map[string]any{"approvalDecision": "approved"}},
+			},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected workflow typed kinds to validate, got: %v", err)
+	}
+}

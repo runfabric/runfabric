@@ -140,8 +140,89 @@ func Validate(cfg *Config) error {
 			}
 		}
 	}
+	if err := validateWorkflows(cfg.Workflows); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func validateWorkflows(workflows []WorkflowConfig) error {
+	for wi, wf := range workflows {
+		name := strings.TrimSpace(wf.Name)
+		if name == "" {
+			return fmt.Errorf("workflows[%d].name is required", wi)
+		}
+		for si, step := range wf.Steps {
+			kind := strings.ToLower(strings.TrimSpace(step.Kind))
+			if kind == "" {
+				kind = "code"
+			}
+			input := step.Input
+			switch kind {
+			case "code":
+				// No kind-specific required input.
+			case "ai-retrieval":
+				if strings.TrimSpace(readWorkflowStepString(input, "query")) == "" {
+					return fmt.Errorf("workflows[%d].steps[%d] kind ai-retrieval requires input.query", wi, si)
+				}
+			case "ai-generate":
+				if strings.TrimSpace(readWorkflowStepString(input, "prompt")) == "" {
+					return fmt.Errorf("workflows[%d].steps[%d] kind ai-generate requires input.prompt", wi, si)
+				}
+			case "ai-structured":
+				schema, _ := input["schema"].(map[string]any)
+				if len(schema) == 0 {
+					return fmt.Errorf("workflows[%d].steps[%d] kind ai-structured requires input.schema object", wi, si)
+				}
+			case "ai-eval":
+				if _, ok := readWorkflowStepNumber(input, "score"); !ok {
+					return fmt.Errorf("workflows[%d].steps[%d] kind ai-eval requires numeric input.score", wi, si)
+				}
+				if _, exists := input["threshold"]; exists {
+					if _, ok := readWorkflowStepNumber(input, "threshold"); !ok {
+						return fmt.Errorf("workflows[%d].steps[%d] kind ai-eval requires numeric input.threshold when set", wi, si)
+					}
+				}
+			case "human-approval":
+				decision := strings.ToLower(strings.TrimSpace(readWorkflowStepString(input, "approvalDecision")))
+				if decision != "" && decision != "approve" && decision != "approved" && decision != "reject" && decision != "rejected" {
+					return fmt.Errorf("workflows[%d].steps[%d] human approval input.approvalDecision must be approve/approved/reject/rejected when set", wi, si)
+				}
+			default:
+				return fmt.Errorf("workflows[%d].steps[%d].kind %q is unsupported", wi, si, step.Kind)
+			}
+		}
+	}
+	return nil
+}
+
+func readWorkflowStepString(input map[string]any, key string) string {
+	if input == nil {
+		return ""
+	}
+	v, _ := input[key].(string)
+	return strings.TrimSpace(v)
+}
+
+func readWorkflowStepNumber(input map[string]any, key string) (float64, bool) {
+	if input == nil {
+		return 0, false
+	}
+	switch n := input[key].(type) {
+	case int:
+		return float64(n), true
+	case int32:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case float32:
+		return float64(n), true
+	case float64:
+		return n, true
+	default:
+		return 0, false
+	}
 }
 
 func validateGCSBackend(cfg *Config) error {

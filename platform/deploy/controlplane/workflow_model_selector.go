@@ -1,6 +1,9 @@
 package controlplane
 
-import "strings"
+import (
+	"os"
+	"strings"
+)
 
 // ModelSelector picks the appropriate model identifier for a given AI step kind
 // based on provider region availability and step requirements.
@@ -9,18 +12,81 @@ type ModelSelector interface {
 	SelectModel(kind string, region string) string
 }
 
-// DefaultModelSelector returns a generic model placeholder for non-cloud environments.
-type DefaultModelSelector struct{}
-
-func (DefaultModelSelector) SelectModel(_, _ string) string {
-	return "default-model"
+// ConfigurableModelSelector applies config-based overrides on top of a base selector.
+// Override keys are step kinds (ai-retrieval, ai-generate, ai-structured, ai-eval) and "default".
+type ConfigurableModelSelector struct {
+	Base      ModelSelector
+	Overrides map[string]string
 }
 
-// AWSModelSelector routes to Bedrock model IDs based on region availability.
-// Claude 3 Sonnet is preferred in regions with full Bedrock support; Haiku elsewhere.
+func (s ConfigurableModelSelector) SelectModel(kind, region string) string {
+	normalizedKind := strings.ToLower(strings.TrimSpace(kind))
+	if model := strings.TrimSpace(s.Overrides[normalizedKind]); model != "" {
+		return model
+	}
+	if model := strings.TrimSpace(s.Overrides["default"]); model != "" {
+		return model
+	}
+	if s.Base == nil {
+		return ""
+	}
+	return s.Base.SelectModel(kind, region)
+}
+
+func WithModelSelectorOverrides(base ModelSelector, overrides map[string]string) ModelSelector {
+	if len(overrides) == 0 {
+		return base
+	}
+	return ConfigurableModelSelector{
+		Base:      base,
+		Overrides: overrides,
+	}
+}
+
+func EnvModelSelectorOverrides(provider string) map[string]string {
+	overrides := map[string]string{}
+	// Global overrides apply to all providers.
+	collectEnvModelOverride(overrides, "default", "RUNFABRIC_MODEL_DEFAULT")
+	collectEnvModelOverride(overrides, StepKindAIRetrieval, "RUNFABRIC_MODEL_AI_RETRIEVAL")
+	collectEnvModelOverride(overrides, StepKindAIGenerate, "RUNFABRIC_MODEL_AI_GENERATE")
+	collectEnvModelOverride(overrides, StepKindAIStructured, "RUNFABRIC_MODEL_AI_STRUCTURED")
+	collectEnvModelOverride(overrides, StepKindAIEval, "RUNFABRIC_MODEL_AI_EVAL")
+
+	// Provider-scoped env keys override globals for that provider.
+	p := strings.ToUpper(strings.TrimSpace(provider))
+	if p != "" {
+		collectEnvModelOverride(overrides, "default", "RUNFABRIC_MODEL_"+p+"_DEFAULT")
+		collectEnvModelOverride(overrides, StepKindAIRetrieval, "RUNFABRIC_MODEL_"+p+"_AI_RETRIEVAL")
+		collectEnvModelOverride(overrides, StepKindAIGenerate, "RUNFABRIC_MODEL_"+p+"_AI_GENERATE")
+		collectEnvModelOverride(overrides, StepKindAIStructured, "RUNFABRIC_MODEL_"+p+"_AI_STRUCTURED")
+		collectEnvModelOverride(overrides, StepKindAIEval, "RUNFABRIC_MODEL_"+p+"_AI_EVAL")
+	}
+	return overrides
+}
+
+func collectEnvModelOverride(overrides map[string]string, kind, envKey string) {
+	if model := strings.TrimSpace(os.Getenv(envKey)); model != "" {
+		overrides[kind] = model
+	}
+}
+
+// DefaultModelSelector provides concrete fallback model IDs for non-cloud/unknown providers.
+type DefaultModelSelector struct{}
+
+func (DefaultModelSelector) SelectModel(kind, _ string) string {
+	switch kind {
+	case StepKindAIEval, StepKindAIRetrieval:
+		return "gpt-4o-mini"
+	default:
+		return "gpt-4o"
+	}
+}
+
+// AWSModelSelector routes to Bedrock model families based on region availability.
+// Version pinning is intentionally avoided here; prefer config/env overrides for exact IDs.
 type AWSModelSelector struct{}
 
-// awsSonnetRegions lists AWS regions with Claude 3 Sonnet availability on Bedrock.
+// awsSonnetRegions lists AWS regions with stronger model family availability.
 var awsSonnetRegions = map[string]bool{
 	"us-east-1":      true,
 	"us-west-2":      true,
@@ -31,26 +97,25 @@ var awsSonnetRegions = map[string]bool{
 func (AWSModelSelector) SelectModel(kind, region string) string {
 	switch kind {
 	case StepKindAIEval, StepKindAIStructured:
-		// Cost-optimized: use Haiku for classification and eval steps.
-		return "anthropic.claude-3-haiku-20240307-v1:0"
+		return "anthropic.claude-3-haiku"
 	default:
 		if awsSonnetRegions[strings.ToLower(strings.TrimSpace(region))] {
-			return "anthropic.claude-3-sonnet-20240229-v1:0"
+			return "anthropic.claude-3-sonnet"
 		}
-		return "anthropic.claude-3-haiku-20240307-v1:0"
+		return "anthropic.claude-3-haiku"
 	}
 }
 
-// GCPModelSelector routes to Vertex AI model IDs (Gemini family) by step use-case.
-// Gemini 1.5 Pro for generation and structured extraction; Flash for eval/retrieval.
+// GCPModelSelector routes to Vertex AI model families by step use-case.
+// Version pinning is intentionally avoided here; prefer config/env overrides for exact IDs.
 type GCPModelSelector struct{}
 
 func (GCPModelSelector) SelectModel(kind, _ string) string {
 	switch kind {
 	case StepKindAIEval, StepKindAIRetrieval:
-		return "gemini-1.5-flash-001"
+		return "gemini-flash"
 	default:
-		return "gemini-1.5-pro-001"
+		return "gemini-pro"
 	}
 }
 

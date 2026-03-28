@@ -32,6 +32,9 @@ type MCPProviderPolicyRule struct {
 	DenyCrossRegion bool
 	// DenyRegions lists specific regions from which MCP calls are blocked.
 	DenyRegions []string
+	// Models configures per-step model selection overrides.
+	// Supported keys: default, ai-retrieval, ai-generate, ai-structured, ai-eval.
+	Models map[string]string
 }
 
 type MCPPolicyConfig struct {
@@ -130,6 +133,10 @@ func ParseMCPPolicy(cfg *Config) (MCPPolicyConfig, error) {
 		}
 		out.Providers = make(map[string]MCPProviderPolicyRule, len(providersObj))
 		for provName, provRaw := range providersObj {
+			normalizedProvider := strings.ToLower(strings.TrimSpace(provName))
+			if normalizedProvider == "" {
+				return out, fmt.Errorf("policies.mcp.providers contains empty provider name")
+			}
 			provObj, ok := provRaw.(map[string]any)
 			if !ok {
 				return out, fmt.Errorf("policies.mcp.providers.%s must be an object", provName)
@@ -149,7 +156,25 @@ func ParseMCPPolicy(cfg *Config) (MCPPolicyConfig, error) {
 				}
 				rule.DenyRegions = list
 			}
-			out.Providers[provName] = rule
+			if modelsRaw, ok := provObj["models"]; ok && modelsRaw != nil {
+				modelsObj, ok := modelsRaw.(map[string]any)
+				if !ok {
+					return out, fmt.Errorf("policies.mcp.providers.%s.models must be an object", provName)
+				}
+				rule.Models = make(map[string]string, len(modelsObj))
+				for stepKind, modelRaw := range modelsObj {
+					normalizedKind := strings.ToLower(strings.TrimSpace(stepKind))
+					if normalizedKind == "" {
+						return out, fmt.Errorf("policies.mcp.providers.%s.models contains empty key", provName)
+					}
+					model, ok := modelRaw.(string)
+					if !ok || strings.TrimSpace(model) == "" {
+						return out, fmt.Errorf("policies.mcp.providers.%s.models.%s must be a non-empty string", provName, normalizedKind)
+					}
+					rule.Models[normalizedKind] = strings.TrimSpace(model)
+				}
+			}
+			out.Providers[normalizedProvider] = rule
 		}
 	}
 	return out, nil

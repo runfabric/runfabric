@@ -141,9 +141,72 @@ extensions:
   runtimePlugin: nodejs # kind=runtime
   simulatorPlugin: local # kind=simulator
   routerPlugin: cloudflare # kind=router (router command backend)
+  router:
+    autoApply:
+      enabled: true
+      stages: [staging, prod]
+      enforceStageRollout: true
+    approvalEnvByStage:
+      staging: RUNFABRIC_DNS_SYNC_DEV_APPROVED
+      prod: RUNFABRIC_DNS_SYNC_STAGING_APPROVED
+    requireReason: true
+    reasonEnv: RUNFABRIC_DNS_SYNC_REASON
+    mutationPolicy:
+      enabled: true
+      approvalEnv: RUNFABRIC_DNS_SYNC_RISK_APPROVED
+      riskyResources: [lb_monitor, lb_pool, load_balancer]
+      maxMutationsWithoutApproval: 3
+    credentialPolicy:
+      enabled: true
+      requireAttestation: true
+      attestationEnv: RUNFABRIC_ROUTER_TOKEN_ATTESTED
+      issuedAtEnv: RUNFABRIC_ROUTER_TOKEN_ISSUED_AT
+      expiresAtEnv: RUNFABRIC_ROUTER_TOKEN_EXPIRES_AT
+      maxTTLSeconds: 3600
+      minRemainingSeconds: 120
+    credentials:
+      zoneIDEnv: RUNFABRIC_ROUTER_ZONE_ID
+      accountIDEnv: RUNFABRIC_ROUTER_ACCOUNT_ID
+      apiTokenEnv: RUNFABRIC_ROUTER_API_TOKEN
+      apiTokenFileEnv: RUNFABRIC_ROUTER_API_TOKEN_FILE
+      apiTokenSecretRef: router_api_token
 ```
 
-Router commands currently support `cloudflare` as the implemented backend. When omitted, `extensions.routerPlugin` defaults to `cloudflare`.
+Router commands ship with built-in `cloudflare` backend. External `kind=router` plugins are also supported through extension discovery/dispatch. When omitted, `extensions.routerPlugin` defaults to `cloudflare`.
+Additional built-ins: `route53`, `ns1`, `azure-traffic-manager` (provider API reconcilers).
+
+Router policy keys under `extensions.router`:
+
+- `autoApply` (`bool|object`): enable automatic post-deploy DNS sync from `runfabric router deploy`.
+- `autoApply.stages` (`string[]`): restrict auto-apply to listed stages.
+- `autoApply.dryRun` (`bool`): default dry-run for auto-applies.
+- `allowProdSync` (`bool`): config default for prod sync gate.
+- `enforceStageRollout` (`bool`): config default for staged rollout approval checks.
+- `approvalEnvByStage` (`map`): stage -> env var that must equal `true`.
+- `requireReason` + `reasonEnv`: require an operator reason env var before apply.
+- `mutationPolicy`: policy-as-code guardrails for risky/high-volume mutations.
+  - `enabled` (`bool`): turn on mutation preflight enforcement.
+  - `approvalEnv` (`string`): env var that must equal `true` to approve guarded mutations.
+  - `riskyResources` (`string[]`): resources requiring approval when changed.
+  - `maxMutationsWithoutApproval` (`int`): mutation threshold requiring approval.
+- `credentialPolicy`: policy-as-code guardrails for short-lived credentials.
+  - `enabled` (`bool`): turn on credential attestation checks before sync.
+  - `requireAttestation` + `attestationEnv`: require explicit approval signal (env must equal `true`).
+  - `issuedAtEnv` / `expiresAtEnv`: RFC3339 timestamps used to validate token lifetime.
+  - `maxTTLSeconds` (`int`): max allowed token lifetime.
+  - `minRemainingSeconds` (`int`): minimum required remaining token lifetime at execution time.
+- `credentials.zoneIDEnv` / `credentials.accountIDEnv`: customize env names for zone/account lookup.
+- `credentials.apiTokenEnv` / `credentials.apiTokenFileEnv`: customize token env or file-env wiring (supports secret-manager mounted token files).
+- `credentials.apiTokenSecretRef`: first-class secret reference (`KEY`, `${secret:KEY}`, or `secret://KEY`) resolved via top-level `secrets` + environment.
+- `qualityScoring`: endpoint quality-based weight tuning.
+  - `enabled` (`bool`): enable quality scoring before sync/simulate output is generated.
+  - `unhealthyPenaltyPercent` (`int`): weight reduction for unhealthy endpoints (0-100).
+  - `providerMultiplier` (`map[string]int`): provider-specific weight multipliers in percent (`100` = neutral).
+- `canary`: default staged traffic shift policy.
+  - `enabled` (`bool`): enable default canary weighting.
+  - `provider` (`string`): endpoint/provider key to receive canary traffic.
+  - `percent` (`int`): canary target percentage (1-99 recommended).
+- `stages.<stage>`: stage-specific overrides for all router policy keys above.
 
 ## Real deploy and unsafe defaults
 
@@ -280,6 +343,9 @@ policies:
         denyCrossRegion: true
         denyRegions: ["eu-*"]
         requiredAuth: iam
+        models:
+          default: anthropic.claude-3-sonnet-20240229-v1:0
+          ai-eval: anthropic.claude-3-haiku-20240307-v1:0
 ```
 
 Supported keys under `policies.mcp.providers.<provider>`:
@@ -288,6 +354,16 @@ Supported keys under `policies.mcp.providers.<provider>`:
 - `denyCrossRegion`: block calls when active region differs from `requiredRegion`.
 - `denyRegions`: wildcard deny list for active regions.
 - `requiredAuth`: required auth mode hint recorded in policy metadata.
+- `models`: optional per-provider model override map for workflow AI steps.
+- `models.default`: fallback model for all AI step kinds.
+- `models.ai-retrieval|ai-generate|ai-structured|ai-eval`: per-kind model overrides.
+- Per-step override: set `workflows[].steps[].model` (or `workflows[].steps[].input.model`) to force a model for one specific step.
+
+Environment-based overrides are also supported:
+
+- Global: `RUNFABRIC_MODEL_DEFAULT`, `RUNFABRIC_MODEL_AI_RETRIEVAL`, `RUNFABRIC_MODEL_AI_GENERATE`, `RUNFABRIC_MODEL_AI_STRUCTURED`, `RUNFABRIC_MODEL_AI_EVAL`
+- Provider-scoped: `RUNFABRIC_MODEL_<PROVIDER>_DEFAULT` and `RUNFABRIC_MODEL_<PROVIDER>_AI_{RETRIEVAL|GENERATE|STRUCTURED|EVAL}` (example: `RUNFABRIC_MODEL_AWS_AI_GENERATE`)
+- Precedence: per-step `model` / `input.model` > `policies.mcp.providers.<provider>.models` > environment overrides > built-in provider fallback
 
 ## Deploy Policy
 
@@ -683,23 +759,23 @@ workflows:
     steps:
       - id: gather-context
         kind: ai-retrieval
-        prompt: "Summarize deploy risks for this commit"
-        model: gpt-4.1
+        input:
+          query: "Summarize deploy risks for this commit"
+          model: gpt-4.1
       - id: generate-plan
         kind: ai-structured
-        prompt: "Create a release plan"
-        schema:
-          type: object
-          properties:
-            actions:
-              type: array
-              items: { type: string }
+        input:
+          prompt: "Create a release plan"
+          schema:
+            type: object
+            properties:
+              actions:
+                type: array
+                items: { type: string }
       - id: approve
         kind: human-approval
-        approval:
-          inputKey: actions
-          timeoutSeconds: 900
-          onTimeout: fail
+        input:
+          approvalRequest: "Review generated release actions"
       - id: deploy
         kind: code
         function: deploy
@@ -707,8 +783,11 @@ workflows:
 
 Compatibility notes:
 
+- `id` is the explicit step identifier. If omitted, runtime falls back to legacy `function`, then auto-generates `step-N`.
 - Legacy workflow fields (`function`, `next`, `retry`) remain valid.
 - Typed `kind` is forward-compatible and can be mixed with legacy fields as needed.
+- AI and approval kind-specific values are read from `steps[].input`.
+- `steps[].model` is a shorthand for `steps[].input.model` (for AI step kinds).
 
 ## Human approval lifecycle
 
@@ -779,7 +858,7 @@ Durable declarations are now applied through explicit Azure management-plane app
 | ----------------------------------------------------------------- | -------------------------------------------------------------------- |
 | [schemas/runfabric.schema.json](../schemas/runfabric.schema.json) | Full schema for the current config contract.                         |
 | [schemas/resource.schema.json](../schemas/resource.schema.json)   | Resource definition schema (binding + optional provisioning fields). |
-| [schemas/workflow.schema.json](../schemas/workflow.schema.json)   | Workflow definition schema (`name`, `steps`, optional retry policy). |
+| [schemas/workflow.schema.json](../schemas/workflow.schema.json)   | Workflow definition schema (`name`, `steps`, kind/input/model/timeout/retry shape). |
 | [schemas/secrets.schema.json](../schemas/secrets.schema.json)     | Secrets map shape.                                                   |
 
 ## Related Docs

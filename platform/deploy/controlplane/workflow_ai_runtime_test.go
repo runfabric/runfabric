@@ -186,3 +186,55 @@ func TestDefaultAIStepRunner_PropagatesMCPFailure(t *testing.T) {
 		t.Fatalf("expected propagated MCP failure, got %v", err)
 	}
 }
+
+func TestDefaultAIStepRunner_PerStepModelOverride_TakesPrecedence(t *testing.T) {
+	runner := NewDefaultAIStepRunner(NewMCPRuntime(fakeMCPClient{}, config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}), nil)
+	runner.ModelSelector = WithModelSelectorOverrides(DefaultModelSelector{}, map[string]string{
+		"default": "selector-model",
+	})
+
+	run := &state.WorkflowRun{RunID: "run-step-model", WorkflowHash: "wf-step-model"}
+	step := state.WorkflowStepRun{
+		StepID: "s-model",
+		Kind:   StepKindAIEval,
+		Input: map[string]any{
+			"score": 0.9,
+			"model": "step-model",
+		},
+	}
+
+	res, err := runner.ExecuteStep(context.Background(), run, step, map[string]any{"kind": StepKindAIEval}, map[string]any{})
+	if err != nil {
+		t.Fatalf("ExecuteStep returned error: %v", err)
+	}
+	if got, _ := res.Metadata["selectedModel"].(string); got != "step-model" {
+		t.Fatalf("expected per-step model override, got %q", got)
+	}
+}
+
+func TestDefaultAIStepRunner_AIEval_ShaperUsesSelectedModel(t *testing.T) {
+	runner := NewDefaultAIStepRunner(NewMCPRuntime(fakeMCPClient{}, config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}), nil)
+	runner.OutputShaper = AWSBedrockOutputShaper{}
+	runner.ModelSelector = WithModelSelectorOverrides(DefaultModelSelector{}, map[string]string{
+		"default": "selector-model",
+	})
+
+	run := &state.WorkflowRun{RunID: "run-eval-model", WorkflowHash: "wf-eval-model"}
+	step := state.WorkflowStepRun{
+		StepID: "s-eval",
+		Kind:   StepKindAIEval,
+		Input: map[string]any{
+			"score": 0.9,
+			"model": "step-model",
+		},
+	}
+
+	res, err := runner.ExecuteStep(context.Background(), run, step, map[string]any{"kind": StepKindAIEval}, map[string]any{})
+	if err != nil {
+		t.Fatalf("ExecuteStep returned error: %v", err)
+	}
+	modelOutput, _ := res.Output["modelOutput"].(map[string]any)
+	if got, _ := modelOutput["model"].(string); got != "step-model" {
+		t.Fatalf("expected shaper model to match selected model, got %q", got)
+	}
+}

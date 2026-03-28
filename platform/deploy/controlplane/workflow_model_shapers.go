@@ -23,7 +23,7 @@ type AWSBedrockOutputShaper struct{}
 func (AWSBedrockOutputShaper) ShapeOutput(kind, stepID string, raw map[string]any) map[string]any {
 	out := copyMap(raw)
 	out["provider"] = "aws"
-	out["model"] = bedrockModelForKind(kind)
+	out["model"] = resolvedModelForOutput(kind, raw, bedrockModelForKind)
 	if _, ok := out["usage"]; !ok {
 		out["usage"] = map[string]any{
 			"inputTokens":  estimateTokens(raw),
@@ -41,7 +41,7 @@ type GCPVertexOutputShaper struct{}
 func (GCPVertexOutputShaper) ShapeOutput(kind, stepID string, raw map[string]any) map[string]any {
 	out := copyMap(raw)
 	out["provider"] = "gcp"
-	out["model"] = vertexModelForKind(kind)
+	out["model"] = resolvedModelForOutput(kind, raw, vertexModelForKind)
 	if _, ok := out["usageMetadata"]; !ok {
 		inTok := estimateTokens(raw)
 		outTok := estimateOutputTokens(raw)
@@ -62,7 +62,7 @@ type AzureOpenAIOutputShaper struct{}
 func (AzureOpenAIOutputShaper) ShapeOutput(kind, stepID string, raw map[string]any) map[string]any {
 	out := copyMap(raw)
 	out["provider"] = "azure"
-	out["model"] = azureModelForKind(kind)
+	out["model"] = resolvedModelForOutput(kind, raw, azureModelForKind)
 	if _, ok := out["usage"]; !ok {
 		inTok := estimateTokens(raw)
 		outTok := estimateOutputTokens(raw)
@@ -116,6 +116,15 @@ func azureModelForKind(kind string) string {
 	default:
 		return "gpt-4o"
 	}
+}
+
+func resolvedModelForOutput(kind string, raw map[string]any, fallback func(string) string) string {
+	if raw != nil {
+		if model, ok := raw["model"].(string); ok && strings.TrimSpace(model) != "" {
+			return strings.TrimSpace(model)
+		}
+	}
+	return fallback(kind)
 }
 
 // estimateTokens returns a crude token estimate (4 chars ≈ 1 token) from string values in a map.

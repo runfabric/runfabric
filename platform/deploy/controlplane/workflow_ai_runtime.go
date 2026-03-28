@@ -76,7 +76,9 @@ func (r *DefaultAIStepRunner) ExecuteStep(ctx context.Context, run *state.Workfl
 		region = r.MCPRuntime.ActiveRegion
 		provider = r.MCPRuntime.Provider
 	}
-	if r.ModelSelector != nil {
+	if explicitModel := strings.TrimSpace(asInputString(step.Input, "model")); explicitModel != "" {
+		metadata["selectedModel"] = explicitModel
+	} else if r.ModelSelector != nil {
 		metadata["selectedModel"] = r.ModelSelector.SelectModel(kind, region)
 	}
 	var result *StepExecutionResult
@@ -136,6 +138,7 @@ func (r *DefaultAIStepRunner) executeAIRetrieval(ctx context.Context, run *state
 	output["query"] = query
 	output["documents"] = documents
 	rawOut := map[string]any{"type": "retrieval", "documents": documents}
+	rawOut = withSelectedModel(rawOut, metadata)
 	if r.OutputShaper != nil {
 		rawOut = r.OutputShaper.ShapeOutput(step.Kind, step.StepID, rawOut)
 	}
@@ -181,6 +184,7 @@ func (r *DefaultAIStepRunner) executeAIGenerate(ctx context.Context, run *state.
 	text := fmt.Sprintf("generated(%s): %s", step.StepID, renderedPrompt)
 	output["text"] = text
 	rawOut := map[string]any{"type": "text", "text": text}
+	rawOut = withSelectedModel(rawOut, metadata)
 	if r.OutputShaper != nil {
 		rawOut = r.OutputShaper.ShapeOutput(step.Kind, step.StepID, rawOut)
 	}
@@ -204,7 +208,12 @@ func (r *DefaultAIStepRunner) executeAIStructured(step state.WorkflowStepRun, ou
 	}
 	output["object"] = obj
 	output["schema"] = schemaObj
-	output["modelOutput"] = map[string]any{"type": "object", "object": obj}
+	rawOut := map[string]any{"type": "object", "object": obj}
+	rawOut = withSelectedModel(rawOut, metadata)
+	if r.OutputShaper != nil {
+		rawOut = r.OutputShaper.ShapeOutput(step.Kind, step.StepID, rawOut)
+	}
+	output["modelOutput"] = rawOut
 	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
 }
 
@@ -221,7 +230,12 @@ func (r *DefaultAIStepRunner) executeAIEval(step state.WorkflowStepRun, output, 
 	output["score"] = score
 	output["threshold"] = threshold
 	output["pass"] = pass
-	output["modelOutput"] = map[string]any{"type": "eval", "pass": pass, "score": score, "threshold": threshold}
+	rawOut := map[string]any{"type": "eval", "pass": pass, "score": score, "threshold": threshold}
+	rawOut = withSelectedModel(rawOut, metadata)
+	if r.OutputShaper != nil {
+		rawOut = r.OutputShaper.ShapeOutput(step.Kind, step.StepID, rawOut)
+	}
+	output["modelOutput"] = rawOut
 	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
 }
 
@@ -253,4 +267,18 @@ func (r *DefaultAIStepRunner) getPromptWithRetry(ctx context.Context, run *state
 		}
 		time.Sleep(r.RetryStrategy.Backoff(attempt))
 	}
+}
+
+func withSelectedModel(rawOut, metadata map[string]any) map[string]any {
+	if rawOut == nil {
+		rawOut = map[string]any{}
+	}
+	if metadata == nil {
+		return rawOut
+	}
+	model, _ := metadata["selectedModel"].(string)
+	if strings.TrimSpace(model) != "" {
+		rawOut["model"] = strings.TrimSpace(model)
+	}
+	return rawOut
 }
