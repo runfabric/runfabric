@@ -59,13 +59,15 @@ help:
 	@echo "  make daemon-background  start daemon in background (logs: .runfabric/daemon.log)"
 	@echo "  make daemon-stop   stop daemon started with daemon-background"
 	@echo "  make docker-daemon-build  build daemon Docker image (infra/Dockerfile.daemon)"
+	@echo "      overrides: DAEMON_GO_BUILDER_IMAGE=... DAEMON_RUNTIME_IMAGE=..."
 	@echo "  make docker-daemon-tag    tag image as ghcr.io/runfabric/runfabric-daemon:latest"
 	@echo "  make docker-daemon-push  build, tag, and push daemon image to ghcr.io"
 	@echo "  make docker-daemon-run   run daemon container (API on port 8766)"
 	@echo "  make docker-daemon-up    docker compose up daemon + Redis (infra/docker-compose.daemon.yml)"
 	@echo "  make docker-daemon-down  docker compose down daemon stack"
 	@echo "  make registry-api    run local extension registry API (apps/registry)"
-	@echo "  make docker-registry-build  build registry Docker image (registry/Dockerfile)"
+	@echo "  make docker-registry-build  build registry Docker image (apps/registry/Dockerfile)"
+	@echo "      overrides: REGISTRY_WEB_BUILDER_IMAGE=... REGISTRY_GO_BUILDER_IMAGE=... REGISTRY_RUNTIME_IMAGE=..."
 	@echo "  make docker-registry-run    run registry container (port 8787)"
 	@echo "  make docker-registry-stop   stop registry container"
 	@echo "  make docker-registry-up     docker compose up registry stack (infra/docker-compose.registry.yml)"
@@ -404,9 +406,16 @@ registry-api:
 REGISTRY_IMAGE ?= runfabric-registry:latest
 REGISTRY_CONTAINER ?= runfabric-registry
 REGISTRY_COMPOSE ?= infra/docker-compose.registry.yml
+REGISTRY_WEB_BUILDER_IMAGE ?= public.ecr.aws/docker/library/node:24-alpine
+REGISTRY_GO_BUILDER_IMAGE ?= public.ecr.aws/docker/library/golang:1.25-alpine
+REGISTRY_RUNTIME_IMAGE ?= public.ecr.aws/docker/library/alpine:3.21
 
 docker-registry-build:
-	docker build -t $(REGISTRY_IMAGE) -f apps/registry/Dockerfile .
+	docker build -t $(REGISTRY_IMAGE) -f apps/registry/Dockerfile \
+		--build-arg WEB_BUILDER_IMAGE=$(REGISTRY_WEB_BUILDER_IMAGE) \
+		--build-arg GO_BUILDER_IMAGE=$(REGISTRY_GO_BUILDER_IMAGE) \
+		--build-arg RUNTIME_IMAGE=$(REGISTRY_RUNTIME_IMAGE) \
+		.
 
 docker-registry-run: docker-registry-build
 	docker run -d --name $(REGISTRY_CONTAINER) -p 8787:8787 $(REGISTRY_IMAGE)
@@ -510,9 +519,14 @@ daemon-stop:
 # Daemon Docker image (see docs/DAEMON.md). Image name override: make docker-daemon-build DAEMON_IMAGE=my-registry/runfabric-daemon
 DAEMON_IMAGE ?= runfabric-daemon
 DAEMON_COMPOSE ?= infra/docker-compose.daemon.yml
+DAEMON_GO_BUILDER_IMAGE ?= public.ecr.aws/docker/library/golang:1.25-alpine
+DAEMON_RUNTIME_IMAGE ?= public.ecr.aws/docker/library/alpine:3.21
 
 docker-daemon-build:
-	docker build -f infra/Dockerfile.daemon -t $(DAEMON_IMAGE) .
+	docker build -f infra/Dockerfile.daemon \
+		--build-arg GO_BUILDER_IMAGE=$(DAEMON_GO_BUILDER_IMAGE) \
+		--build-arg RUNTIME_IMAGE=$(DAEMON_RUNTIME_IMAGE) \
+		-t $(DAEMON_IMAGE) .
 
 # Tag and push daemon image to GitHub Container Registry (ghcr.io/runfabric/runfabric-daemon:latest)
 GHCRIO_DAEMON_IMAGE ?= ghcr.io/runfabric/runfabric-daemon:latest

@@ -1,10 +1,14 @@
-FROM golang:1.25-alpine AS builder
+ARG GO_BUILDER_IMAGE=public.ecr.aws/docker/library/golang:1.25-alpine
+ARG RUNTIME_IMAGE=public.ecr.aws/docker/library/alpine:3.21
+FROM ${GO_BUILDER_IMAGE} AS builder
 RUN apk add --no-cache ca-certificates
 WORKDIR /build
 
 COPY cmd/ cmd/
+COPY extensions/ extensions/
 COPY internal/ internal/
 COPY platform/ platform/
+COPY packages/go/plugin-sdk/ packages/go/plugin-sdk/
 COPY go.mod go.sum ./
 COPY VERSION /build/VERSION
 
@@ -13,7 +17,7 @@ RUN VERSION_FILE=$(cat /build/VERSION 2>/dev/null | tr -d '\n' || echo "0.0.0-de
     -ldflags "-s -w -X github.com/runfabric/runfabric/platform/core/model.Version=${VERSION_FILE}" \
     -o /build/runfabricd ./cmd/runfabricd
 
-FROM alpine:3.21
+FROM ${RUNTIME_IMAGE}
 RUN apk add --no-cache ca-certificates wget && \
     adduser -D -u 1000 runfabric
 COPY --from=builder /build/runfabricd /usr/local/bin/runfabricd

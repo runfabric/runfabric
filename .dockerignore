@@ -2,6 +2,8 @@
 .git
 .gitignore
 *.md
+!docs/**/*.md
+!apps/registry/docs/**/*.md
 bin/
 node_modules/
 .runfabric/
@@ -13,3 +15,6 @@ docker-compose*.yml
 .githooks
 protocol/mcp/node_modules
 packages/
+!packages/go/
+!packages/go/plugin-sdk/
+!packages/go/plugin-sdk/**

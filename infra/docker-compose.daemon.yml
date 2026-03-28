@@ -1,15 +1,19 @@
 services:
   daemon:
+    image: ${DAEMON_IMAGE:-runfabric-daemon:local}
     build:
       context: ..
       dockerfile: infra/Dockerfile.daemon
+      args:
+        GO_BUILDER_IMAGE: ${GO_BUILDER_IMAGE:-public.ecr.aws/docker/library/golang:1.25-alpine}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-public.ecr.aws/docker/library/alpine:3.21}
     ports:
       - "8766:8766"
     environment:
       - RUNFABRIC_DAEMON_CACHE_URL=redis://redis:6379/0
 
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-public.ecr.aws/docker/library/redis:7-alpine}
     ports:
       - "6379:6379"
     healthcheck:
