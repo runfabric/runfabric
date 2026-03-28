@@ -2,7 +2,7 @@ APP=runfabric
 DAEMON_APP=runfabricd
 WORKER_APP=runfabricw
 
-.PHONY: all help build build-daemon build-worker build-platform build-daemon-platform build-worker-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax check-boundary check-architecture check-binary-surfaces release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
+.PHONY: all help build build-daemon build-worker build-platform build-daemon-platform build-worker-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax check-boundary check-architecture check-binary-surfaces release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down ghcr-login registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
 
 # UPX: compress binaries for smaller distribution. Override with e.g. make build-upx UPX="upx --best"
 # On macOS, UPX requires --force-macos; compressed binaries may need re-signing for notarization.
@@ -62,6 +62,7 @@ help:
 	@echo "      overrides: DAEMON_GO_BUILDER_IMAGE=... DAEMON_RUNTIME_IMAGE=..."
 	@echo "  make docker-daemon-tag    tag image as ghcr.io/runfabric/runfabric-daemon:latest"
 	@echo "  make docker-daemon-push  build, tag, and push daemon image to ghcr.io"
+	@echo "  make ghcr-login         login to ghcr.io (requires GHCR_USER and GHCR_PAT env vars)"
 	@echo "  make docker-daemon-run   run daemon container (API on port 8766)"
 	@echo "  make docker-daemon-up    docker compose up daemon + Redis (infra/docker-compose.daemon.yml)"
 	@echo "  make docker-daemon-down  docker compose down daemon stack"
@@ -530,6 +531,14 @@ docker-daemon-build:
 
 # Tag and push daemon image to GitHub Container Registry (ghcr.io/runfabric/runfabric-daemon:latest)
 GHCRIO_DAEMON_IMAGE ?= ghcr.io/runfabric/runfabric-daemon:latest
+GHCR_REGISTRY ?= ghcr.io
+GHCR_USER ?=
+GHCR_PAT ?=
+ghcr-login:
+	@if [ -z "$(GHCR_USER)" ]; then echo "GHCR_USER is required (example: GHCR_USER=<github-username> make ghcr-login)"; exit 1; fi
+	@if [ -z "$(GHCR_PAT)" ]; then echo "GHCR_PAT is required (token with write:packages)"; exit 1; fi
+	@echo "$(GHCR_PAT)" | docker login $(GHCR_REGISTRY) -u "$(GHCR_USER)" --password-stdin
+	@echo "Logged into $(GHCR_REGISTRY) as $(GHCR_USER)"
 docker-daemon-tag: docker-daemon-build
 	docker tag $(DAEMON_IMAGE) $(GHCRIO_DAEMON_IMAGE)
 docker-daemon-push: docker-daemon-tag

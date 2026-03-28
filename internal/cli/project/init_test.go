@@ -45,7 +45,7 @@ func TestInit_ValidLang(t *testing.T) {
 	dir := t.TempDir()
 	opts := &common.GlobalOptions{}
 	cmd := newInitCmd(opts)
-	cmd.SetArgs([]string{"--dir", dir, "--lang", "ts", "--no-interactive"})
+	cmd.SetArgs([]string{"--dir", dir, "--lang", "ts", "--no-interactive", "--skip-install"})
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	if err := cmd.Execute(); err != nil {

@@ -33,27 +33,11 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Format Check
-        run: |
-          if [ -n "$(gofmt -l .)" ]; then
-            echo "Go code is not formatted."
-            gofmt -d .
-            exit 1
-          fi
-
-      - name: Run Go Vet
-        run: go vet ./...
-
-      - name: Build
-        run: go build -v ./...
-
-      - name: Test
-        run: go test -v -race ./...
+      - name: Release check (Makefile)
+        run: make release-check
 
       - name: Coverage report
-        run: |
-          go test -coverprofile=coverage.out ./...
-          go tool cover -func=coverage.out | tail -5
+        run: make coverage
 
   build-cli-packages:
     runs-on: ubuntu-latest

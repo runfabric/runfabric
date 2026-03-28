@@ -13,24 +13,23 @@ jobs:
       packages: write
     env:
       REGISTRY_IMAGE: ghcr.io/runfabric/runfabric-registry:latest
-      WEB_BUILDER_IMAGE: public.ecr.aws/docker/library/node:24-alpine
-      GO_BUILDER_IMAGE: public.ecr.aws/docker/library/golang:1.25-alpine
-      RUNTIME_IMAGE: public.ecr.aws/docker/library/alpine:3.21
+      REGISTRY_WEB_BUILDER_IMAGE: public.ecr.aws/docker/library/node:24-alpine
+      REGISTRY_GO_BUILDER_IMAGE: public.ecr.aws/docker/library/golang:1.25-alpine
+      REGISTRY_RUNTIME_IMAGE: public.ecr.aws/docker/library/alpine:3.21
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Build registry image
-        run: |
-          docker build -f apps/registry/Dockerfile \
-            --build-arg WEB_BUILDER_IMAGE="${WEB_BUILDER_IMAGE}" \
-            --build-arg GO_BUILDER_IMAGE="${GO_BUILDER_IMAGE}" \
-            --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
-            -t "${REGISTRY_IMAGE}" .
+        run: make docker-registry-build
 
       - name: Smoke test registry image
         run: docker run --rm "${REGISTRY_IMAGE}" --help >/dev/null

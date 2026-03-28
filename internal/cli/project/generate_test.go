@@ -449,6 +449,7 @@ func TestInitThenGenerateFunction(t *testing.T) {
 	initCmd.SetArgs([]string{
 		"--dir", dir,
 		"--no-interactive",
+		"--skip-install",
 		"--provider", "aws-lambda",
 		"--template", "http",
 		"--lang", "js",

@@ -13,22 +13,22 @@ jobs:
       packages: write
     env:
       DAEMON_IMAGE: ghcr.io/runfabric/runfabric-daemon:latest
-      GO_BUILDER_IMAGE: public.ecr.aws/docker/library/golang:1.25-alpine
-      RUNTIME_IMAGE: public.ecr.aws/docker/library/alpine:3.21
+      DAEMON_GO_BUILDER_IMAGE: public.ecr.aws/docker/library/golang:1.25-alpine
+      DAEMON_RUNTIME_IMAGE: public.ecr.aws/docker/library/alpine:3.21
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Build daemon image
-        run: |
-          docker build -f infra/Dockerfile.daemon \
-            --build-arg GO_BUILDER_IMAGE="${GO_BUILDER_IMAGE}" \
-            --build-arg RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
-            -t "${DAEMON_IMAGE}" .
+        run: make docker-daemon-build
 
       - name: Smoke test daemon image
         run: docker run --rm "${DAEMON_IMAGE}" --help >/dev/null
