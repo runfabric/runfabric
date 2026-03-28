@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newPlanCmd(opts *GlobalOptions) *cobra.Command {
+func newPlanCmd(opts *common.GlobalOptions) *cobra.Command {
 	var providerOverride string
 	cmd := &cobra.Command{
 		Use:   "plan",

@@ -67,7 +67,7 @@ type oauthErrorResponse struct {
 	ErrorDescription string `json:"error_description,omitempty"`
 }
 
-func newAuthCmd(opts *GlobalOptions) *cobra.Command {
+func newAuthCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "token",
 		Short: "Token operations (list, revoke)",
@@ -79,7 +79,7 @@ func newAuthCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newLoginCmd(opts *GlobalOptions) *cobra.Command {
+func newLoginCmd(opts *common.GlobalOptions) *cobra.Command {
 	var authURL string
 	var clientID string
 	var scope string
@@ -166,7 +166,7 @@ func newLoginCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newWhoAmICmd(opts *GlobalOptions) *cobra.Command {
+func newWhoAmICmd(opts *common.GlobalOptions) *cobra.Command {
 	var authURL string
 	cmd := &cobra.Command{
 		Use:   "whoami",
@@ -251,7 +251,7 @@ func newWhoAmICmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newLogoutCmd(opts *GlobalOptions) *cobra.Command {
+func newLogoutCmd(opts *common.GlobalOptions) *cobra.Command {
 	var authURL string
 	var remote bool
 	cmd := &cobra.Command{
@@ -296,7 +296,7 @@ func newLogoutCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newTokenListCmd(opts *GlobalOptions) *cobra.Command {
+func newTokenListCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List locally stored auth tokens",
@@ -340,7 +340,7 @@ func newTokenListCmd(opts *GlobalOptions) *cobra.Command {
 	}
 }
 
-func newTokenRevokeCmd(opts *GlobalOptions) *cobra.Command {
+func newTokenRevokeCmd(opts *common.GlobalOptions) *cobra.Command {
 	var authURL string
 	var all bool
 	cmd := &cobra.Command{

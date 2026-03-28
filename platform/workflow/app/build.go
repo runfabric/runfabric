@@ -10,7 +10,7 @@ import (
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/buildcache"
-	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
+	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 )
 
 func copyFile(src, dst string) error {
@@ -61,7 +61,7 @@ func Build(configPath string, opts BuildOptions) (*BuildResult, error) {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
 	projectRoot := filepath.Dir(configPath)
-	extBoundary, err := resolution.NewCached(providerResolutionOptions(cfg))
+	extBoundary, err := providerloader.LoadBoundary(providerResolutionOptions(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("runtime boundary init: %w", err)
 	}

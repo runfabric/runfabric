@@ -7,9 +7,6 @@ import (
 	sdkrouter "github.com/runfabric/runfabric/plugin-sdk/go/router"
 )
 
-// PluginMeta identifies a runtime plugin.
-type PluginMeta = sdkrouter.PluginMeta
-
 // FunctionSpec describes a function handler and runtime.
 type FunctionSpec struct {
 	Handler string `json:"handler"`
@@ -40,7 +37,7 @@ type InvokeResult struct {
 
 // Plugin is the interface all runtime plugins implement.
 type Plugin interface {
-	Meta() PluginMeta
+	Meta() sdkrouter.PluginMeta
 	Build(ctx context.Context, req BuildRequest) (*sdkprovider.Artifact, error)
 	Invoke(ctx context.Context, req InvokeRequest) (*InvokeResult, error)
 }

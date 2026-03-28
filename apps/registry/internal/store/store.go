@@ -682,8 +682,8 @@ func canonicalIDLocked(ext map[string]*Extension, raw string) string {
 		return raw
 	}
 	for id, e := range ext {
-		for _, alias := range e.Aliases {
-			if strings.EqualFold(strings.TrimSpace(alias), raw) {
+		for _, compatName := range e.Aliases {
+			if strings.EqualFold(strings.TrimSpace(compatName), raw) {
 				return id
 			}
 		}

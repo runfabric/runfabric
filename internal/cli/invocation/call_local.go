@@ -9,11 +9,11 @@ import (
 
 	"github.com/runfabric/runfabric/internal/cli/common"
 
-	"github.com/runfabric/runfabric/internal/app"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func newCallLocalCmd(opts *GlobalOptions) *cobra.Command {
+func newCallLocalCmd(opts *common.GlobalOptions) *cobra.Command {
 	var serve, watch bool
 	var host, port, provider, method, path, query, header, body, eventFile, entry string
 

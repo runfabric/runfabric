@@ -86,4 +86,4 @@ node_modules/
 .runfabric
 .coverage*
 
-my-service
+my-service*

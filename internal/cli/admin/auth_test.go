@@ -8,6 +8,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/runfabric/runfabric/internal/cli/common"
 )
 
 func TestAuth_LoginWhoamiTokenAndLogoutFlow(t *testing.T) {
@@ -55,7 +57,7 @@ func TestAuth_LoginWhoamiTokenAndLogoutFlow(t *testing.T) {
 
 	// login
 	loginOut := &bytes.Buffer{}
-	loginCmd := newLoginCmd(&GlobalOptions{JSONOutput: true})
+	loginCmd := newLoginCmd(&common.GlobalOptions{JSONOutput: true})
 	loginCmd.SetOut(loginOut)
 	loginCmd.SetErr(&bytes.Buffer{})
 	loginCmd.SetArgs([]string{"--auth-url", server.URL})
@@ -65,7 +67,7 @@ func TestAuth_LoginWhoamiTokenAndLogoutFlow(t *testing.T) {
 
 	// whoami
 	whoOut := &bytes.Buffer{}
-	whoCmd := newWhoAmICmd(&GlobalOptions{JSONOutput: true})
+	whoCmd := newWhoAmICmd(&common.GlobalOptions{JSONOutput: true})
 	whoCmd.SetOut(whoOut)
 	whoCmd.SetErr(&bytes.Buffer{})
 	whoCmd.SetArgs([]string{"--auth-url", server.URL})
@@ -75,7 +77,7 @@ func TestAuth_LoginWhoamiTokenAndLogoutFlow(t *testing.T) {
 
 	// token list
 	listOut := &bytes.Buffer{}
-	listCmd := newTokenListCmd(&GlobalOptions{JSONOutput: true})
+	listCmd := newTokenListCmd(&common.GlobalOptions{JSONOutput: true})
 	listCmd.SetOut(listOut)
 	listCmd.SetErr(&bytes.Buffer{})
 	listCmd.SetArgs([]string{})
@@ -88,7 +90,7 @@ func TestAuth_LoginWhoamiTokenAndLogoutFlow(t *testing.T) {
 
 	// token revoke
 	revokeOut := &bytes.Buffer{}
-	revokeCmd := newTokenRevokeCmd(&GlobalOptions{JSONOutput: true})
+	revokeCmd := newTokenRevokeCmd(&common.GlobalOptions{JSONOutput: true})
 	revokeCmd.SetOut(revokeOut)
 	revokeCmd.SetErr(&bytes.Buffer{})
 	revokeCmd.SetArgs([]string{"--all", "--auth-url", server.URL})
@@ -98,7 +100,7 @@ func TestAuth_LoginWhoamiTokenAndLogoutFlow(t *testing.T) {
 
 	// logout should still succeed when no tokens remain
 	logoutOut := &bytes.Buffer{}
-	logoutCmd := newLogoutCmd(&GlobalOptions{JSONOutput: true})
+	logoutCmd := newLogoutCmd(&common.GlobalOptions{JSONOutput: true})
 	logoutCmd.SetOut(logoutOut)
 	logoutCmd.SetErr(&bytes.Buffer{})
 	logoutCmd.SetArgs([]string{"--auth-url", server.URL})
@@ -159,7 +161,7 @@ func TestAuth_WhoAmIRefreshesExpiredToken(t *testing.T) {
 	}
 
 	out := &bytes.Buffer{}
-	whoCmd := newWhoAmICmd(&GlobalOptions{JSONOutput: true})
+	whoCmd := newWhoAmICmd(&common.GlobalOptions{JSONOutput: true})
 	whoCmd.SetOut(out)
 	whoCmd.SetErr(&bytes.Buffer{})
 	whoCmd.SetArgs([]string{"--auth-url", server.URL})

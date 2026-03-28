@@ -3,10 +3,11 @@ package infrastructure
 import (
 	"fmt"
 
+	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/spf13/cobra"
 )
 
-func newMigrateCmd(opts *GlobalOptions) *cobra.Command {
+func newMigrateCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "migrate command",

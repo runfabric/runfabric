@@ -88,6 +88,8 @@ jobs:
       - name: Publish @runfabric/cli to npm
         working-directory: packages/node/cli
         run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish @runfabric/sdk to npm
         working-directory: packages/node/sdk
         run: npm publish --access public

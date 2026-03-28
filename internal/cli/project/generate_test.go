@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/runfabric/runfabric/internal/cli/common"
 )
 
 func withStdinInput(t *testing.T, input string, fn func()) {
@@ -32,7 +34,7 @@ func TestGenerateFunction_RequiresName(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateFunctionCmd(opts)
 	cmd.SetArgs([]string{"--trigger", "http"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -51,7 +53,7 @@ func TestGenerateFunction_InteractiveFlagConflict(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateFunctionCmd(opts)
 	cmd.SetArgs([]string{"hello", "--interactive", "--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -70,7 +72,7 @@ func TestGenerateResource_InteractiveFlagConflict(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateResourceCmd(opts)
 	cmd.SetArgs([]string{"db", "--interactive", "--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -89,7 +91,7 @@ func TestGenerateAddon_InteractiveFlagConflict(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateAddonCmd(opts)
 	cmd.SetArgs([]string{"sentry", "--interactive", "--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -108,7 +110,7 @@ func TestGenerateProviderOverride_InteractiveFlagConflict(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateProviderOverrideCmd(opts)
 	cmd.SetArgs([]string{"aws", "--interactive", "--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -136,7 +138,7 @@ func TestGenerateProviderOverride_ProviderDoesNotSupportExistingTriggers(t *test
 		"      - type: queue\n"+
 		"        queue: jobs\n")
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateProviderOverrideCmd(opts)
 	cmd.SetArgs([]string{"fly", "--provider", "fly-machines", "--runtime", "nodejs20.x", "--region", "iad", "--no-backup"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -164,7 +166,7 @@ func TestGenerateProviderOverride_InteractivePromptRePromptsUnsupportedProvider(
 		"      - type: queue\n"+
 		"        queue: jobs\n")
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateProviderOverrideCmd(opts)
 	cmd.SetArgs([]string{"--interactive", "--no-backup"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -195,7 +197,7 @@ func TestGenerateFunction_UnsupportedTrigger(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateFunctionCmd(opts)
 	cmd.SetArgs([]string{"hello", "--trigger", "kafka"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -222,7 +224,7 @@ functions:
     entry: src/handler.handler
 `)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateFunctionCmd(opts)
 	cmd.SetArgs([]string{"worker", "--trigger", "queue", "--no-backup"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -241,7 +243,7 @@ func TestGenerateFunction_Success(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateFunctionCmd(opts)
 	cmd.SetArgs([]string{"hello", "--trigger", "http", "--route", "GET:/hello", "--no-backup"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -273,7 +275,7 @@ func TestGenerateWorkerCommand_Success(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateCmd(opts)
 	cmd.SetArgs([]string{"worker", "jobs", "--queue-name", "jobs-queue", "--no-backup"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -305,7 +307,7 @@ func TestGenerateFunction_Collision(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateFunctionCmd(opts)
 	cmd.SetArgs([]string{"handler", "--trigger", "http", "--no-backup"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -324,7 +326,7 @@ func TestGenerateFunction_DryRun(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateFunctionCmd(opts)
 	cmd.SetArgs([]string{"dryrun-fn", "--trigger", "cron", "--schedule", "rate(10 minutes)", "--dry-run"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -349,7 +351,7 @@ func TestGenerateFunction_InteractivePromptFlow(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateFunctionCmd(opts)
 	cmd.SetArgs([]string{"--interactive", "--no-backup"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -387,7 +389,7 @@ func TestGenerateResource_InteractivePromptFlow(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateResourceCmd(opts)
 	cmd.SetArgs([]string{"--interactive", "--no-backup"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -415,7 +417,7 @@ func TestGenerateAddon_InteractivePromptFlow(t *testing.T) {
 	cfgPath := filepath.Join(dir, "runfabric.yml")
 	writeMinimalConfig(t, cfgPath)
 
-	opts := &GlobalOptions{ConfigPath: cfgPath}
+	opts := &common.GlobalOptions{ConfigPath: cfgPath}
 	cmd := newGenerateAddonCmd(opts)
 	cmd.SetArgs([]string{"--interactive", "--no-backup"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -442,7 +444,7 @@ func TestInitThenGenerateFunction(t *testing.T) {
 	dir := t.TempDir()
 
 	// 1. Init project
-	initOpts := &GlobalOptions{}
+	initOpts := &common.GlobalOptions{}
 	initCmd := newInitCmd(initOpts)
 	initCmd.SetArgs([]string{
 		"--dir", dir,
@@ -464,7 +466,7 @@ func TestInitThenGenerateFunction(t *testing.T) {
 	}
 
 	// 2. Generate a new function
-	genOpts := &GlobalOptions{ConfigPath: cfgPath}
+	genOpts := &common.GlobalOptions{ConfigPath: cfgPath}
 	genCmd := newGenerateFunctionCmd(genOpts)
 	genCmd.SetArgs([]string{"second", "--trigger", "http", "--route", "POST:/second", "--no-backup"})
 	genCmd.SetOut(&bytes.Buffer{})
@@ -505,7 +507,7 @@ func TestGeneratePlugin_RequiresID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	opts := &GlobalOptions{}
+	opts := &common.GlobalOptions{}
 	cmd := newGeneratePluginCmd(opts)
 	cmd.SetArgs([]string{"--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -530,7 +532,7 @@ func TestGeneratePlugin_Success(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	opts := &GlobalOptions{}
+	opts := &common.GlobalOptions{}
 	cmd := newGeneratePluginCmd(opts)
 	cmd.SetArgs([]string{"acme-provider", "--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -576,7 +578,7 @@ func TestGeneratePlugin_DryRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	opts := &GlobalOptions{}
+	opts := &common.GlobalOptions{}
 	cmd := newGeneratePluginCmd(opts)
 	cmd.SetArgs([]string{"acme-provider", "--dry-run", "--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -600,7 +602,7 @@ func TestGeneratePlugin_WithObservability(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	opts := &GlobalOptions{}
+	opts := &common.GlobalOptions{}
 	cmd := newGeneratePluginCmd(opts)
 	cmd.SetArgs([]string{"acme-provider", "--with-observability", "--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})

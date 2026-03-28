@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/core/model/configpatch"
 	"github.com/spf13/cobra"
 )
 
-func newAddonsCmd(opts *GlobalOptions) *cobra.Command {
+func newAddonsCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "addons",
 		Short: "List or validate add-ons",
@@ -20,7 +21,7 @@ func newAddonsCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newAddonsListCmd(opts *GlobalOptions) *cobra.Command {
+func newAddonsListCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List add-ons in the catalog",
@@ -55,7 +56,7 @@ func newAddonsListCmd(opts *GlobalOptions) *cobra.Command {
 	}
 }
 
-func newAddonsValidateCmd(opts *GlobalOptions) *cobra.Command {
+func newAddonsValidateCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate [addon-id]",
 		Short: "Validate runfabric.yml and optional addon (e.g. sentry)",
@@ -112,7 +113,7 @@ func newAddonsValidateCmd(opts *GlobalOptions) *cobra.Command {
 	}
 }
 
-func newAddonsAddCmd(opts *GlobalOptions) *cobra.Command {
+func newAddonsAddCmd(opts *common.GlobalOptions) *cobra.Command {
 	var function string
 	cmd := &cobra.Command{
 		Use:   "add [addon-id]",
@@ -145,7 +146,7 @@ func newAddonsAddCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newAddonsRemoveCmd(opts *GlobalOptions) *cobra.Command {
+func newAddonsRemoveCmd(opts *common.GlobalOptions) *cobra.Command {
 	var function string
 	cmd := &cobra.Command{
 		Use:   "remove [addon-id]",

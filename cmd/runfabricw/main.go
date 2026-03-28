@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/runfabric/runfabric/internal/cli"
+	workercli "github.com/runfabric/runfabric/internal/cli/worker"
 	"github.com/runfabric/runfabric/platform/observability/telemetry"
 )
 
@@ -21,8 +21,7 @@ func main() {
 		_ = telemetry.Shutdown(shutdownCtx)
 	}()
 
-	cmd := cli.NewRootCmd()
-	cmd.Use = "runfabricw"
+	cmd := workercli.NewRootCmd()
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

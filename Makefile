@@ -2,7 +2,7 @@ APP=runfabric
 DAEMON_APP=runfabricd
 WORKER_APP=runfabricw
 
-.PHONY: all help build build-daemon build-worker build-platform build-daemon-platform build-worker-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax check-boundary check-architecture release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
+.PHONY: all help build build-daemon build-worker build-platform build-daemon-platform build-worker-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax check-boundary check-architecture check-binary-surfaces release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
 
 # UPX: compress binaries for smaller distribution. Override with e.g. make build-upx UPX="upx --best"
 # On macOS, UPX requires --force-macos; compressed binaries may need re-signing for notarization.
@@ -45,6 +45,7 @@ help:
 	@echo "  make check-syntax   go vet + go build + go test -count=1 (no -race); fast PR feedback"
 	@echo "  make check-boundary  verify extension/packages/testdata stubs have no platform/ imports"
 	@echo "  make check-architecture  enforce normalized architecture flow + anti-bridge rules"
+	@echo "  make check-binary-surfaces  smoke-check runfabric/runfabricd/runfabricw command ownership"
 	@echo "  make check-docs-sync  verify doc links and no outdated refs (packages/planner, packages/core)"
 	@echo "  make pre-push       lint + validation (used by .githooks/pre-push)"
 	@echo "  make release-tag   create and push tag v\$$(cat VERSION) to trigger CI release"
@@ -210,11 +211,44 @@ check-architecture: check-boundary
 		echo "  ERROR [Flow]: internal/extensions/builtins/loaders.go imports root extensions/*"; FAILED=1; \
 	fi; \
 	\
+	echo "  [Rule 4] go-level architecture policy tests"; \
+	go test -count=1 ./platform/core/policy/architecture >/dev/null || FAILED=1; \
+	\
 	if [ "$$FAILED" -ne "0" ]; then exit 1; fi; \
 	echo "check-architecture OK"
 
+# Smoke-check binary command ownership surfaces to prevent drift:
+#   - runfabric: control-plane commands, no daemon command
+#   - runfabricd: daemon commands only (start/stop/restart/status), no deploy/workflow/daemon subcommand
+#   - runfabricw: workflow command only, no deploy/start command
+check-binary-surfaces:
+	@echo "Checking binary command surfaces..."
+	@RF_HELP="$$(go run ./cmd/runfabric --help 2>&1)"; \
+	echo "$$RF_HELP" | grep -q '^  deploy[[:space:]]' || { echo "runfabric help missing deploy"; exit 1; }; \
+	echo "$$RF_HELP" | grep -q '^  workflow[[:space:]]' || { echo "runfabric help missing workflow"; exit 1; }; \
+	if echo "$$RF_HELP" | grep -q '^  daemon[[:space:]]'; then echo "runfabric must not expose daemon command"; exit 1; fi
+	@RFD_HELP="$$(go run ./cmd/runfabricd --help 2>&1)"; \
+	echo "$$RFD_HELP" | grep -q '^  start[[:space:]]' || { echo "runfabricd help missing start"; exit 1; }; \
+	echo "$$RFD_HELP" | grep -q '^  stop[[:space:]]' || { echo "runfabricd help missing stop"; exit 1; }; \
+	echo "$$RFD_HELP" | grep -q '^  restart[[:space:]]' || { echo "runfabricd help missing restart"; exit 1; }; \
+	echo "$$RFD_HELP" | grep -q '^  status[[:space:]]' || { echo "runfabricd help missing status"; exit 1; }; \
+	if echo "$$RFD_HELP" | grep -q '^  deploy[[:space:]]'; then echo "runfabricd must not expose deploy"; exit 1; fi; \
+	if echo "$$RFD_HELP" | grep -q '^  workflow[[:space:]]'; then echo "runfabricd must not expose workflow"; exit 1; fi; \
+	if echo "$$RFD_HELP" | grep -q '^  daemon[[:space:]]'; then echo "runfabricd must not expose daemon subcommand"; exit 1; fi
+	@RFW_HELP="$$(go run ./cmd/runfabricw --help 2>&1)"; \
+	echo "$$RFW_HELP" | grep -q '^  workflow[[:space:]]' || { echo "runfabricw help missing workflow"; exit 1; }; \
+	if echo "$$RFW_HELP" | grep -q '^  deploy[[:space:]]'; then echo "runfabricw must not expose deploy"; exit 1; fi; \
+	if echo "$$RFW_HELP" | grep -q '^  start[[:space:]]'; then echo "runfabricw must not expose start"; exit 1; fi
+	@RF_DAEMON_OUT="$$(go run ./cmd/runfabric daemon status 2>&1)"; RF_DAEMON_CODE=$$?; \
+	if [ $$RF_DAEMON_CODE -eq 0 ]; then echo "runfabric daemon status unexpectedly succeeded"; exit 1; fi; \
+	echo "$$RF_DAEMON_OUT" | grep -q 'unknown command "daemon" for "runfabric"' || { echo "runfabric daemon status error did not mention unknown command"; echo "$$RF_DAEMON_OUT"; exit 1; }
+	@RFD_DAEMON_OUT="$$(go run ./cmd/runfabricd daemon status 2>&1)"; RFD_DAEMON_CODE=$$?; \
+	if [ $$RFD_DAEMON_CODE -eq 0 ]; then echo "runfabricd daemon status unexpectedly succeeded"; exit 1; fi; \
+	echo "$$RFD_DAEMON_OUT" | grep -q 'unknown command "daemon" for "runfabricd"' || { echo "runfabricd daemon status error did not mention unknown command"; echo "$$RFD_DAEMON_OUT"; exit 1; }
+	@echo "check-binary-surfaces OK"
+
 # Fast CI check: vet, build, test without -race. Use for quick PR feedback before full release-check.
-check-syntax: check-architecture
+check-syntax: check-architecture check-binary-surfaces
 	@echo "Running go vet..."
 	@go vet ./...
 	@echo "Building all packages..."
@@ -224,7 +258,7 @@ check-syntax: check-architecture
 	@echo "check-syntax OK"
 
 # Pre-release validation: format, vet, build all, test with race, build CLI, then compress with UPX if available (matches CI; AGENTS.md default gate).
-release-check: check-architecture
+release-check: check-architecture check-binary-surfaces
 	@echo "Checking format (gofmt)..."
 	@test -z "$$(gofmt -l .)" || { echo "Go code is not formatted. Run: gofmt -w ."; gofmt -d .; exit 1; }
 	@echo "Running go vet..."
@@ -465,10 +499,10 @@ mcp-build: mcp-install
 mcp: mcp-build
 	cd packages/node/mcp && npm start
 
-# Daemon: run in background (does not hold terminal). Uses bin/runfabric; logs in .runfabric/daemon.log
+# Daemon: run in background (does not hold terminal). Uses bin/runfabricd; logs in .runfabric/daemon.log
 daemon-background:
 	@mkdir -p .runfabric
-	@([ -f bin/runfabric ] && nohup ./bin/runfabric daemon >> .runfabric/daemon.log 2>&1 & echo $$! > .runfabric/daemon.pid && echo "Daemon started (PID $$(cat .runfabric/daemon.pid)). Logs: .runfabric/daemon.log") || (echo "Run 'make build' first to create bin/runfabric" && exit 1)
+	@([ -f bin/runfabricd ] && nohup ./bin/runfabricd >> .runfabric/daemon.log 2>&1 & echo $$! > .runfabric/daemon.pid && echo "Daemon started (PID $$(cat .runfabric/daemon.pid)). Logs: .runfabric/daemon.log") || (echo "Run 'make build' first to create bin/runfabricd" && exit 1)
 
 daemon-stop:
 	@[ -f .runfabric/daemon.pid ] && kill $$(cat .runfabric/daemon.pid) 2>/dev/null && rm -f .runfabric/daemon.pid && echo "Daemon stopped." || echo "No daemon PID file (.runfabric/daemon.pid)."

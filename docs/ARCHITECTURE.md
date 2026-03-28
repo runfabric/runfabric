@@ -12,12 +12,15 @@ Shared contracts should live under `platform/core/contracts/` to avoid stale cro
 - **Visual flow**: Engine request routing diagram
 - **Extension boundary**: Provider/runtime resolution boundary
 - **Ownership ADR**: `docs/ARCHITECTURE_OWNERSHIP.md`
+- **Binary profiles ADR**: `docs/BINARY_PROFILES_ADR.md`
 - **Where provider implementations live**: Provider code layout
 - **Why AWS is special**: Control plane + deployrunner + deployexec
 
 ## Architecture ownership
 
 Canonical ownership and dependency direction rules for provider, router, runtime, and simulator domains are frozen in `docs/ARCHITECTURE_OWNERSHIP.md`.
+
+Binary command ownership contracts for `runfabric`, `runfabricd`, and `runfabricw` are frozen in `docs/BINARY_PROFILES_ADR.md`.
 
 That ADR is the source of truth for:
 

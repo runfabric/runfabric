@@ -8,24 +8,21 @@ import (
 // AutoInstallExtensions reports whether runfabric.yml requests auto-install of missing extensions.
 //
 // Supported keys:
-// - extensions.autoInstallExtensions: true|false (preferred)
-// - extensions.autoInstall: true|false (alias)
+// - extensions.autoInstallExtensions: true|false
 func AutoInstallExtensions(cfg *Config) bool {
 	if cfg == nil || cfg.Extensions == nil {
 		return false
 	}
-	for _, k := range []string{"autoInstallExtensions", "autoInstall"} {
-		v, ok := cfg.Extensions[k]
-		if !ok {
-			continue
-		}
-		switch t := v.(type) {
-		case bool:
-			return t
-		case string:
-			s := strings.ToLower(strings.TrimSpace(t))
-			return s == "1" || s == "true" || s == "yes"
-		}
+	v, ok := cfg.Extensions["autoInstallExtensions"]
+	if !ok {
+		return false
+	}
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		s := strings.ToLower(strings.TrimSpace(t))
+		return s == "1" || s == "true" || s == "yes"
 	}
 	return false
 }

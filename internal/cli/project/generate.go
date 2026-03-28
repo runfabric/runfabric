@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/core/model/configpatch"
 	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
@@ -31,7 +32,7 @@ type generateOpts struct {
 	NoInteractive bool
 }
 
-func resolveGenerateInteractivity(gopts *GlobalOptions, interactive, noInteractive bool) (bool, error) {
+func resolveGenerateInteractivity(gopts *common.GlobalOptions, interactive, noInteractive bool) (bool, error) {
 	if interactive && noInteractive {
 		return false, fmt.Errorf("--interactive and --no-interactive cannot be used together")
 	}
@@ -164,7 +165,7 @@ func confirmGeneratePreview(interactive bool, lines ...string) error {
 	return nil
 }
 
-func newGenerateCmd(opts *GlobalOptions) *cobra.Command {
+func newGenerateCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "generate",
 		Short: "Scaffold artifacts in an existing project",
@@ -179,7 +180,7 @@ func newGenerateCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newGenerateWorkerCmd(opts *GlobalOptions) *cobra.Command {
+func newGenerateWorkerCmd(opts *common.GlobalOptions) *cobra.Command {
 	o := &generateOpts{Trigger: planner.TriggerQueue}
 
 	cmd := &cobra.Command{
@@ -213,7 +214,7 @@ func newGenerateWorkerCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newGenerateFunctionCmd(opts *GlobalOptions) *cobra.Command {
+func newGenerateFunctionCmd(opts *common.GlobalOptions) *cobra.Command {
 	o := &generateOpts{}
 
 	cmd := &cobra.Command{
@@ -246,7 +247,7 @@ func newGenerateFunctionCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func runGenerateFunction(gopts *GlobalOptions, o *generateOpts, name string) error {
+func runGenerateFunction(gopts *common.GlobalOptions, o *generateOpts, name string) error {
 	interactive, err := resolveGenerateInteractivity(gopts, o.Interactive, o.NoInteractive)
 	if err != nil {
 		return err
@@ -525,7 +526,7 @@ type generateResourceOpts struct {
 	NoInteractive bool
 }
 
-func newGenerateResourceCmd(opts *GlobalOptions) *cobra.Command {
+func newGenerateResourceCmd(opts *common.GlobalOptions) *cobra.Command {
 	o := &generateResourceOpts{}
 	cmd := &cobra.Command{
 		Use:   "resource [name]",
@@ -549,7 +550,7 @@ func newGenerateResourceCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func runGenerateResource(gopts *GlobalOptions, o *generateResourceOpts, name string) error {
+func runGenerateResource(gopts *common.GlobalOptions, o *generateResourceOpts, name string) error {
 	interactive, err := resolveGenerateInteractivity(gopts, o.Interactive, o.NoInteractive)
 	if err != nil {
 		return err
@@ -625,7 +626,7 @@ type generateAddonOpts struct {
 	NoInteractive bool
 }
 
-func newGenerateAddonCmd(opts *GlobalOptions) *cobra.Command {
+func newGenerateAddonCmd(opts *common.GlobalOptions) *cobra.Command {
 	o := &generateAddonOpts{}
 	cmd := &cobra.Command{
 		Use:   "addon [name]",
@@ -648,7 +649,7 @@ func newGenerateAddonCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func runGenerateAddon(gopts *GlobalOptions, o *generateAddonOpts, name string) error {
+func runGenerateAddon(gopts *common.GlobalOptions, o *generateAddonOpts, name string) error {
 	interactive, err := resolveGenerateInteractivity(gopts, o.Interactive, o.NoInteractive)
 	if err != nil {
 		return err
@@ -720,7 +721,7 @@ type generateProviderOverrideOpts struct {
 	NoInteractive bool
 }
 
-func newGenerateProviderOverrideCmd(opts *GlobalOptions) *cobra.Command {
+func newGenerateProviderOverrideCmd(opts *common.GlobalOptions) *cobra.Command {
 	o := &generateProviderOverrideOpts{}
 	cmd := &cobra.Command{
 		Use:   "provider-override [key]",
@@ -745,7 +746,7 @@ func newGenerateProviderOverrideCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func runGenerateProviderOverride(gopts *GlobalOptions, o *generateProviderOverrideOpts, key string) error {
+func runGenerateProviderOverride(gopts *common.GlobalOptions, o *generateProviderOverrideOpts, key string) error {
 	interactive, err := resolveGenerateInteractivity(gopts, o.Interactive, o.NoInteractive)
 	if err != nil {
 		return err

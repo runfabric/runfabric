@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newRemoveCmd(opts *GlobalOptions) *cobra.Command {
+func newRemoveCmd(opts *common.GlobalOptions) *cobra.Command {
 	var providerOverride string
 	cmd := &cobra.Command{
 		Use:   "remove",

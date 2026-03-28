@@ -3,12 +3,8 @@ package contracts
 import (
 	"context"
 
-	"github.com/runfabric/runfabric/platform/core/model/config"
-	planner "github.com/runfabric/runfabric/platform/core/planner/api"
+	planner "github.com/runfabric/runfabric/platform/planner/engine"
 )
-
-// Config is the standard runfabric config type used throughout provider contracts.
-type Config = config.Config
 
 // DoctorResult is the result of Provider.Doctor.
 type DoctorResult struct {
@@ -80,7 +76,7 @@ type OrchestrationSyncResult struct {
 	Outputs  map[string]string `json:"outputs,omitempty"`
 }
 
-// ProviderPlugin is the canonical interface for provider plugins.
+// ProviderPlugin is the primary interface for provider plugins.
 type ProviderPlugin interface {
 	Meta() ProviderMeta
 	ValidateConfig(ctx context.Context, req ValidateConfigRequest) error

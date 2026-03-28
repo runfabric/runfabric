@@ -41,7 +41,7 @@ func (c *fcClient) baseURL() string {
 	return fmt.Sprintf(fcHostFmt, c.accountID, c.region)
 }
 
-// doSigned executes a signed request. path is the canonical resource e.g. /2021-04-06/services.
+// doSigned executes a signed request. path is the normalized resource (e.g. /2021-04-06/services).
 func (c *fcClient) doSigned(ctx context.Context, method, path string, body []byte, fcHeaders map[string]string) ([]byte, int, error) {
 	url := c.baseURL() + path
 	bodyStr := ""

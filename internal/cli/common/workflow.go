@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/platform/core/model/configpatch"
 	"github.com/runfabric/runfabric/platform/extensions/registry/loader/runtime"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 

@@ -3,10 +3,11 @@ package extensions
 import (
 	"fmt"
 
+	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/spf13/cobra"
 )
 
-func newProvidersCmd(opts *GlobalOptions) *cobra.Command {
+func newProvidersCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "providers",
 		Short: "providers command",

@@ -1,6 +1,8 @@
 package architecture
 
 import (
+	"fmt"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -8,13 +10,24 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 const modulePrefix = "github.com/runfabric/runfabric/"
 
-var aliasOnlyTypePattern = regexp.MustCompile(`(?m)^\s*(type\s+[A-Za-z0-9_]+\s*=|[A-Za-z0-9_]+\s*=)`)
+var aliasOnlyTypePattern = regexp.MustCompile(`(?m)^\s*type\s+[A-Za-z0-9_]+\s*=`)
+var bannedTermPattern = regexp.MustCompile(`(?i)\b(bridge|alias|canonical|facade|wrapper|wrapping)\b`)
+var bannedIdentifierTerms = map[string]struct{}{
+	"bridge":    {},
+	"alias":     {},
+	"canonical": {},
+	"facade":    {},
+	"wrapper":   {},
+	"wrapping":  {},
+}
 
 func TestImportGraphConstraints(t *testing.T) {
 	root := repoRoot(t)
@@ -72,9 +85,45 @@ func TestGoldenImportRulePatterns(t *testing.T) {
 			allowed:    false,
 		},
 		{
-			name:       "packages cannot import platform",
+			name:       "internal cannot import plugin sdk directly",
+			file:       "internal/cli/router/router.go",
+			importPath: modulePrefix + "plugin-sdk/go/router",
+			allowed:    false,
+		},
+		{
+			name:       "plugin sdk cannot import platform",
 			file:       "packages/go/plugin-sdk/router/types.go",
 			importPath: modulePrefix + "platform/core/model/config",
+			allowed:    false,
+		},
+		{
+			name:       "plugin sdk cannot import internal",
+			file:       "packages/go/plugin-sdk/router/types.go",
+			importPath: modulePrefix + "internal/provider/contracts",
+			allowed:    false,
+		},
+		{
+			name:       "platform cannot import packages directly",
+			file:       "platform/workflow/app/example.go",
+			importPath: modulePrefix + "packages/go/plugin-sdk/runtime",
+			allowed:    false,
+		},
+		{
+			name:       "platform cannot import plugin sdk directly",
+			file:       "platform/workflow/app/router_sync.go",
+			importPath: modulePrefix + "plugin-sdk/go/router",
+			allowed:    false,
+		},
+		{
+			name:       "plugin sdk may import root extensions",
+			file:       "packages/go/plugin-sdk/router/types.go",
+			importPath: modulePrefix + "extensions/routers",
+			allowed:    true,
+		},
+		{
+			name:       "non plugin-sdk packages cannot import root extensions",
+			file:       "packages/node/sdk/index.go",
+			importPath: modulePrefix + "extensions/routers",
 			allowed:    false,
 		},
 		{
@@ -148,6 +197,130 @@ func TestOwnershipADRAndInvariants(t *testing.T) {
 	}
 }
 
+func TestRule4NoAliasBridgeArtifacts(t *testing.T) {
+	root := repoRoot(t)
+
+	// These paths previously hosted alias bridge layers and must remain direct/canonical.
+	noAliasFiles := []string{
+		"extensions/routers/registry.go",
+		"platform/extensions/providerpolicy/providers.go",
+	}
+
+	for _, rel := range noAliasFiles {
+		path := filepath.Join(root, rel)
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if aliasOnlyTypePattern.Match(body) {
+			t.Fatalf("rule4 violation: alias/re-export type detected in %s", rel)
+		}
+	}
+
+	// Historic alias-only bridge file must stay deleted.
+	removedBridge := filepath.Join(root, "platform/extensions/registry/resolution/types_aliases.go")
+	if _, err := os.Stat(removedBridge); err == nil {
+		t.Fatalf("rule4 violation: deleted alias bridge file restored: %s", removedBridge)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat %s: %v", removedBridge, err)
+	}
+
+	removedAppFacade := filepath.Join(root, "internal/app/app.go")
+	if _, err := os.Stat(removedAppFacade); err == nil {
+		t.Fatalf("rule4 violation: deleted app facade restored: %s", removedAppFacade)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat %s: %v", removedAppFacade, err)
+	}
+
+	for _, rel := range []string{
+		"apps/sdkbridge",
+		"internal/provider/sdkbridge",
+	} {
+		path := filepath.Join(root, rel)
+		if _, err := os.Stat(path); err == nil {
+			t.Fatalf("rule4 violation: bridge/facade package remains: %s", path)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+	}
+}
+
+func TestRule4NoTypeAliasesRepoWide(t *testing.T) {
+	root := repoRoot(t)
+	files := goFiles(t, root)
+
+	var violations []string
+	for _, rel := range files {
+		body, err := readFileWithTimeout(filepath.Join(root, rel), 2*time.Second)
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		if aliasOnlyTypePattern.Match(body) {
+			violations = append(violations, rel)
+		}
+	}
+
+	if len(violations) > 0 {
+		sort.Strings(violations)
+		t.Fatalf("rule4 violation: type aliases are not allowed; found in:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestRule4NoBannedTermsInCodeText(t *testing.T) {
+	root := repoRoot(t)
+	files := goFiles(t, root)
+	fset := token.NewFileSet()
+
+	var violations []string
+	for _, rel := range files {
+		path := filepath.Join(root, rel)
+		src, err := readFileWithTimeout(path, 2*time.Second)
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		parsed, err := parser.ParseFile(fset, path, src, parser.ParseComments)
+		if err != nil {
+			t.Fatalf("parse %s: %v", rel, err)
+		}
+
+		if _, found := bannedIdentifierTerms[strings.ToLower(parsed.Name.Name)]; found {
+			pos := fset.Position(parsed.Name.Pos())
+			violations = append(violations, rel+":"+itoa(pos.Line)+": package name contains banned term ("+parsed.Name.Name+")")
+		}
+
+		for _, cg := range parsed.Comments {
+			for _, c := range cg.List {
+				if term := bannedTermPattern.FindString(c.Text); term != "" {
+					pos := fset.Position(c.Pos())
+					violations = append(violations, rel+":"+itoa(pos.Line)+": comment contains banned term ("+strings.ToLower(term)+")")
+				}
+			}
+		}
+
+		ast.Inspect(parsed, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if !ok || id == nil || id.Name == "_" {
+				return true
+			}
+			if _, found := bannedIdentifierTerms[strings.ToLower(id.Name)]; !found {
+				return true
+			}
+			pos := fset.Position(id.Pos())
+			violations = append(violations, rel+":"+itoa(pos.Line)+": identifier uses banned term ("+id.Name+")")
+			return true
+		})
+	}
+
+	if len(violations) > 0 {
+		sort.Strings(violations)
+		t.Fatalf("rule4 violation: banned terms found in package/comments/identifiers:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func itoa(v int) string {
+	return strconv.Itoa(v)
+}
+
 func importAllowed(relPath, importPath string) (bool, string) {
 	relPath = filepath.ToSlash(relPath)
 
@@ -164,8 +337,36 @@ func importAllowed(relPath, importPath string) (bool, string) {
 		return false, "Flow: internal must not import extensions"
 	}
 
-	if (strings.HasPrefix(relPath, "packages/") || strings.HasPrefix(relPath, "platform/extensions/external/testdata/")) && strings.HasPrefix(importPath, modulePrefix+"platform/") {
-		return false, "Legacy boundary: packages and testdata must not import platform"
+	if strings.HasPrefix(relPath, "internal/") && strings.HasPrefix(importPath, modulePrefix+"plugin-sdk/") {
+		return false, "Rule 2h: internal must not import plugin-sdk directly"
+	}
+
+	if strings.HasPrefix(relPath, "packages/go/plugin-sdk/") && strings.HasPrefix(importPath, modulePrefix+"platform/") {
+		return false, "Rule 2c: plugin-sdk must not import platform directly"
+	}
+
+	if strings.HasPrefix(relPath, "packages/go/plugin-sdk/") && strings.HasPrefix(importPath, modulePrefix+"internal/") {
+		return false, "Rule 2d: plugin-sdk must not import internal directly"
+	}
+
+	if strings.HasPrefix(relPath, "packages/") && strings.HasPrefix(importPath, modulePrefix+"platform/") {
+		return false, "Rule 2e: packages must not import platform directly"
+	}
+
+	if strings.HasPrefix(relPath, "packages/") && !strings.HasPrefix(relPath, "packages/go/plugin-sdk/") && strings.HasPrefix(importPath, modulePrefix+"extensions/") {
+		return false, "Rule 2g: only plugin-sdk may import root extensions"
+	}
+
+	if strings.HasPrefix(relPath, "platform/extensions/external/testdata/") && strings.HasPrefix(importPath, modulePrefix+"platform/") {
+		return false, "Legacy boundary: testdata stubs must not import platform"
+	}
+
+	if strings.HasPrefix(relPath, "platform/") && strings.HasPrefix(importPath, modulePrefix+"packages/") {
+		return false, "Rule 2f: platform must not import packages directly"
+	}
+
+	if strings.HasPrefix(relPath, "platform/") && strings.HasPrefix(importPath, modulePrefix+"plugin-sdk/") {
+		return false, "Rule 2i: platform must not import plugin-sdk directly"
 	}
 
 	if strings.HasPrefix(relPath, "platform/extensions/") && relPath != "platform/extensions/providerpolicy/providers.go" && strings.HasPrefix(importPath, modulePrefix+"extensions/") {
@@ -183,7 +384,11 @@ func isPlatformExtensionsRootImport(relPath, importPath string) bool {
 func fileImports(t *testing.T, path string) []string {
 	t.Helper()
 	fset := token.NewFileSet()
-	parsed, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+	src, err := readFileWithTimeout(path, 2*time.Second)
+	if err != nil {
+		t.Fatalf("read imports %s: %v", path, err)
+	}
+	parsed, err := parser.ParseFile(fset, path, src, parser.ImportsOnly)
 	if err != nil {
 		t.Fatalf("parse imports %s: %v", path, err)
 	}
@@ -266,4 +471,23 @@ func compact(values []string) []string {
 		}
 	}
 	return out
+}
+
+func readFileWithTimeout(path string, timeout time.Duration) ([]byte, error) {
+	type result struct {
+		body []byte
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		body, err := os.ReadFile(path)
+		ch <- result{body: body, err: err}
+	}()
+
+	select {
+	case r := <-ch:
+		return r.body, r.err
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("read timeout after %s", timeout)
+	}
 }

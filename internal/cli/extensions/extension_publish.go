@@ -21,7 +21,7 @@ type publishSession struct {
 	Uploads     map[string]external.PublishUpload `json:"uploads"`
 }
 
-func newExtensionPublishCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionPublishCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "publish",
 		Short: "Publish an extension artifact via registry (init/upload/finalize/status)",
@@ -38,7 +38,7 @@ func newExtensionPublishCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newExtensionPublishInitCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionPublishInitCmd(opts *common.GlobalOptions) *cobra.Command {
 	var version string
 	var artifactPath string
 	var typ string
@@ -120,7 +120,7 @@ func newExtensionPublishInitCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newExtensionPublishUploadCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionPublishUploadCmd(opts *common.GlobalOptions) *cobra.Command {
 	var publishID string
 	var key string
 	var artifactPath string
@@ -211,7 +211,7 @@ func newExtensionPublishUploadCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newExtensionPublishFinalizeCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionPublishFinalizeCmd(opts *common.GlobalOptions) *cobra.Command {
 	var publishID string
 	var registry string
 	var registryToken string
@@ -247,7 +247,7 @@ func newExtensionPublishFinalizeCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newExtensionPublishStatusCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionPublishStatusCmd(opts *common.GlobalOptions) *cobra.Command {
 	var publishID string
 	var registry string
 	var registryToken string

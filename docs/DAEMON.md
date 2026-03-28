@@ -13,22 +13,22 @@ The **daemon** is a long-running HTTP server that exposes the RunFabric Configur
 
 ```bash
 # API only (default port 8766) — runs in foreground (holds terminal)
-runfabric daemon
+runfabricd
 
 # Start in background (does not hold terminal). Run from project root.
-runfabric daemon start
-runfabric daemon stop
-runfabric daemon restart   # stop (if running) then start
-runfabric daemon status    # report if daemon is running (from .runfabric/daemon.pid)
+runfabricd start
+runfabricd stop
+runfabricd restart   # stop (if running) then start
+runfabricd status    # report if daemon is running (from .runfabric/daemon.pid)
 
 # With dashboard at GET /
-runfabric daemon --dashboard --config runfabric.yml
+runfabricd --dashboard --config runfabric.yml
 
 # With API key and rate limit
-runfabric daemon --api-key my-secret --rate-limit 60 --dashboard --config runfabric.yml
+runfabricd --api-key my-secret --rate-limit 60 --dashboard --config runfabric.yml
 ```
 
-**Background (start/stop):** `runfabric daemon start` spawns the daemon as a detached process. PID is written to `.runfabric/daemon.pid` and logs to `.runfabric/daemon.log`. Run both `start` and `stop` from the same directory (e.g. project root) so they use the same `.runfabric` folder.
+**Background (start/stop):** `runfabricd start` spawns the daemon as a detached process. PID is written to `.runfabric/daemon.pid` and logs to `.runfabric/daemon.log`. Run both `start` and `stop` from the same directory (e.g. project root) so they use the same `.runfabric` folder.
 
 ## Options
 
@@ -54,11 +54,11 @@ When `--cache-url` is set to a Redis URL, the daemon caches **Config API** respo
 TTL per endpoint: validate 10m, resolve/plan 5m, releases 1m (or `--cache-ttl` if set and shorter).
 
 ```bash
-runfabric daemon --cache-url redis://localhost:6379/0
+runfabricd --cache-url redis://localhost:6379/0
 
 # With env
 export RUNFABRIC_DAEMON_CACHE_URL=redis://localhost:6379/0
-runfabric daemon
+runfabricd
 ```
 
 Supported URL schemes: `redis://` and `rediss://` (TLS). Cache key prefix defaults to `runfabric:daemon:api:`; override with `RUNFABRIC_DAEMON_CACHE_PREFIX` so a single Redis can serve multiple teams or projects (e.g. `RUNFABRIC_DAEMON_CACHE_PREFIX=team-a:runfabric:api:`). Per-endpoint TTL: validate 10m, resolve/plan 5m, releases 1m (or cap with `--cache-ttl`).

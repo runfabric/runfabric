@@ -1,6 +1,10 @@
 package contracts
 
-import "context"
+import (
+	"context"
+
+	"github.com/runfabric/runfabric/platform/core/model/config"
+)
 
 // ProviderMeta is the plugin metadata returned by ProviderPlugin.Meta().
 type ProviderMeta struct {
@@ -15,33 +19,33 @@ type ProviderMeta struct {
 
 // ValidateConfigRequest is the input to ValidateConfig.
 type ValidateConfigRequest struct {
-	Config *Config
+	Config *config.Config
 	Stage  string
 }
 
 // DoctorRequest is the input to Doctor.
 type DoctorRequest struct {
-	Config *Config
+	Config *config.Config
 	Stage  string
 }
 
 // PlanRequest is the input to Plan.
 type PlanRequest struct {
-	Config *Config
+	Config *config.Config
 	Stage  string
 	Root   string
 }
 
 // DeployRequest is the input to Deploy.
 type DeployRequest struct {
-	Config *Config
+	Config *config.Config
 	Stage  string
 	Root   string
 }
 
 // RemoveRequest is the input to Remove.
 type RemoveRequest struct {
-	Config  *Config
+	Config  *config.Config
 	Stage   string
 	Root    string
 	Receipt interface{}
@@ -49,7 +53,7 @@ type RemoveRequest struct {
 
 // InvokeRequest is the input to Invoke.
 type InvokeRequest struct {
-	Config   *Config
+	Config   *config.Config
 	Stage    string
 	Function string
 	Payload  []byte
@@ -57,14 +61,14 @@ type InvokeRequest struct {
 
 // LogsRequest is the input to Logs.
 type LogsRequest struct {
-	Config   *Config
+	Config   *config.Config
 	Stage    string
 	Function string
 }
 
 // OrchestrationSyncRequest is the input to SyncOrchestrations.
 type OrchestrationSyncRequest struct {
-	Config                 *Config
+	Config                 *config.Config
 	Stage                  string
 	Root                   string
 	FunctionResourceByName map[string]string
@@ -72,14 +76,14 @@ type OrchestrationSyncRequest struct {
 
 // OrchestrationRemoveRequest is the input to RemoveOrchestrations.
 type OrchestrationRemoveRequest struct {
-	Config *Config
+	Config *config.Config
 	Stage  string
 	Root   string
 }
 
 // OrchestrationInvokeRequest is the input to InvokeOrchestration.
 type OrchestrationInvokeRequest struct {
-	Config  *Config
+	Config  *config.Config
 	Stage   string
 	Root    string
 	Name    string
@@ -88,14 +92,14 @@ type OrchestrationInvokeRequest struct {
 
 // OrchestrationInspectRequest is the input to InspectOrchestrations.
 type OrchestrationInspectRequest struct {
-	Config *Config
+	Config *config.Config
 	Stage  string
 	Root   string
 }
 
 // MetricsRequest is the input to FetchMetrics.
 type MetricsRequest struct {
-	Config *Config
+	Config *config.Config
 	Stage  string
 }
 
@@ -107,7 +111,7 @@ type MetricsResult struct {
 
 // TracesRequest is the input to FetchTraces.
 type TracesRequest struct {
-	Config *Config
+	Config *config.Config
 	Stage  string
 }
 
@@ -119,7 +123,7 @@ type TracesResult struct {
 
 // DevStreamRequest is the input to PrepareDevStream.
 type DevStreamRequest struct {
-	Config    *Config
+	Config    *config.Config
 	Stage     string
 	TunnelURL string
 	Region    string
@@ -153,7 +157,7 @@ func (s *DevStreamSession) Restore(ctx context.Context) error {
 
 // RecoveryRequest is the input to Recover.
 type RecoveryRequest struct {
-	Config  *Config
+	Config  *config.Config
 	Root    string
 	Service string
 	Stage   string

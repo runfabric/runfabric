@@ -1,12 +1,12 @@
 package project
 
 import (
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func newListCmd(opts *GlobalOptions) *cobra.Command {
+func newListCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List functions and deployment status",

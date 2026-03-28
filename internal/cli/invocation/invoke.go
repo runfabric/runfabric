@@ -5,11 +5,11 @@ import (
 
 	"github.com/runfabric/runfabric/internal/cli/common"
 
-	"github.com/runfabric/runfabric/internal/app"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func invokeRunCommand(opts *GlobalOptions, use string) *cobra.Command {
+func invokeRunCommand(opts *common.GlobalOptions, use string) *cobra.Command {
 	var function string
 	var payload string
 	var providerOverride string
@@ -41,7 +41,7 @@ func invokeRunCommand(opts *GlobalOptions, use string) *cobra.Command {
 	return cmd
 }
 
-func newInvokeCmd(opts *GlobalOptions) *cobra.Command {
+func newInvokeCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "invoke",
 		Short: "Invocation and local execution commands",

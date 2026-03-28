@@ -54,7 +54,7 @@ var (
 	pkgManagers   = []string{"npm", "pnpm", "yarn", "bun"}
 )
 
-func newInitCmd(opts *GlobalOptions) *cobra.Command {
+func newInitCmd(opts *common.GlobalOptions) *cobra.Command {
 	initOpts := &initOpts{}
 
 	cmd := &cobra.Command{
@@ -655,7 +655,10 @@ func generateRunfabricYAML(o *initOpts) string {
 	b.WriteString("provider:\n")
 	b.WriteString("  name: " + o.Provider + "\n")
 	b.WriteString("  runtime: " + runtime + "\n")
-	b.WriteString("  region: ${env:AWS_REGION,us-east-1}\n\n")
+	if o.Provider != "kubernetes" {
+		b.WriteString("  region: ${env:AWS_REGION,us-east-1}\n")
+	}
+	b.WriteString("\n")
 
 	if o.StateBackend != "local" {
 		b.WriteString("backend:\n")

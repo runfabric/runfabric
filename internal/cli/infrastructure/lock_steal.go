@@ -1,12 +1,12 @@
 package infrastructure
 
 import (
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func newLockStealCmd(opts *GlobalOptions) *cobra.Command {
+func newLockStealCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "lock-steal",
 		Short: "Steal an expired remote lock",

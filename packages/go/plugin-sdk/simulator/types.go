@@ -29,12 +29,9 @@ type Response struct {
 	Body       json.RawMessage   `json:"body,omitempty"`
 }
 
-// PluginMeta identifies a simulator plugin.
-type PluginMeta = sdkrouter.PluginMeta
-
 // Plugin is the interface all simulator plugins implement.
 type Plugin interface {
-	Meta() PluginMeta
+	Meta() sdkrouter.PluginMeta
 	Simulate(ctx context.Context, req Request) (*Response, error)
 }
 

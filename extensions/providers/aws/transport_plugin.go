@@ -9,7 +9,7 @@ import (
 )
 
 // TransportPlugin implements sdkprovider.Plugin for AWS Lambda.
-// Wrap it with inprocess.New to register it as a core ProviderPlugin.
+// Register it with inprocess.New as a core ProviderPlugin.
 type TransportPlugin struct{}
 
 // NewTransportPlugin returns a TransportPlugin ready to be wrapped by inprocess.New.

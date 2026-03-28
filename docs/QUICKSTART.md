@@ -244,6 +244,34 @@ Compose deploy exports upstream endpoints as environment variables for downstrea
 
 - `RUNFABRIC_OUTPUT_<SERVICE>_<PROVIDER>_ENDPOINT`
 
+Router DNS/LB operations for multi-target `fabric` deployments:
+
+```bash
+# deploy all fabric targets, then sync DNS/LB in one flow
+pnpm run runfabric -- router deploy -c ./my-api/runfabric.yml --sync-dns
+
+# drift report (dry-run)
+pnpm run runfabric -- router dns-reconcile -c ./my-api/runfabric.yml
+
+# apply reconcile
+pnpm run runfabric -- router dns-reconcile -c ./my-api/runfabric.yml --apply
+
+# restore from previous applied snapshot (last-known-good)
+pnpm run runfabric -- router dns-restore -c ./my-api/runfabric.yml
+
+# inspect sync history trend + latest operation metadata
+pnpm run runfabric -- router dns-history -c ./my-api/runfabric.yml
+
+# simulate weighted routing locally (no provider API calls)
+pnpm run runfabric -- router simulate -c ./my-api/runfabric.yml --requests 500
+
+# chaos/failover verification (single-endpoint-down + all-down scenarios)
+pnpm run runfabric -- router chaos-verify -c ./my-api/runfabric.yml
+
+# progressive canary shift to one endpoint
+pnpm run runfabric -- router dns-shift -c ./my-api/runfabric.yml --provider aws-us --percent 20 --dry-run
+```
+
 ## State Backends And Receipts
 
 After deploy:

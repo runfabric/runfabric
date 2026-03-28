@@ -1,12 +1,12 @@
 package project
 
 import (
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func newInspectCmd(opts *GlobalOptions) *cobra.Command {
+func newInspectCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "inspect",
 		Short: "Inspect lock, journal, and receipt state",

@@ -33,9 +33,16 @@ make clean          # remove bin/ and go caches
 
 The binaries are built with `-trimpath` and ldflags for `platform/core/model.Version`.
 
+Binary intent:
+
+- `runfabric`: control-plane CLI (doctor/plan/build/deploy/remove/invoke/state/extensions/router/admin/project/config + workflow).
+- `runfabricw`: workload-plane CLI (workflow runtime commands only: run/status/cancel/replay).
+- `runfabricd`: daemon-plane CLI (`runfabricd`, `runfabricd start|stop|restart|status`) for long-running config API/dashboard operations.
+- Code boundary: `runfabric` root is built from `internal/cli`; `runfabricd` root is built from `internal/cli/daemon`; `runfabricw` root is built from `internal/cli/worker`.
+
 ## SDKs
 
-- **packages/node/cli** – `@runfabric/cli` (Node CLI wrapper). Published releases include all platform binaries in the package (`bin/`). Resolution order: package `bin/` → repo root `bin/` → `~/.runfabric/bin/`.
+- **packages/node/cli** – `@runfabric/cli` (Node CLI wrapper). Published releases include platform-specific `runfabric-<os-arch>` binaries in the package (`bin/`). Resolution order: package `bin/` → repo root `bin/` → `~/.runfabric/bin/`.
 - **packages/node/sdk** – `@runfabric/sdk` (Node SDK: handler contract, HTTP adapter, framework adapters). No binaries.
 
 ## Release from local
@@ -66,7 +73,7 @@ make release-tag
 On push of a tag matching `v*`, **.github/workflows/release.yml** runs:
 
 - **goreleaser**: builds all platforms for `runfabric`, `runfabricd`, and `runfabricw`, then creates GitHub Release tarballs/zips and checksums.
-- **npm**: builds all platform binaries, copies them into `packages/node/cli/bin/`, sets package version from the tag, and publishes **@runfabric/cli** and **@runfabric/sdk**. Requires **NPM_TOKEN** in repo secrets.
+- **npm**: builds all platform binaries, copies platform-specific `runfabric-<os-arch>` binaries into `packages/node/cli/bin/`, sets package version from the tag, and publishes **@runfabric/cli** and **@runfabric/sdk**. Requires **NPM_TOKEN** in repo secrets.
 
 ### 4. Optional: local snapshot (no publish)
 

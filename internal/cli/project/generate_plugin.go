@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +23,7 @@ type generatePluginOpts struct {
 	Force             bool
 }
 
-func newGeneratePluginCmd(opts *GlobalOptions) *cobra.Command {
+func newGeneratePluginCmd(opts *common.GlobalOptions) *cobra.Command {
 	o := &generatePluginOpts{}
 	cmd := &cobra.Command{
 		Use:   "plugin [provider-id]",
@@ -49,7 +50,7 @@ func newGeneratePluginCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func runGeneratePlugin(gopts *GlobalOptions, o *generatePluginOpts, providerID string) error {
+func runGeneratePlugin(gopts *common.GlobalOptions, o *generatePluginOpts, providerID string) error {
 	interactive, err := resolveGenerateInteractivity(gopts, o.Interactive, o.NoInteractive)
 	if err != nil {
 		return err

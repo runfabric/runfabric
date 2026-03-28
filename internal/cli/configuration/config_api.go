@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/runfabric/runfabric/platform/daemon/configapi"
 	"github.com/spf13/cobra"
 )
 
-func newConfigAPICmd(opts *GlobalOptions) *cobra.Command {
+func newConfigAPICmd(opts *common.GlobalOptions) *cobra.Command {
 	var address string
 	var port int
 	var apiKey string

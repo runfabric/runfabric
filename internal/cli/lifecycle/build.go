@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/runfabric/runfabric/internal/app"
+	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/runfabric/runfabric/platform/core/model/configpatch"
+	"github.com/runfabric/runfabric/platform/workflow/app"
+	coreapp "github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func newBuildCmd(opts *GlobalOptions) *cobra.Command {
+func newBuildCmd(opts *common.GlobalOptions) *cobra.Command {
 	var outDir string
 	var noCache bool
 	cmd := &cobra.Command{
@@ -26,7 +28,7 @@ func newBuildCmd(opts *GlobalOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			result, err := app.Build(configPath, app.BuildOptions{
+			result, err := app.Build(configPath, coreapp.BuildOptions{
 				NoCache: noCache,
 				OutDir:  outDir,
 			})

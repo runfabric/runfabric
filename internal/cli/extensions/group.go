@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newExtensionsGroupCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionsGroupCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "extensions",
 		Short: "Extension ecosystem commands",

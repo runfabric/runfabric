@@ -1,8 +1,8 @@
 package infrastructure
 
 import (
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +19,7 @@ type stateOpts struct {
 
 const stateBackendFlagHelp = "Backend: local|postgres|sqlite|s3|aws|dynamodb|gcs|azblob"
 
-func newStateCmd(opts *GlobalOptions) *cobra.Command {
+func newStateCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "state",
 		Short: "State and lock operations (pull, list, backup, restore, force-unlock, migrate, reconcile)",
@@ -44,7 +44,7 @@ func newStateCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newStatePullCmd(opts *GlobalOptions) *cobra.Command {
+func newStatePullCmd(opts *common.GlobalOptions) *cobra.Command {
 	so := &stateOpts{}
 	cmd := &cobra.Command{
 		Use:   "pull",
@@ -69,7 +69,7 @@ func newStatePullCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newStateListCmd(opts *GlobalOptions) *cobra.Command {
+func newStateListCmd(opts *common.GlobalOptions) *cobra.Command {
 	so := &stateOpts{}
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -95,7 +95,7 @@ func newStateListCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newStateBackupCmd(opts *GlobalOptions) *cobra.Command {
+func newStateBackupCmd(opts *common.GlobalOptions) *cobra.Command {
 	so := &stateOpts{}
 	cmd := &cobra.Command{
 		Use:   "backup",
@@ -121,7 +121,7 @@ func newStateBackupCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newStateRestoreCmd(opts *GlobalOptions) *cobra.Command {
+func newStateRestoreCmd(opts *common.GlobalOptions) *cobra.Command {
 	so := &stateOpts{}
 	cmd := &cobra.Command{
 		Use:   "restore",
@@ -145,7 +145,7 @@ func newStateRestoreCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newStateForceUnlockCmd(opts *GlobalOptions) *cobra.Command {
+func newStateForceUnlockCmd(opts *common.GlobalOptions) *cobra.Command {
 	so := &stateOpts{}
 	cmd := &cobra.Command{
 		Use:   "force-unlock",
@@ -171,7 +171,7 @@ func newStateForceUnlockCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newStateMigrateCmd(opts *GlobalOptions) *cobra.Command {
+func newStateMigrateCmd(opts *common.GlobalOptions) *cobra.Command {
 	so := &stateOpts{}
 	cmd := &cobra.Command{
 		Use:   "migrate",
@@ -198,7 +198,7 @@ func newStateMigrateCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newStateReconcileCmd(opts *GlobalOptions) *cobra.Command {
+func newStateReconcileCmd(opts *common.GlobalOptions) *cobra.Command {
 	so := &stateOpts{}
 	cmd := &cobra.Command{
 		Use:   "reconcile",

@@ -1,6 +1,6 @@
 //go:build !windows
 
-package admin
+package daemoncmd
 
 import (
 	"os/exec"

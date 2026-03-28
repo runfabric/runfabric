@@ -1,12 +1,12 @@
 package admin
 
 import (
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func newDebugCmd(opts *GlobalOptions) *cobra.Command {
+func newDebugCmd(opts *common.GlobalOptions) *cobra.Command {
 	var host, port string
 
 	cmd := &cobra.Command{

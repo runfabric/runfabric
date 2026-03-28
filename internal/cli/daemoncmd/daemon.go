@@ -1,4 +1,4 @@
-package admin
+package daemoncmd
 
 import (
 	"encoding/json"
@@ -15,10 +15,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/runfabric/runfabric/internal/app"
+	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/runfabric/runfabric/platform/daemon/configapi"
 	runfabricruntime "github.com/runfabric/runfabric/platform/extensions/registry/loader/runtime"
 	"github.com/runfabric/runfabric/platform/observability/telemetry"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -54,7 +55,14 @@ func (o *otelResponseRecorder) WriteHeader(code int) {
 	o.ResponseWriter.WriteHeader(code)
 }
 
-func newDaemonCmd(opts *GlobalOptions) *cobra.Command {
+// NewDaemonCmd returns the daemon command with the provided Use token.
+// Typical value is "runfabricd" for the daemon binary root.
+func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
+	use = strings.TrimSpace(use)
+	if use == "" {
+		use = "runfabricd"
+	}
+
 	var address string
 	var port int
 	var apiKey string
@@ -65,7 +73,7 @@ func newDaemonCmd(opts *GlobalOptions) *cobra.Command {
 	var cacheURL string
 
 	cmd := &cobra.Command{
-		Use:   "daemon",
+		Use:   use,
 		Short: "Run a long-running API server (config API + optional dashboard)",
 		Long:  "Starts a single process serving the config API (POST /validate, /resolve, /plan, /deploy, /remove, /releases) and optionally the dashboard at GET /. Use --dashboard and ensure --config points to a runfabric.yml workspace. Optional --api-key, --rate-limit, --workspace. Suitable for foreground use or as an OS service (systemd, launchd): run the binary with --config and optionally --workspace so state paths are resolved from that directory.",
 		RunE: func(c *cobra.Command, args []string) error {
@@ -75,7 +83,7 @@ func newDaemonCmd(opts *GlobalOptions) *cobra.Command {
 			}
 			service := opts.AppService
 			if service == nil {
-				service = app.NewAppService()
+				service = common.NewAppService()
 			}
 			configPath := opts.ConfigPath
 			if workspace != "" {
@@ -220,7 +228,7 @@ func newDaemonCmd(opts *GlobalOptions) *cobra.Command {
 						workflowBlock += "<p class=\"none\">No workflow runs yet. Use <code>runfabric workflow run</code>.</p>"
 					}
 					workflowBlock += "</div>"
-					_, _ = fmt.Fprintf(w, dashboardHTML, d.Service, d.Service, d.Stage, appOrgBlock, stagesBlock, deployBlock, workflowBlock)
+					_, _ = fmt.Fprintf(w, common.DashboardHTML, d.Service, d.Service, d.Stage, appOrgBlock, stagesBlock, deployBlock, workflowBlock)
 				})
 			} else {
 				mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -250,7 +258,7 @@ func newDaemonCmd(opts *GlobalOptions) *cobra.Command {
 			handler := daemonOtelMiddleware(telemetry.Tracer("runfabric/daemon"), mux)
 			if err := http.ListenAndServe(addr, handler); err != nil {
 				if strings.Contains(err.Error(), "address already in use") {
-					fmt.Fprintf(os.Stderr, "Error: %v — try: runfabric daemon stop (or use --port to pick another port)\n", err)
+					fmt.Fprintf(os.Stderr, "Error: %v - try: runfabricd stop (or use --port to pick another port)\n", err)
 					os.Exit(1)
 				}
 				return err
@@ -277,20 +285,20 @@ func newDaemonCmd(opts *GlobalOptions) *cobra.Command {
 		},
 		&cobra.Command{
 			Use:   "stop",
-			Short: "Stop the daemon started with daemon start",
-			Long:  "Sends SIGTERM to the process whose PID is in .runfabric/daemon.pid and removes the file. Run from the same directory used for daemon start.",
+			Short: "Stop the daemon started with runfabricd start",
+			Long:  "Sends SIGTERM to the process whose PID is in .runfabric/daemon.pid and removes the file. Run from the same directory used for runfabricd start.",
 			RunE:  runDaemonStop,
 		},
 		&cobra.Command{
 			Use:   "restart",
 			Short: "Stop the daemon (if running) and start it again in the background",
-			Long:  "Equivalent to daemon stop followed by daemon start. Uses the same .runfabric directory; run from project root.",
+			Long:  "Equivalent to runfabricd stop followed by runfabricd start. Uses the same .runfabric directory; run from project root.",
 			RunE:  runDaemonRestart,
 		},
 		&cobra.Command{
 			Use:   "status",
 			Short: "Report whether the daemon is running (from .runfabric/daemon.pid)",
-			Long:  "Reads .runfabric/daemon.pid and checks if that process is alive. Run from the same directory used for daemon start.",
+			Long:  "Reads .runfabric/daemon.pid and checks if that process is alive. Run from the same directory used for runfabricd start.",
 			RunE:  runDaemonStatus,
 		},
 	)
@@ -388,9 +396,6 @@ func runDaemonStart(c *cobra.Command, _ []string) error {
 			continue
 		}
 		newArgs = append(newArgs, a)
-	}
-	if len(newArgs) == 0 || newArgs[0] != "daemon" {
-		newArgs = append([]string{"daemon"}, newArgs...)
 	}
 
 	cmd := exec.Command(execPath, newArgs...)

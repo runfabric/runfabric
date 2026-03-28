@@ -7,12 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/core/model/configpatch"
 	"github.com/spf13/cobra"
 )
 
-func newDocsCmd(opts *GlobalOptions) *cobra.Command {
+func newDocsCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "docs",
 		Short: "Documentation and config checks",
@@ -25,7 +26,7 @@ func newDocsCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newDocsCheckCmd(opts *GlobalOptions) *cobra.Command {
+func newDocsCheckCmd(opts *common.GlobalOptions) *cobra.Command {
 	var configPath, readmePath string
 	var jsonOut bool
 	cmd := &cobra.Command{
@@ -98,7 +99,7 @@ func newDocsCheckCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newDocsSyncCmd(opts *GlobalOptions) *cobra.Command {
+func newDocsSyncCmd(opts *common.GlobalOptions) *cobra.Command {
 	var configPath, readmePath string
 	var dryRun, jsonOut bool
 	cmd := &cobra.Command{

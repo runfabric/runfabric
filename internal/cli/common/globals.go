@@ -1,7 +1,5 @@
 package common
 
-import "github.com/runfabric/runfabric/internal/app"
-
 // GlobalOptions holds global CLI flags shared across all subpackages
 type GlobalOptions struct {
 	ConfigPath     string
@@ -10,5 +8,5 @@ type GlobalOptions struct {
 	NonInteractive bool
 	AssumeYes      bool
 	AutoInstallExt bool
-	AppService     app.AppService
+	AppService     AppService
 }

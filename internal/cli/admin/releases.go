@@ -1,12 +1,12 @@
 package admin
 
 import (
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func newReleasesCmd(opts *GlobalOptions) *cobra.Command {
+func newReleasesCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "releases",
 		Short: "List deployment history (releases)",

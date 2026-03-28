@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/runfabric/runfabric/internal/cli/common"
 )
 
 func TestYAMLQuoted(t *testing.T) {
@@ -41,7 +43,7 @@ func TestYAMLQuoted(t *testing.T) {
 
 func TestInit_ValidLang(t *testing.T) {
 	dir := t.TempDir()
-	opts := &GlobalOptions{}
+	opts := &common.GlobalOptions{}
 	cmd := newInitCmd(opts)
 	cmd.SetArgs([]string{"--dir", dir, "--lang", "ts", "--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -56,7 +58,7 @@ func TestInit_ValidLang(t *testing.T) {
 
 func TestInit_InvalidLang(t *testing.T) {
 	dir := t.TempDir()
-	opts := &GlobalOptions{}
+	opts := &common.GlobalOptions{}
 	cmd := newInitCmd(opts)
 	cmd.SetArgs([]string{"--dir", dir, "--lang", "rust", "--no-interactive"})
 	cmd.SetErr(&bytes.Buffer{})
@@ -68,7 +70,7 @@ func TestInit_InvalidLang(t *testing.T) {
 
 func TestInit_ProviderTemplateMatrixRejection(t *testing.T) {
 	dir := t.TempDir()
-	opts := &GlobalOptions{}
+	opts := &common.GlobalOptions{}
 	cmd := newInitCmd(opts)
 	// fly-machines does not support cron per Trigger Capability Matrix
 	cmd.SetArgs([]string{"--dir", dir, "--provider", "fly-machines", "--template", "cron", "--no-interactive"})
@@ -82,7 +84,7 @@ func TestInit_ProviderTemplateMatrixRejection(t *testing.T) {
 
 func TestInit_ProviderTemplateMatrixAccept(t *testing.T) {
 	dir := t.TempDir()
-	opts := &GlobalOptions{}
+	opts := &common.GlobalOptions{}
 	cmd := newInitCmd(opts)
 	cmd.SetArgs([]string{"--dir", dir, "--provider", "aws-lambda", "--template", "api", "--lang", "go", "--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -214,7 +216,7 @@ func TestGeneratePackageJSON_JSCallLocalScriptUnchanged(t *testing.T) {
 
 func TestInit_TypeScriptScaffoldIncludesBuildToolingByDefault(t *testing.T) {
 	dir := t.TempDir()
-	opts := &GlobalOptions{}
+	opts := &common.GlobalOptions{}
 	cmd := newInitCmd(opts)
 	cmd.SetArgs([]string{"--dir", dir, "--lang", "ts", "--no-interactive", "--skip-install"})
 	cmd.SetOut(&bytes.Buffer{})
@@ -278,7 +280,7 @@ func TestInit_TypeScriptScaffoldBuildsDistHandlerAfterInstall(t *testing.T) {
 	t.Setenv("RUNFABRIC_TEST_PM_LOG", logPath)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	opts := &GlobalOptions{}
+	opts := &common.GlobalOptions{}
 	cmd := newInitCmd(opts)
 	cmd.SetArgs([]string{"--dir", dir, "--lang", "ts", "--no-interactive"})
 	cmd.SetOut(&bytes.Buffer{})

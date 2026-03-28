@@ -26,11 +26,11 @@ Protocol is **OTLP over HTTP**. Use an OpenTelemetry Collector or a backend (e.g
 ```bash
 # Export to a local collector (e.g. otelcol) on default HTTP port
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-runfabric daemon --dashboard --config runfabric.yml
+runfabricd --dashboard --config runfabric.yml
 
 # Or enable with default endpoint
 export OTEL_TRACES_ENABLED=1
-runfabric daemon
+runfabricd
 ```
 
 ## What is traced

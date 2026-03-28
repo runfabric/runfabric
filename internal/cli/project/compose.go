@@ -1,13 +1,13 @@
 package project
 
 import (
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	workflow "github.com/runfabric/runfabric/platform/workflow/core"
 	"github.com/spf13/cobra"
 )
 
-func newComposeCmd(opts *GlobalOptions) *cobra.Command {
+func newComposeCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "compose",
 		Short: "Multi-project compose operations",
@@ -20,7 +20,7 @@ func newComposeCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newComposePlanCmd(opts *GlobalOptions) *cobra.Command {
+func newComposePlanCmd(opts *common.GlobalOptions) *cobra.Command {
 	var composeFile string
 	var concurrency int
 	cmd := &cobra.Command{
@@ -55,7 +55,7 @@ func newComposePlanCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newComposeDeployCmd(opts *GlobalOptions) *cobra.Command {
+func newComposeDeployCmd(opts *common.GlobalOptions) *cobra.Command {
 	var composeFile string
 	var concurrency int
 	var rollbackOnFailure, noRollbackOnFailure bool
@@ -85,7 +85,7 @@ func newComposeDeployCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newComposeRemoveCmd(opts *GlobalOptions) *cobra.Command {
+func newComposeRemoveCmd(opts *common.GlobalOptions) *cobra.Command {
 	var composeFile string
 	var concurrency int
 	var provider string

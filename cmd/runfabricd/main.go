@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/runfabric/runfabric/internal/cli"
+	daemoncli "github.com/runfabric/runfabric/internal/cli/daemon"
 	"github.com/runfabric/runfabric/platform/observability/telemetry"
 )
 
@@ -21,14 +21,7 @@ func main() {
 		_ = telemetry.Shutdown(shutdownCtx)
 	}()
 
-	cmd := cli.NewRootCmd()
-	cmd.Use = "runfabricd"
-
-	args := os.Args[1:]
-	if len(args) == 0 || args[0] != "daemon" {
-		args = append([]string{"daemon"}, args...)
-	}
-	cmd.SetArgs(args)
+	cmd := daemoncli.NewRootCmd()
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

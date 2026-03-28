@@ -6,15 +6,17 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/runfabric/runfabric/internal/app"
+	"github.com/runfabric/runfabric/internal/cli/common"
 	extproviders "github.com/runfabric/runfabric/internal/provider/contracts"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
+	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/runfabric/runfabric/platform/workflow/lifecycle"
 	"github.com/spf13/cobra"
 )
 
-func newPluginCmd(opts *GlobalOptions) *cobra.Command {
+func newPluginCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "plugin",
 		Short: "List and manage provider plugins",
@@ -35,7 +37,7 @@ func newPluginCmd(opts *GlobalOptions) *cobra.Command {
 }
 
 func builtinProviderRegistry() *extproviders.Registry {
-	b, err := resolution.NewCached(resolution.Options{IncludeExternal: false})
+	b, err := providerloader.LoadBoundary(providerloader.LoadOptions{IncludeExternal: false})
 	if err != nil {
 		// IncludeExternal=false should be deterministic; keep a safe fallback.
 		reg := extproviders.NewRegistry()
@@ -45,7 +47,7 @@ func builtinProviderRegistry() *extproviders.Registry {
 	return b.ProviderRegistry()
 }
 
-func newPluginListCmd(opts *GlobalOptions) *cobra.Command {
+func newPluginListCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List provider plugins",
@@ -65,7 +67,7 @@ func newPluginListCmd(opts *GlobalOptions) *cobra.Command {
 	}
 }
 
-func newPluginInfoCmd(opts *GlobalOptions) *cobra.Command {
+func newPluginInfoCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "info [name]",
 		Short: "Show plugin manifest for a provider",
@@ -74,7 +76,7 @@ func newPluginInfoCmd(opts *GlobalOptions) *cobra.Command {
 				return fmt.Errorf("usage: runfabric plugin info <name>")
 			}
 			name := args[0]
-			boundary, berr := resolution.NewCached(resolution.Options{IncludeExternal: true})
+			boundary, berr := providerloader.LoadBoundary(providerloader.LoadOptions{IncludeExternal: true})
 			reg := manifests.NewPluginRegistry()
 			if berr == nil {
 				reg = boundary.PluginRegistry()
@@ -114,7 +116,7 @@ func newPluginInfoCmd(opts *GlobalOptions) *cobra.Command {
 	}
 }
 
-func newPluginDoctorCmd(opts *GlobalOptions) *cobra.Command {
+func newPluginDoctorCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor [name]",
 		Short: "Run doctor for a provider (optional: provider name; default from config)",
@@ -149,7 +151,7 @@ func newPluginDoctorCmd(opts *GlobalOptions) *cobra.Command {
 	}
 }
 
-func newPluginEnableCmd(opts *GlobalOptions) *cobra.Command {
+func newPluginEnableCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "enable [name]",
 		Short: "Mark a plugin as enabled (record in .runfabric/plugins.json)",
@@ -162,7 +164,7 @@ func newPluginEnableCmd(opts *GlobalOptions) *cobra.Command {
 	}
 }
 
-func newPluginDisableCmd(opts *GlobalOptions) *cobra.Command {
+func newPluginDisableCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "disable [name]",
 		Short: "Mark a plugin as disabled (record in .runfabric/plugins.json)",
@@ -213,7 +215,7 @@ func updatePluginsPref(name string, enabled bool) error {
 	return os.WriteFile(path, out, 0o644)
 }
 
-func newPluginCapabilitiesCmd(opts *GlobalOptions) *cobra.Command {
+func newPluginCapabilitiesCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "capabilities [name]",
 		Short: "Show plugin capabilities (runtimes, triggers, etc.)",
@@ -222,7 +224,7 @@ func newPluginCapabilitiesCmd(opts *GlobalOptions) *cobra.Command {
 				return fmt.Errorf("usage: runfabric plugin capabilities <name>")
 			}
 			name := args[0]
-			boundary, err := resolution.NewCached(resolution.Options{IncludeExternal: true})
+			boundary, err := providerloader.LoadBoundary(providerloader.LoadOptions{IncludeExternal: true})
 			if err != nil {
 				// Fallback keeps current behavior for built-ins and API providers.
 				reg := builtinProviderRegistry()

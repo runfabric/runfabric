@@ -1,12 +1,12 @@
 package lifecycle
 
 import (
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func newRecoverDryRunCmd(opts *GlobalOptions) *cobra.Command {
+func newRecoverDryRunCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "recover-dry-run",
 		Short: "Inspect recovery feasibility without mutating state",

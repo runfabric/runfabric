@@ -1,12 +1,12 @@
 package invocation
 
 import (
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func newMetricsCmd(opts *GlobalOptions) *cobra.Command {
+func newMetricsCmd(opts *common.GlobalOptions) *cobra.Command {
 	var provider string
 	var all bool
 	var service string

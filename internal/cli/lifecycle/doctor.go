@@ -1,12 +1,12 @@
 package lifecycle
 
 import (
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func newDoctorCmd(opts *GlobalOptions) *cobra.Command {
+func newDoctorCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
 		Short: "Validate config and provider readiness",

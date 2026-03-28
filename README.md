@@ -8,7 +8,7 @@
 
 **Current scope:**
 
-- **Core engine and CLI** — Go code in `cmd/`, `internal/`, and `platform/`; build with `make build` → `bin/runfabric` and `bin/runfabricd`. **Packages** (Node CLI/SDK, Python, Go, Java, .NET) live under `packages/`. See [docs/FILE_STRUCTURE.md](docs/FILE_STRUCTURE.md) and [docs/LAYOUT.md](docs/LAYOUT.md).
+- **Core engine and CLI** — Go code in `cmd/`, `internal/`, and `platform/`; build with `make build` → `bin/runfabric`, `bin/runfabricw`, and `bin/runfabricd`. **Packages** (Node CLI/SDK, Python, Go, Java, .NET) live under `packages/`. See [docs/FILE_STRUCTURE.md](docs/FILE_STRUCTURE.md) and [docs/LAYOUT.md](docs/LAYOUT.md).
 - **Deployment framework** — Not a cluster scheduler or standalone runtime; uses each provider’s managed serverless (Lambda, Cloud Run, Workers, etc.).
 - **Config** — `runfabric.yml` (not a drop-in replacement for `serverless.yml`; use `runfabric migrate` to convert).
 - **Production path** — Node-first beta; other runtimes (Python, Go) are supported per provider.
@@ -113,6 +113,13 @@ runfabric deploy -c ./my-api/runfabric.yml
 runfabric deploy -c ./my-api/runfabric.yml --rollback-on-failure
 ```
 
+Workflow runtime (workload-plane binary):
+
+```bash
+./bin/runfabricw workflow run -c ./my-api/runfabric.yml --name hello-flow
+./bin/runfabricw workflow status -c ./my-api/runfabric.yml --run-id <run-id>
+```
+
 Run local provider-mimic server:
 
 ```bash
@@ -147,6 +154,7 @@ The **Node SDK** (`@runfabric/sdk`, `packages/node/sdk`) lets you use a single h
 - `runfabric traces`
 - `runfabric metrics`
 - `runfabric remove`
+- `runfabric router deploy|status|endpoints|routing|simulate|chaos-verify|dns-sync|dns-shift|dns-reconcile|dns-restore|dns-history`
 - `runfabric compose plan|deploy|remove`
 - `runfabric state pull|list|backup|restore|force-unlock|migrate|reconcile`
 
@@ -186,6 +194,8 @@ Rollback precedence: CLI `--rollback-on-failure` / `--no-rollback-on-failure` �
 - `docs/PROVIDER_SETUP.md` — per-provider setup
 - `docs/DEPLOY_PROVIDERS.md` — deploy by provider (REST/SDK)
 - `docs/STATE_BACKENDS.md` — state storage
+- `docs/ROUTER_OPERATIONS_WORKFLOW.md` — router deploy/sync/verify/rollback runbook
+- `docs/ROUTER_PLUGIN_AUTHORING.md` — router plugin contract + Go template
 
 - `docs/MIGRATION.md` — Serverless Framework migration
 - `docs/ARCHITECTURE.md` — deploy flow and provider layout

@@ -1,14 +1,14 @@
-package sdkbridge
+package codec
 
 import (
 	"encoding/json"
 
+	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
-// FromCoreConfig converts a core Config to an SDK provider Config.
-func FromCoreConfig(cfg *config.Config) (sdkprovider.Config, error) {
+// FromCoreConfig converts a core Config to a transport-safe provider Config.
+func FromCoreConfig(cfg *config.Config) (providers.Config, error) {
 	if cfg == nil {
 		return nil, nil
 	}
@@ -16,15 +16,15 @@ func FromCoreConfig(cfg *config.Config) (sdkprovider.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	var sdkCfg sdkprovider.Config
+	var sdkCfg providers.Config
 	if err := json.Unmarshal(b, &sdkCfg); err != nil {
 		return nil, err
 	}
 	return sdkCfg, nil
 }
 
-// ToCoreConfig converts an SDK provider Config to a core Config.
-func ToCoreConfig(cfg sdkprovider.Config) (*config.Config, error) {
+// ToCoreConfig converts a transport-safe provider Config to a core Config.
+func ToCoreConfig(cfg providers.Config) (*config.Config, error) {
 	if cfg == nil {
 		return nil, nil
 	}

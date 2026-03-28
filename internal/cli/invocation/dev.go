@@ -9,12 +9,13 @@ import (
 
 	"github.com/runfabric/runfabric/internal/cli/common"
 
-	"github.com/runfabric/runfabric/internal/app"
 	"github.com/runfabric/runfabric/platform/observability/diagnostics"
+	"github.com/runfabric/runfabric/platform/workflow/app"
+	coreapp "github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
-func newDevCmd(opts *GlobalOptions) *cobra.Command {
+func newDevCmd(opts *common.GlobalOptions) *cobra.Command {
 	var host, port, provider, preset, method, path, query, body, header, entry, out, streamFrom, tunnelURL string
 	var watch, once, doctorFirst bool
 	var intervalSeconds int
@@ -59,7 +60,7 @@ func newDevCmd(opts *GlobalOptions) *cobra.Command {
 			common.StatusRunning(opts.JSONOutput, "Starting dev server...")
 
 			var restore func()
-			var devReport *app.DevStreamReport
+			var devReport *coreapp.DevStreamReport
 			if streamFrom != "" && tunnelURL != "" {
 				var err error
 				restore, devReport, err = app.PrepareDevStreamTunnelWithReport(opts.ConfigPath, effectiveStage, tunnelURL)

@@ -14,6 +14,7 @@ import (
 	"github.com/runfabric/runfabric/platform/core/state/backends"
 	"github.com/runfabric/runfabric/platform/extensions/application/external"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
+	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	extRuntime "github.com/runfabric/runfabric/platform/extensions/registry/loader/runtime"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 )
@@ -56,7 +57,7 @@ func Bootstrap(configPath, stage, providerOverride string) (*AppContext, error) 
 		return nil, appErrs.Wrap(appErrs.CodeConfigValidation, "config validation failed", err)
 	}
 
-	extBoundary, err := resolution.NewCached(providerResolutionOptions(cfg))
+	extBoundary, err := providerloader.LoadBoundary(providerResolutionOptions(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -189,8 +190,8 @@ func isTruthyEnv(k string) bool {
 	return v == "1" || v == "true" || v == "yes"
 }
 
-func providerResolutionOptions(cfg *config.Config) resolution.Options {
-	opts := resolution.Options{IncludeExternal: true}
+func providerResolutionOptions(cfg *config.Config) providerloader.LoadOptions {
+	opts := providerloader.LoadOptions{IncludeExternal: true}
 	if cfg == nil {
 		return opts
 	}

@@ -1,9 +1,12 @@
 package admin
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/spf13/cobra"
+)
 
 // auth groups authentication operations while keeping existing top-level commands.
-func newAuthGroupCmd(opts *GlobalOptions) *cobra.Command {
+func newAuthGroupCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Authentication operations",

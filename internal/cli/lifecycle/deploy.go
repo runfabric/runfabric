@@ -6,14 +6,15 @@ import (
 
 	"github.com/runfabric/runfabric/internal/cli/common"
 
-	"github.com/runfabric/runfabric/internal/app"
+	"github.com/runfabric/runfabric/platform/deploy/source"
+	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
 
 // runDeploy runs app.Deploy and prints result; used by deploy, deploy fn, deploy function, deploy-function.
 // If preview is non-empty, it is used as the stage (e.g. --preview pr-123 => stage pr-123 for preview environments).
 // providerOverride is the key from providerOverrides in runfabric.yml (e.g. aws, gcp) for multi-cloud; use "" for single provider.
-func runDeploy(opts *GlobalOptions, functionName string, rollbackOnFailure, noRollbackOnFailure bool, preview, providerOverride, label string) error {
+func runDeploy(opts *common.GlobalOptions, functionName string, rollbackOnFailure, noRollbackOnFailure bool, preview, providerOverride, label string) error {
 	stage := opts.Stage
 	if preview != "" {
 		stage = preview
@@ -32,7 +33,7 @@ func runDeploy(opts *GlobalOptions, functionName string, rollbackOnFailure, noRo
 	return common.PrintSuccess(label, result)
 }
 
-func newDeployCmd(opts *GlobalOptions) *cobra.Command {
+func newDeployCmd(opts *common.GlobalOptions) *cobra.Command {
 	var function, outDir, preview, sourceURL, providerOverride string
 	var rollbackOnFailure, noRollbackOnFailure bool
 
@@ -44,7 +45,7 @@ func newDeployCmd(opts *GlobalOptions) *cobra.Command {
 			_ = outDir
 			runOpts := opts
 			if sourceURL != "" {
-				extractRoot, resolvedConfig, cleanup, err := app.FetchDeploySource(sourceURL)
+				extractRoot, resolvedConfig, cleanup, err := source.FetchAndExtract(sourceURL)
 				if err != nil {
 					common.StatusFail(opts.JSONOutput, "Deploy from source failed.")
 					return common.PrintFailure("deploy", err)
@@ -79,7 +80,7 @@ func newDeployCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newDeployFnCmd(opts *GlobalOptions) *cobra.Command {
+func newDeployFnCmd(opts *common.GlobalOptions) *cobra.Command {
 	var outDir string
 	var rollbackOnFailure, noRollbackOnFailure bool
 	cmd := &cobra.Command{
@@ -100,7 +101,7 @@ func newDeployFnCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newDeployFunctionCmd(opts *GlobalOptions) *cobra.Command {
+func newDeployFunctionCmd(opts *common.GlobalOptions) *cobra.Command {
 	var outDir string
 	var rollbackOnFailure, noRollbackOnFailure bool
 	cmd := &cobra.Command{
@@ -121,7 +122,7 @@ func newDeployFunctionCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newDeployFunctionStandaloneCmd(opts *GlobalOptions) *cobra.Command {
+func newDeployFunctionStandaloneCmd(opts *common.GlobalOptions) *cobra.Command {
 	var outDir string
 	var rollbackOnFailure, noRollbackOnFailure bool
 	cmd := &cobra.Command{
@@ -142,7 +143,7 @@ func newDeployFunctionStandaloneCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newDeployListCmd(opts *GlobalOptions) *cobra.Command {
+func newDeployListCmd(opts *common.GlobalOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List deployments (releases) for the service",

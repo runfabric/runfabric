@@ -13,10 +13,26 @@ Global flags (apply when supported): `-c`/`--config` (path to runfabric.yml), `-
 - **Daemon/UI**: Daemon, dashboard, and config API
 - **State/recovery**: State + Recovery and inspection
 
+## Binary profiles (`runfabric` + `runfabricd` + `runfabricw`)
+
+| Binary       | Profile         | Command surface |
+| ------------ | --------------- | --------------- |
+| `runfabric`  | Control-plane   | Full CLI: project/init, doctor/plan/build/package/deploy/remove, invoke/logs/traces/metrics, state, extensions, router, admin, workflow |
+| `runfabricd` | Daemon-plane    | Daemon-focused surface: run/start/stop/restart/status for long-running config API + dashboard process |
+| `runfabricw` | Workload-plane  | Workflow runtime only: `workflow run`, `workflow status`, `workflow cancel`, `workflow replay` |
+
+Notes:
+
+- `runfabricd` is the only binary that executes daemon lifecycle commands (`runfabricd`, `runfabricd start|stop|restart|status`).
+- `runfabricw` intentionally does **not** expose deploy/remove/state/admin/router commands.
+- If a control-plane command is run through `runfabricw`, the CLI returns an actionable error that points to `runfabric`.
+- Global flags still apply to workflow commands in both binaries (`-c`, `-s`, `--json`, etc.).
+
 ## CLI organization (developer note)
 
-- Commands are grouped by domain under `internal/cli/` (`lifecycle`, `invocation`, `project`, `configuration`, `extensions`, `infrastructure`, `admin`, `fabric`, `common`) and registered in root.
-- CLI command handlers call the internal app boundary (`internal/app`) for orchestration.
+- Commands are grouped by domain under `internal/cli/` (`lifecycle`, `invocation`, `project`, `configuration`, `extensions`, `infrastructure`, `admin`, `router`, `common`) and registered in root.
+- Binary roots are split by code boundary: control-plane root in `internal/cli`, daemon root in `internal/cli/daemon`, workload-plane root in `internal/cli/worker`.
+- CLI command handlers call canonical workflow orchestration packages under `platform/workflow/app`.
 - Preferred grouped namespaces: `runfabric auth ...`, `runfabric invoke ...`, `runfabric state ...`, `runfabric extensions ...`.
 
 ## Project setup and scaffolding
@@ -44,6 +60,10 @@ Generate interactive notes:
 - `runfabric workflow status -c <config> [--stage <name>] --run-id <id> [--json]` — Read a workflow run record from local run state.
 - `runfabric workflow cancel -c <config> [--stage <name>] --run-id <id> [--json]` — Mark a workflow run as cancel-requested.
 - `runfabric workflow replay -c <config> [--stage <name>] [--provider <key>] --run-id <id> --from-step <step-id> [--json]` — Replay a run from a specific step.
+
+Worker-binary equivalents:
+
+- `runfabricw workflow run|status|cancel|replay ...` — same workflow runtime operations through the workload-plane binary.
 
 Workflow runtime behavior notes:
 
@@ -122,11 +142,11 @@ Auth URL resolution order: `--auth-url` -> `RUNFABRIC_AUTH_URL` -> `.runfabricrc
 
 - `runfabric config-api [--address <addr>] [--port <number>] [--stage <name>] [--api-key <key>] [--rate-limit <n>]` — Run the Configuration API server (default `0.0.0.0:8765`). Endpoints: **POST /validate**, **POST /resolve** (body: YAML, query `stage=dev`), **POST /plan**, **POST /deploy**, **POST /remove**, **POST /releases** (body: YAML, query `stage=dev`). Optional `--api-key` requires `X-API-Key` header; `--rate-limit` limits requests per minute per client. For CI and dashboards.
 - `runfabric dashboard [--config <path>] [--stage <name>] [--port <number>]` — Start a local web UI (default port 3000) showing project name, stage selector, last deploy status, and **Plan**, **Deploy**, **Remove** action buttons that run against the current config and stage. Use `?stage=<name>` in the browser to switch stage.
-- `runfabric daemon [options]` — Long-running process: config API (POST /validate, /resolve, /plan, /deploy, /remove, /releases) and optionally dashboard at GET / when `--dashboard` is set (requires `--config`). Default port 8766. Runs in foreground.
-- `runfabric daemon start [options]` — Start the daemon in the background; PID in `.runfabric/daemon.pid`, logs in `.runfabric/daemon.log`. Run from project root.
-- `runfabric daemon stop` — Stop the daemon started with `daemon start` (reads PID from `.runfabric/daemon.pid`).
-- `runfabric daemon restart` — Stop the daemon (if running) and start it again in the background.
-- `runfabric daemon status` — Report whether the daemon is running (reads .runfabric/daemon.pid and checks process). See [DAEMON.md](DAEMON.md).
+- `runfabricd [options]` — Long-running process: config API (POST /validate, /resolve, /plan, /deploy, /remove, /releases) and optionally dashboard at GET / when `--dashboard` is set (requires `--config`). Default port 8766. Runs in foreground.
+- `runfabricd start [options]` — Start the daemon in the background; PID in `.runfabric/daemon.pid`, logs in `.runfabric/daemon.log`. Run from project root.
+- `runfabricd stop` — Stop the daemon started with `runfabricd start` (reads PID from `.runfabric/daemon.pid`).
+- `runfabricd restart` — Stop the daemon (if running) and start it again in the background.
+- `runfabricd status` — Report whether the daemon is running (reads .runfabric/daemon.pid and checks process). See [DAEMON.md](DAEMON.md).
 
 `invoke` and `logs` resolve project context from the current working directory.
 
@@ -140,8 +160,9 @@ Auth URL resolution order: `--auth-url` -> `RUNFABRIC_AUTH_URL` -> `.runfabricrc
 
 ## Runtime router
 
-- `runfabric router deploy [--rollback-on-failure|--no-rollback-on-failure] [--sync-cloudflare-dns] [--sync-cloudflare-dns-dry-run] [--allow-prod-dns-sync] [--enforce-dns-sync-stage-rollout] [--zone-id <id>] [--account-id <id>] [--json]` — Active-active deploy to all `fabric.targets` (provider keys from runfabric.yml). Saves endpoints to `.runfabric/fabric-<stage>.json`. Requires `fabric` and `providerOverrides` in config.
-  Optional post-deploy hook: `--sync-cloudflare-dns` runs the same Cloudflare reconciliation as `router dns-sync` immediately after a successful deploy. For `--stage prod`, `--allow-prod-dns-sync` is required as a safety gate.
+- `runfabric router deploy [--rollback-on-failure|--no-rollback-on-failure] [--sync-dns] [--sync-dns-dry-run] [--allow-prod-dns-sync] [--enforce-dns-sync-stage-rollout] [--zone-id <id>] [--account-id <id>] [--json]` — Active-active deploy to all `fabric.targets` (provider keys from runfabric.yml). Saves endpoints to `.runfabric/fabric-<stage>.json`. Requires `fabric` and `providerOverrides` in config.
+  Optional post-deploy hook: `--sync-dns` runs the same reconciliation flow as `router dns-sync` immediately after a successful deploy.
+  Config-driven policy mode: `extensions.router.autoApply` can trigger post-deploy DNS sync automatically (without `--sync-dns`) for selected stages.
   With `--enforce-dns-sync-stage-rollout`, staged policy checks are enforced:
   - `dev`: allowed by default
   - `staging`: requires `RUNFABRIC_DNS_SYNC_DEV_APPROVED=true`
@@ -150,14 +171,31 @@ Auth URL resolution order: `--auth-url` -> `RUNFABRIC_AUTH_URL` -> `.runfabricrc
 - `runfabric router endpoints [--json]` — List router endpoint URLs (e.g. for Route53 failover or latency routing).
 - `runfabric router routing [--json]` — Generate DNS/load-balancer routing hints from `fabric.routing` and deployed router endpoints.
   JSON output uses deterministic contract `runfabric.fabric.routing.v1` with top-level fields: `contract`, `service`, `stage`, `hostname`, `strategy`, `healthPath`, `ttl`, `endpoints`, plus optional `dns` and `loadBalancer` hints.
+- `runfabric router simulate [--requests <n>] [--down <provider>]... [--json]` — Local routing simulation with synthetic request distribution (no provider API calls). Useful for weighted steering and failure rehearsal.
+- `runfabric router chaos-verify [--requests <n>] [--json]` — Automated failover verification: runs one-endpoint-down and all-endpoints-down scenarios and reports pass/fail.
 - `runfabric router dns-sync [--dry-run] [--allow-prod-dns-sync] [--enforce-dns-sync-stage-rollout] [--zone-id <id>] [--account-id <id>] [--json]` — Apply the router routing contract to Cloudflare DNS and (optionally) Load Balancer idempotently.
-  Reads `CLOUDFLARE_API_TOKEN` from the environment (never a flag). Zone ID and Account ID may be passed via flags or `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_ACCOUNT_ID` env vars.
+  Reads router API token from `RUNFABRIC_ROUTER_API_TOKEN` (preferred) or `CLOUDFLARE_API_TOKEN` (fallback). Additional sources: `extensions.router.credentials.apiTokenSecretRef` (resolved via top-level `secrets`) and file-backed secret envs (`RUNFABRIC_ROUTER_API_TOKEN_FILE` / `CLOUDFLARE_API_TOKEN_FILE`). Zone ID and Account ID may be passed via flags or env (`RUNFABRIC_ROUTER_ZONE_ID` / `RUNFABRIC_ROUTER_ACCOUNT_ID`, configurable via `extensions.router.credentials.*Env`).
   - **DNS-only mode** (no Account ID): creates/updates a CNAME record at `hostname` pointing to the primary endpoint.
   - **Full LB mode** (Account ID present): also reconciles an HTTPS health-check monitor, an LB pool (origins = all router endpoints), and a zone-level load balancer with the configured steering policy (`dynamic_latency` | `off` | `random`).
+  - Optional policy-as-code preflight (`extensions.router.mutationPolicy`) can require explicit approval for risky or high-volume mutations before apply.
+  - Optional short-lived credential attestation policy (`extensions.router.credentialPolicy`) can require attestation and token TTL/remaining lifetime checks before apply.
   - Drift detection: resources are only mutated when content, origin list, steering policy, or TTL differs from the live state. No deletions without an explicit flag (not yet implemented).
   - Use `--dry-run` to preview all planned changes before applying.
+- `runfabric router dns-shift --provider <name> [--percent <n>] [--dry-run] [--allow-prod-dns-sync] [--enforce-dns-sync-stage-rollout] [--zone-id <id>] [--account-id <id>] [--json]` — Progressive canary traffic shift. Reweights router endpoints (1-99% target) and applies through DNS/LB sync.
+- `runfabric router dns-reconcile [--apply] [--allow-prod-dns-sync] [--enforce-dns-sync-stage-rollout] [--zone-id <id>] [--account-id <id>] [--json]` — Drift-focused UX for DNS sync.
+  - Default mode (`--apply` omitted): dry-run drift report with create/update/no-op summary.
+  - Includes resource-level breakdown, delete-candidate preview for managed duplicates, and rolling trend summary from sync history snapshots.
+  - Apply mode (`--apply`): reconciles desired routing to provider state.
+- `runfabric router dns-restore [--snapshot-id <id>|--latest] [--dry-run] [--allow-prod-dns-sync] [--enforce-dns-sync-stage-rollout] [--zone-id <id>] [--account-id <id>] [--json]` — Restore routing from saved sync snapshots.
+  - Snapshots are persisted under `.runfabric/router-sync-<stage>.json`.
+  - Snapshot records include operation ID, before/after actions, summaries, and structured events for audit/replay.
+  - Default restore target is previous applied snapshot (last-known-good before latest apply).
+- `runfabric router dns-history [--window <n>] [--json]` — Show router sync history analytics and trend summary from `.runfabric/router-sync-<stage>.json`.
 
 Compatibility: `runfabric fabric ...` remains available as an alias to `runfabric router ...`.
+Router backend selection: `extensions.routerPlugin` defaults to `cloudflare`. Built-ins also include `route53`, `ns1`, and `azure-traffic-manager` provider API reconcilers.
+CI rollout template: see [ROUTER_CI_TEMPLATE.md](ROUTER_CI_TEMPLATE.md) for a `dev -> staging -> prod` pipeline baseline.
+Operator runbook: [ROUTER_OPERATIONS_WORKFLOW.md](ROUTER_OPERATIONS_WORKFLOW.md).
 
 ## Compose
 
@@ -191,5 +229,10 @@ Supported backend kinds for state commands: `local`, `postgres`, `sqlite`, `s3`,
   - env fallback: `RUNFABRIC_ROLLBACK_ON_FAILURE=1`
 - Deploy progress/state logs are shown in standard output; use `--json` for machine-readable output without progress logs.
 - Remove recovery notes: `.runfabric/recovery/remove/*.json`
+
+Troubleshooting:
+
+- If you see `command "<name>" is not available in runfabricw`, switch to `runfabric` for control-plane operations (deploy/remove/state/router/admin).
+- If you see `unknown command "daemon" for "runfabric"`, use `runfabricd` for daemon operations.
 
 **See also:** [RUNFABRIC_YML_REFERENCE.md](RUNFABRIC_YML_REFERENCE.md) for config (including `resources` and per-function `resources: [key, ...]` for DATABASE_URL/REDIS_URL binding, `deploy.rollbackOnFailure`, `deploy.healthCheck`, `deploy.scaling`, `providerOverrides`, `layers`, and `state`). [TESTING_GUIDE.md](TESTING_GUIDE.md) for call-local, invoke, and CI. [MCP.md](MCP.md) for the MCP server (agents/IDEs).

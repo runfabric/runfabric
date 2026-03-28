@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newExtensionCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "extension",
 		Short: "List or inspect RunFabric plugins (Phase 15)",
@@ -33,7 +33,7 @@ func newExtensionCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newExtensionInstallCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionInstallCmd(opts *common.GlobalOptions) *cobra.Command {
 	var kind string
 	var version string
 	var source string
@@ -117,7 +117,7 @@ func newExtensionInstallCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newExtensionUninstallCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionUninstallCmd(opts *common.GlobalOptions) *cobra.Command {
 	var kind string
 	var version string
 	cmd := &cobra.Command{
@@ -152,7 +152,7 @@ func newExtensionUninstallCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newExtensionUpgradeCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionUpgradeCmd(opts *common.GlobalOptions) *cobra.Command {
 	var kind string
 	var source string
 	var registry string
@@ -229,7 +229,7 @@ func newExtensionUpgradeCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newExtensionListCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionListCmd(opts *common.GlobalOptions) *cobra.Command {
 	var kind string
 	var showInvalid bool
 	var preferExternal bool
@@ -306,7 +306,7 @@ func newExtensionListCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newExtensionInfoCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionInfoCmd(opts *common.GlobalOptions) *cobra.Command {
 	var version string
 	var preferExternal bool
 	cmd := &cobra.Command{
@@ -360,7 +360,7 @@ func newExtensionInfoCmd(opts *GlobalOptions) *cobra.Command {
 	return cmd
 }
 
-func newExtensionSearchCmd(opts *GlobalOptions) *cobra.Command {
+func newExtensionSearchCmd(opts *common.GlobalOptions) *cobra.Command {
 	var preferExternal bool
 	cmd := &cobra.Command{
 		Use:   "search [query]",

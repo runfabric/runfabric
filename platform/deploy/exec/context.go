@@ -5,14 +5,13 @@ import (
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	planner "github.com/runfabric/runfabric/platform/planner/engine"
-	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 type Context struct {
 	Root      string
 	Config    *config.Config
 	Stage     string
-	Artifacts map[string]sdkprovider.Artifact
+	Artifacts map[string]providers.Artifact
 	Desired   *planner.DesiredState
 	Actual    *planner.ActualState
 	Receipt   *state.Receipt
