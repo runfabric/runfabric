@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
@@ -37,7 +38,7 @@ func TestExternalProviderAdapter_Doctor(t *testing.T) {
 
 func buildStubPlugin(t *testing.T) string {
 	t.Helper()
-	src := filepath.Join("testdata", "stubplugin")
+	src := filepath.Join(testPackageDir(t), "testdata", "stubplugin")
 	out, err := filepath.Abs(filepath.Join(src, "stubplugin.testbin"))
 	if err != nil {
 		t.Fatalf("resolve plugin output path: %v", err)
@@ -52,4 +53,13 @@ func buildStubPlugin(t *testing.T) string {
 	}
 	_ = os.Chmod(out, 0o755)
 	return out
+}
+
+func testPackageDir(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test package dir: runtime caller unavailable")
+	}
+	return filepath.Dir(file)
 }

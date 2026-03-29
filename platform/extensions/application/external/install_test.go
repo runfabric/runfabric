@@ -108,7 +108,7 @@ func TestInstallAndUninstall_FromLocalTarGz(t *testing.T) {
 	buildDir := t.TempDir()
 	exe := filepath.Join(buildDir, "stubplugin")
 	cmd := exec.Command("go", "build", "-o", exe, "./testdata/stubplugin")
-	cmd.Dir = "." // engine/internal/extensions/external
+	cmd.Dir = testPackageDir(t)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("build stubplugin: %v\n%s", err, string(out))
