@@ -1,0 +1,16 @@
+apiVersion: runfabric.io/plugin/v1
+kind: secret-manager
+id: vault-secret-manager
+name: Vault Secret Manager
+description: Resolves vault:// secret references through HashiCorp Vault HTTP API
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/vault-secret-manager
+capabilities:
+  - resolve-secret
+  - scheme:vault
+permissions:
+  fs: false
+  env: true
+  network: true
+  cloud: true

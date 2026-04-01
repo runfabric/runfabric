@@ -52,10 +52,21 @@ For production, avoid committing credentials. Store them in your cloud’s secre
 | **GCP**   | [Secret Manager](https://cloud.google.com/secret-manager/docs)                                                                                                                             | Use `gcloud secrets versions access latest --secret=runfabric-gcp-key` or workload identity to inject into CI.                                           |
 | **Azure** | [Key Vault](https://azure.microsoft.com/products/key-vault)                                                                                                                                | Use `az keyvault secret show` or managed identity in CI to populate `AZURE_CLIENT_SECRET` and related env vars.                                          |
 
-In CI (e.g. GitHub Actions), use the provider’s “secret” or “vault” integration to set env vars before running `runfabric doctor`, `runfabric deploy`, etc. The RunFabric engine reads credentials from environment variables and now resolves `${secret:KEY}` in `runfabric.yml` via:
+In CI (e.g. GitHub Actions), use the provider’s “secret” or “vault” integration to set env vars before running `runfabric doctor`, `runfabric deploy`, etc. The RunFabric engine reads credentials from environment variables and resolves `${secret:KEY}` in `runfabric.yml` via:
 
 1. Top-level `secrets.KEY` value (including `secret://OTHER_KEY` indirection), then
 2. Environment variable `KEY`.
+
+For secret manager references (`aws-sm://...`, `gcp-sm://...`, `azure-kv://...`, `vault://...`), configure `extensions.secretManagerPlugin` in `runfabric.yml` and install a `kind=secret-manager` extension (or enable `extensions.autoInstallExtensions`).
+
+Built-in extension implementations in this repo:
+
+- `extensions/secretmanagers/aws` (`id: aws-secret-manager`) for `aws-sm://...`
+- `extensions/secretmanagers/gcp` (`id: gcp-secret-manager`) for `gcp-sm://...`
+- `extensions/secretmanagers/azure` (`id: azure-key-vault-secret-manager`) for `azure-kv://...`
+- `extensions/secretmanagers/vault` (`id: vault-secret-manager`) for `vault://...`
+
+Production stages (`prod`, `production`, `live`) reject static literal values in `secrets.*`.
 
 ## Deploy Mode Controls
 

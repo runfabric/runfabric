@@ -50,8 +50,10 @@ func TestImportGraphConstraints(t *testing.T) {
 
 	sort.Strings(platformExtensionImporters)
 	platformExtensionImporters = compact(platformExtensionImporters)
-	if len(platformExtensionImporters) != 1 || platformExtensionImporters[0] != "platform/extensions/providerpolicy/providers.go" {
-		violations = append(violations, "expected exactly one platform/extensions root importer: platform/extensions/providerpolicy/providers.go; found "+strings.Join(platformExtensionImporters, ", "))
+	for _, imp := range platformExtensionImporters {
+		if !strings.HasPrefix(imp, "platform/extensions/providerpolicy/") {
+			violations = append(violations, "expected root extension importers to be in platform/extensions/providerpolicy/; found "+imp)
+		}
 	}
 
 	if len(violations) > 0 {
@@ -89,6 +91,30 @@ func TestGoldenImportRulePatterns(t *testing.T) {
 			file:       "internal/cli/router/router.go",
 			importPath: modulePrefix + "plugin-sdk/go/router",
 			allowed:    false,
+		},
+		{
+			name:       "cli must not import workflow lifecycle directly",
+			file:       "internal/cli/extensions/plugin.go",
+			importPath: modulePrefix + "platform/workflow/lifecycle",
+			allowed:    false,
+		},
+		{
+			name:       "cli must not import workflow recovery directly",
+			file:       "internal/cli/lifecycle/recover.go",
+			importPath: modulePrefix + "platform/workflow/recovery",
+			allowed:    false,
+		},
+		{
+			name:       "cli must not import deploy source directly",
+			file:       "internal/cli/lifecycle/deploy.go",
+			importPath: modulePrefix + "platform/deploy/source",
+			allowed:    false,
+		},
+		{
+			name:       "cli may import workflow app boundary",
+			file:       "internal/cli/lifecycle/deploy.go",
+			importPath: modulePrefix + "platform/workflow/app",
+			allowed:    true,
 		},
 		{
 			name:       "plugin sdk cannot import platform",
@@ -130,6 +156,12 @@ func TestGoldenImportRulePatterns(t *testing.T) {
 			name:       "providerpolicy is the allowed platform importer",
 			file:       "platform/extensions/providerpolicy/providers.go",
 			importPath: modulePrefix + "extensions/routers",
+			allowed:    true,
+		},
+		{
+			name:       "providerpolicy builtin files may import root extensions",
+			file:       "platform/extensions/providerpolicy/builtin_states.go",
+			importPath: modulePrefix + "extensions/states/dynamodb",
 			allowed:    true,
 		},
 		{
@@ -191,6 +223,21 @@ func TestOwnershipADRAndInvariants(t *testing.T) {
 		path := filepath.Join(root, rel)
 		if _, err := os.Stat(path); err == nil {
 			t.Fatalf("duplicate internal extension shim remains: %s", path)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+	}
+
+	for _, rel := range []string{
+		"platform/core/planner/engine",
+		"platform/core/state/locking",
+		"platform/runtime/build",
+		"platform/deploy/runtime",
+		"platform/deploy/testinghooks",
+	} {
+		path := filepath.Join(root, rel)
+		if _, err := os.Stat(path); err == nil {
+			t.Fatalf("duplicate package mirror remains: %s", path)
 		} else if !os.IsNotExist(err) {
 			t.Fatalf("stat %s: %v", path, err)
 		}
@@ -341,6 +388,18 @@ func importAllowed(relPath, importPath string) (bool, string) {
 		return false, "Rule 2h: internal must not import plugin-sdk directly"
 	}
 
+	if strings.HasPrefix(relPath, "internal/cli/") {
+		if importPath == modulePrefix+"platform/workflow/lifecycle" {
+			return false, "Rule 3a: internal/cli must route lifecycle operations via platform/workflow/app"
+		}
+		if importPath == modulePrefix+"platform/workflow/recovery" {
+			return false, "Rule 3a: internal/cli must route recovery operations via platform/workflow/app"
+		}
+		if importPath == modulePrefix+"platform/deploy/source" {
+			return false, "Rule 3a: internal/cli must route source deploy operations via platform/workflow/app"
+		}
+	}
+
 	if strings.HasPrefix(relPath, "packages/go/plugin-sdk/") && strings.HasPrefix(importPath, modulePrefix+"platform/") {
 		return false, "Rule 2c: plugin-sdk must not import platform directly"
 	}
@@ -369,8 +428,8 @@ func importAllowed(relPath, importPath string) (bool, string) {
 		return false, "Rule 2i: platform must not import plugin-sdk directly"
 	}
 
-	if strings.HasPrefix(relPath, "platform/extensions/") && relPath != "platform/extensions/providerpolicy/providers.go" && strings.HasPrefix(importPath, modulePrefix+"extensions/") {
-		return false, "Rule 2b: only providerpolicy/providers.go may import root extensions"
+	if strings.HasPrefix(relPath, "platform/extensions/") && !strings.HasPrefix(relPath, "platform/extensions/providerpolicy/") && strings.HasPrefix(importPath, modulePrefix+"extensions/") {
+		return false, "Rule 2b: only providerpolicy may import root extensions"
 	}
 
 	return true, ""

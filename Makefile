@@ -2,7 +2,7 @@ APP=runfabric
 DAEMON_APP=runfabricd
 WORKER_APP=runfabricw
 
-.PHONY: all help build build-daemon build-worker build-platform build-daemon-platform build-worker-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx test test-integration release-check check-syntax check-boundary check-architecture check-binary-surfaces release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down ghcr-login registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
+.PHONY: all help build build-daemon build-worker build-platform build-daemon-platform build-worker-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx build-provider-plugins install-provider-plugins test test-integration release-check check-syntax check-boundary check-architecture check-binary-surfaces release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down ghcr-login registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
 
 # UPX: compress binaries for smaller distribution. Override with e.g. make build-upx UPX="upx --best"
 # On macOS, UPX requires --force-macos; compressed binaries may need re-signing for notarization.
@@ -37,6 +37,8 @@ help:
 	@echo "  make build-upx    build then compress bin/runfabric with UPX"
 	@echo "  make build-platform-upx   build platform binary then compress with UPX"
 	@echo "  make build-all-platforms-upx  build all platforms then compress each with UPX"
+	@echo "  make build-provider-plugins  build external provider plugin binaries into bin/plugins/"
+	@echo "  make install-provider-plugins  install provider plugin binaries + plugin.yaml into ~/.runfabric/plugins/provider/<id>/"
 	@echo "  make test         run tests"
 	@echo "  make coverage     run tests with coverage report (engine)"
 	@echo "  make coverage-gate [COVERAGE_THRESHOLD=N]  run coverage; fail if total below N%% (omit to report only)"
@@ -143,6 +145,40 @@ build-all-platforms-upx: build-all-platforms
 		$$opts "$$f" && echo "Compressed $$f"; \
 	done
 	@echo "Compressed all platform binaries in bin/"
+
+# Build all built-in providers as external plugin binaries.
+build-provider-plugins:
+	@mkdir -p bin/plugins
+	@set -e; \
+	for p in aws gcp azure alibaba cloudflare digitalocean fly ibm kubernetes netlify vercel; do \
+		echo "Building provider plugin: $$p"; \
+		go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/plugins/$$p-plugin ./extensions/providers/$$p/cmd; \
+	done
+
+# Install provider plugins and manifests to local external plugin directory.
+# This allows switching any provider to external-only mode by editing:
+#   platform/extensions/providerpolicy/external_only.go
+install-provider-plugins: build-provider-plugins
+	@set -e; \
+	for pair in \
+		"aws aws-lambda" \
+		"gcp gcp-functions" \
+		"azure azure-functions" \
+		"alibaba alibaba-fc" \
+		"cloudflare cloudflare-workers" \
+		"digitalocean digitalocean-functions" \
+		"fly fly-machines" \
+		"ibm ibm-openwhisk" \
+		"kubernetes kubernetes" \
+		"netlify netlify" \
+		"vercel vercel"; do \
+		set -- $$pair; p=$$1; id=$$2; \
+		dir="$$HOME/.runfabric/plugins/provider/$$id"; \
+		mkdir -p "$$dir/bin"; \
+		cp "bin/plugins/$$p-plugin" "$$dir/bin/$$p-plugin"; \
+		cp "extensions/providers/$$p/plugin.yaml" "$$dir/plugin.yaml"; \
+		echo "Installed $$id -> $$dir"; \
+	done
 
 # Enforce extension boundary rules:
 #   Rule 1: extensions/ must not import github.com/runfabric/runfabric/internal/ or /platform/

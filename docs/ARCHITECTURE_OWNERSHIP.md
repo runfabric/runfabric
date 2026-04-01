@@ -12,17 +12,19 @@ Shared contracts that are consumed across platform and extension boundaries must
 
 ## Canonical ownership table
 
-| Domain | Canonical ownership | Notes |
-| --- | --- | --- |
-| `provider` | `internal/provider/contracts` and `platform/extensions/providerpolicy` | `providerpolicy` is the single platform-side root `extensions/...` import entrypoint. |
-| `router` | `extensions/routers` for plugin implementation, `platform/workflow/app` for app DTO mapping | No internal bridge package owns router contracts. |
-| `runtime` | `extensions/runtimes` | Platform consumes runtime registries through `platform/extensions/providerpolicy` and `platform/extensions/registry/resolution`. |
-| `simulator` | `extensions/simulators` | Platform consumes simulator registries through `platform/extensions/providerpolicy` and `platform/extensions/registry/resolution`. |
+| Domain              | Canonical ownership                                                                         | Notes                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`          | `internal/provider/contracts` and `platform/extensions/providerpolicy`                      | `providerpolicy` is the single platform-side root `extensions/...` import entrypoint.                                              |
+| `router`            | `extensions/routers` for plugin implementation, `platform/workflow/app` for app DTO mapping | No internal bridge package owns router contracts.                                                                                  |
+| `runtime`           | `extensions/runtimes`                                                                       | Platform consumes runtime registries through `platform/extensions/providerpolicy` and `platform/extensions/registry/resolution`.   |
+| `simulator`         | `extensions/simulators`                                                                     | Platform consumes simulator registries through `platform/extensions/providerpolicy` and `platform/extensions/registry/resolution`. |
+| `cli-orchestration` | `platform/workflow/app`                                                                     | `internal/cli/...` command packages must call app boundary functions, not lifecycle/recovery/source internals directly.            |
 
 ## Allowed dependency directions
 
 - `platform/...` -> `internal/...`
 - `platform/extensions/providerpolicy/providers.go` -> `extensions/...`
+- `platform/extensions/providerpolicy/builtin_*.go` -> `extensions/...`
 - `platform/extensions/registry/resolution/...` -> `platform/extensions/providerpolicy`
 - `extensions/...` -> `packages/go/plugin-sdk/...`
 - `extensions/...` -> Go standard library or external vendor SDKs
@@ -32,14 +34,17 @@ Shared contracts that are consumed across platform and extension boundaries must
 - `extensions/...` -> `internal/...`
 - `extensions/...` -> `platform/...`
 - `internal/...` -> `extensions/...`
-- more than one non-test file under `platform/extensions/` importing root `extensions/...`
+- `internal/cli/...` -> `platform/workflow/lifecycle`
+- `internal/cli/...` -> `platform/workflow/recovery`
+- `internal/cli/...` -> `platform/deploy/source`
+- more than one non-test file outside `platform/extensions/providerpolicy/` importing root `extensions/...`
 - alias-only re-export layers under `internal/extensions/...`
 - bridge or delegator packages that only forward shared types or behavior between `internal` and `extensions`
 
 ## Scope lock
 
 - Root `extensions/...` packages own built-in plugin implementations for `router`, `runtime`, and `simulator` domains.
-- `platform/extensions/providerpolicy/providers.go` is the only allowed non-test importer of root `extensions/...` from inside `platform/extensions`.
+- `platform/extensions/providerpolicy/` is the only allowed non-test importer of root `extensions/...` from inside `platform/extensions`.
 - `platform/workflow/app` owns app-facing DTO translation and must not push those DTOs back into extension implementation packages.
 - `internal/extensions/...` is not a canonical shared-contract layer and must not be used to reintroduce bridge packages.
 

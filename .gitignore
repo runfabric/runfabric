@@ -23,6 +23,8 @@ go.work
 *.tar.zstd.zstd.xz
 go.work.sum
 stubplugin*
+!**/testdata/stubplugin/
+!**/testdata/stubplugin/**
 # Dependency directories (rare with Go modules but sometimes used)
 vendor/
 

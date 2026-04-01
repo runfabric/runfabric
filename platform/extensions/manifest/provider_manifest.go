@@ -9,14 +9,16 @@ import (
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )
 
-// PluginKind is the type of a RunFabric plugin (provider, runtime, simulator, or router).
+// PluginKind is the type of a RunFabric plugin (provider, runtime, simulator, router, secret-manager, or state).
 type PluginKind string
 
 const (
-	KindProvider  PluginKind = "provider"
-	KindRuntime   PluginKind = "runtime"
-	KindSimulator PluginKind = "simulator"
-	KindRouter    PluginKind = "router"
+	KindProvider      PluginKind = "provider"
+	KindRuntime       PluginKind = "runtime"
+	KindSimulator     PluginKind = "simulator"
+	KindRouter        PluginKind = "router"
+	KindSecretManager PluginKind = "secret-manager"
+	KindState         PluginKind = "state"
 )
 
 // NormalizePluginKind normalizes plugin kind input to singular names.
@@ -30,15 +32,19 @@ func NormalizePluginKind(raw string) PluginKind {
 		return KindSimulator
 	case "router":
 		return KindRouter
+	case "secret-manager":
+		return KindSecretManager
+	case "state":
+		return KindState
 	default:
 		return PluginKind(strings.ToLower(strings.TrimSpace(raw)))
 	}
 }
 
-// IsSupportedPluginKind reports whether kind is one of provider/runtime/simulator/router.
+// IsSupportedPluginKind reports whether kind is one of provider/runtime/simulator/router/secret-manager/state.
 func IsSupportedPluginKind(kind PluginKind) bool {
 	switch kind {
-	case KindProvider, KindRuntime, KindSimulator, KindRouter:
+	case KindProvider, KindRuntime, KindSimulator, KindRouter, KindSecretManager, KindState:
 		return true
 	default:
 		return false
@@ -53,7 +59,7 @@ type Permissions struct {
 	Cloud   bool `json:"cloud,omitempty"`
 }
 
-// PluginManifest describes a RunFabric Plugin (provider, runtime, simulator, router) for list/info/search.
+// PluginManifest describes a RunFabric Plugin (provider, runtime, simulator, router, secret-manager, state) for list/info/search.
 type PluginManifest struct {
 	ID                string      `json:"id"`
 	Kind              PluginKind  `json:"kind"`
@@ -134,7 +140,7 @@ func (r *PluginRegistry) Get(id string) *PluginManifest {
 	return r.plugins[id]
 }
 
-// List returns all plugins, optionally filtered by kind, sorted by kind (provider, runtime, simulator, router) then by ID.
+// List returns all plugins, optionally filtered by kind, sorted by kind (provider, runtime, simulator, router, secret-manager, state) then by ID.
 func (r *PluginRegistry) List(kind PluginKind) []*PluginManifest {
 	r.mu.RLock()
 	list := make([]*PluginManifest, 0, len(r.plugins))
@@ -164,8 +170,12 @@ func kindOrder(k PluginKind) int {
 		return 2
 	case KindRouter:
 		return 3
-	default:
+	case KindSecretManager:
 		return 4
+	case KindState:
+		return 5
+	default:
+		return 6
 	}
 }
 

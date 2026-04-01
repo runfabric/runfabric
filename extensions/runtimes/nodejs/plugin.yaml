@@ -1,0 +1,18 @@
+apiVersion: runfabric.io/plugin/v1
+kind: runtime
+id: nodejs
+name: Node.js Runtime
+description: External runtime plugin for Node.js build and invoke
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/nodejs-runtime
+capabilities:
+  - build
+  - invoke
+supportsRuntime:
+  - nodejs
+permissions:
+  fs: true
+  env: true
+  network: false
+  cloud: false

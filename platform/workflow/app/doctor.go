@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
 	"github.com/runfabric/runfabric/platform/core/policy/secrets"
 	"github.com/runfabric/runfabric/platform/observability/diagnostics"
 )
@@ -37,21 +38,39 @@ func BackendDoctor(configPath, stage string) (any, error) {
 	}
 
 	if d, ok := ctx.Backends.Locks.(interface {
-		Doctor(service, stage string) diagnostics.CheckResult
+		Doctor(service, stage string) statetypes.CheckResult
 	}); ok {
-		report.Checks = append(report.Checks, d.Doctor(ctx.Config.Service, ctx.Stage))
+		r := d.Doctor(ctx.Config.Service, ctx.Stage)
+		report.Checks = append(report.Checks, diagnostics.CheckResult{
+			Name:    r.Name,
+			OK:      r.OK,
+			Backend: r.Backend,
+			Message: r.Message,
+		})
 	}
 
 	if d, ok := ctx.Backends.Journals.(interface {
-		Doctor(service, stage string) diagnostics.CheckResult
+		Doctor(service, stage string) statetypes.CheckResult
 	}); ok {
-		report.Checks = append(report.Checks, d.Doctor(ctx.Config.Service, ctx.Stage))
+		r := d.Doctor(ctx.Config.Service, ctx.Stage)
+		report.Checks = append(report.Checks, diagnostics.CheckResult{
+			Name:    r.Name,
+			OK:      r.OK,
+			Backend: r.Backend,
+			Message: r.Message,
+		})
 	}
 
 	if d, ok := ctx.Backends.Receipts.(interface {
-		Doctor(stage string) diagnostics.CheckResult
+		Doctor(stage string) statetypes.CheckResult
 	}); ok {
-		report.Checks = append(report.Checks, d.Doctor(ctx.Stage))
+		r := d.Doctor(ctx.Stage)
+		report.Checks = append(report.Checks, diagnostics.CheckResult{
+			Name:    r.Name,
+			OK:      r.OK,
+			Backend: r.Backend,
+			Message: r.Message,
+		})
 	}
 
 	return report, nil

@@ -9,10 +9,10 @@ import (
 
 func TestGenerateRouterRoutingConfig_DeterministicContractV1(t *testing.T) {
 	healthy := true
-	fabricState := &state.FabricState{
+	fabricState := &state.RunFabricState{
 		Service: "svc",
 		Stage:   "dev",
-		Endpoints: []state.FabricEndpoint{
+		Endpoints: []state.RunFabricEndpoint{
 			{Provider: "z-provider", URL: "https://z.example.com", Healthy: &healthy},
 			{Provider: "a-provider", URL: "https://a.example.com", Healthy: &healthy},
 		},

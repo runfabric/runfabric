@@ -80,6 +80,12 @@ Explicit state backend selection:
 runfabric init --dir ./my-api --provider aws-lambda --state-backend s3
 ```
 
+Optional secret manager plugin selection:
+
+```bash
+runfabric init --dir ./my-api --provider aws-lambda --secret-manager vault-secret-manager
+```
+
 `init` now generates `.env.example` with provider + selected state backend variables.
 For object-storage backends (`s3`, `gcs`, `azblob`), `init` also generates a project-scoped random state prefix to avoid collisions.
 Copy and load it before deploy:
@@ -182,6 +188,7 @@ Rollback precedence: CLI `--rollback-on-failure` / `--no-rollback-on-failure` �
 
 ## Documentation
 
+- https://runfabric.github.io/runfabric/ — hosted documentation site
 - `docs/QUICKSTART.md` — get started
 - `docs/COMMAND_REFERENCE.md` — CLI commands and flags
 - `docs/RUNFABRIC_YML_REFERENCE.md` — runfabric.yml config

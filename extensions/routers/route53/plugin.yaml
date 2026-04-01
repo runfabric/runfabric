@@ -1,0 +1,16 @@
+apiVersion: runfabric.io/plugin/v1
+kind: router
+id: route53
+name: Route53 Router
+description: External router plugin for Route53 DNS sync
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/route53-router
+capabilities:
+  - sync
+permissions:
+  fs: false
+  env: true
+  network: true
+  cloud: true
+

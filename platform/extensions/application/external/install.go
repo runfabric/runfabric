@@ -20,7 +20,7 @@ import (
 
 type InstallOptions struct {
 	ID          string
-	Kind        manifests.PluginKind // provider|runtime|simulator|router; required for source installs
+	Kind        manifests.PluginKind // provider|runtime|simulator|router|secret-manager|state; required for source installs
 	Version     string               // optional: expected version (best-effort)
 	Source      string               // URL or local file path
 	RegistryURL string               // optional; used when Source is empty
@@ -52,7 +52,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 		)
 	}
 	if !manifests.IsSupportedPluginKind(opts.Kind) {
-		return nil, fmt.Errorf("install: kind must be provider, runtime, simulator, or router")
+		return nil, fmt.Errorf("install: kind must be provider, runtime, simulator, router, secret-manager, or state")
 	}
 
 	home, err := HomeDir()
@@ -158,7 +158,14 @@ func Uninstall(opts UninstallOptions) error {
 	if err != nil {
 		return err
 	}
-	kinds := []manifests.PluginKind{manifests.KindProvider, manifests.KindRuntime, manifests.KindSimulator, manifests.KindRouter}
+	kinds := []manifests.PluginKind{
+		manifests.KindProvider,
+		manifests.KindRuntime,
+		manifests.KindSimulator,
+		manifests.KindRouter,
+		manifests.KindSecretManager,
+		manifests.KindState,
+	}
 	if opts.Kind != "" {
 		kinds = []manifests.PluginKind{opts.Kind}
 	}

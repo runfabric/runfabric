@@ -1,0 +1,95 @@
+site_name: RunFabric Docs
+site_description: Comprehensive documentation for RunFabric, a multi-provider serverless framework with unified config and CLI workflow.
+site_author: RunFabric Team
+site_url: https://runfabric.dev/docs/
+
+repo_name: runfabric
+repo_url: https://github.com/runfabric/runfabric
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.action.edit
+    - content.action.view
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - tables
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.details
+  - pymdownx.tabbed
+  - pymdownx.snippets
+
+nav:
+  - Home: README.md
+
+  - 🚀 Getting Started:
+      - Quick Start: QUICKSTART.md
+      - Provider Setup: PROVIDER_SETUP.md
+      - Credentials Configuration: CREDENTIALS.md
+
+  - 🏗 Core Concepts:
+      - Architecture: ARCHITECTURE.md
+      - Architecture Ownership: ARCHITECTURE_OWNERSHIP.md
+      - Architecture Rules: ARCHITECTURE_RULES_KB.md
+      - File Structure: FILE_STRUCTURE.md
+
+  - ⚙️ Configuration & Reference:
+      - RunFabric YAML Reference: RUNFABRIC_YML_REFERENCE.md
+      - Command Reference: COMMAND_REFERENCE.md
+      - Provider Reference: PROVIDER_REFERENCE.md
+
+  - ☁️ Deployment:
+      - Deploy Providers: DEPLOY_PROVIDERS.md
+      - Build & Release: BUILD_AND_RELEASE.md
+      - Packaging: PACKAGING.md
+      - Daemon: DAEMON.md
+
+  - 🔧 Development:
+      - Plugin API: PLUGIN_API.md
+      - Plugin Authoring: ROUTER_PLUGIN_AUTHORING.md
+      - SDK Frameworks: SDK_FRAMEWORKS.md
+      - Testing Guide: TESTING_GUIDE.md
+      - MCP Integration: MCP.md
+
+  - 🎯 Advanced Topics:
+      - State Backends: STATE_BACKENDS.md
+      - Orchestration: ORCHESTRATION.md
+      - Migration Guide: MIGRATION.md
+      - Telemetry: TELEMETRY.md
+      - Handler Scenarios: HANDLER_SCENARIOS.md
+
+  - 📊 Analytics & Operations:
+      - Provider Optimizations: PROVIDER_OPTIMIZATIONS.md
+      - Examples Analysis: EXAMPLES_ANALYSIS.md
+      - Examples Matrix: EXAMPLES_MATRIX.md
+      - Example Validation: EXAMPLE_VALIDATION.md
+
+  - 🧾 Design Decisions (ADRs):
+      - Binary Profiles ADR: BINARY_PROFILES_ADR.md
+      - Router Extension ADR: ROUTER_EXTENSION_ADR.md
+
+  - 📚 Reference & Troubleshooting:
+      - Troubleshooting: TROUBLESHOOTING.md
+      - Addons: ADDONS.md
+      - Roadmap: ROADMAP.md

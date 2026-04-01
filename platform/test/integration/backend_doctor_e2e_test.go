@@ -12,18 +12,19 @@ import (
 func TestBackendDoctorE2ELocal(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "runfabric.yml")
+	providerName, runtimeName := testProviderNameAndRuntime(t)
 
 	cfg := "service: integration-svc\n" +
 		"provider:\n" +
-		"  name: aws-lambda\n" +
-		"  runtime: nodejs20.x\n" +
+		"  name: " + providerName + "\n" +
+		"  runtime: " + runtimeName + "\n" +
 		"  region: ap-southeast-1\n" +
 		"backend:\n" +
 		"  kind: local\n" +
 		"functions:\n" +
 		"  - name: hello\n" +
 		"    entry: src/handler.hello\n" +
-		"    runtime: nodejs20.x\n"
+		"    runtime: " + runtimeName + "\n"
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}

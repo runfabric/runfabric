@@ -1,0 +1,9 @@
+{
+  "name": "@runfabric/addon-sentry-local",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local RunFabric Sentry addon scaffold",
+  "main": "index.js",
+  "type": "commonjs",
+  "license": "MIT"
+}

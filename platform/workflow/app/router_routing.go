@@ -76,7 +76,7 @@ type HealthCheckConfiguration struct {
 }
 
 // GenerateRouterRoutingConfig generates routing configuration based on fabric state and routing strategy.
-func GenerateRouterRoutingConfig(fabricState *state.FabricState, cfg *config.Config, stage string) *RouterRoutingConfig {
+func GenerateRouterRoutingConfig(fabricState *state.RunFabricState, cfg *config.Config, stage string) *RouterRoutingConfig {
 	if fabricState == nil || cfg == nil || cfg.Fabric == nil {
 		return nil
 	}

@@ -25,7 +25,7 @@ If a provider is not registered (built-in or installed external plugin), command
 
 ## Providers wired to deploy API
 
-The following providers have API-based deploy/remove/invoke/logs (see `engine/internal/deploy/api`). The list is asserted by tests so this doc stays in sync with code:
+The following providers have API-based deploy/remove/invoke/logs (see `platform/deploy/core/api`). The list is asserted by tests so this doc stays in sync with code:
 
 - **alibaba-fc**, **azure-functions**, **cloudflare-workers**, **digitalocean-functions**, **fly-machines**, **gcp-functions**, **ibm-openwhisk**, **kubernetes**, **netlify**, **vercel**
 

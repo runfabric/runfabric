@@ -5,6 +5,7 @@ import (
 	"os"
 
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
 	"github.com/runfabric/runfabric/platform/core/model/protocol"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
@@ -55,7 +56,7 @@ func Inspect(configPath, stage string) (any, error) {
 					workflowData = map[string]any{}
 				}
 				if wm, ok := workflowData.(map[string]any); ok {
-					if receipt, ok := receiptData.(*state.Receipt); ok && receipt.Metadata != nil {
+					if receipt, ok := receiptData.(*statetypes.Receipt); ok && receipt.Metadata != nil {
 						if len(receipt.Metadata) > 0 {
 							odata["receiptMetadata"] = receipt.Metadata
 						}

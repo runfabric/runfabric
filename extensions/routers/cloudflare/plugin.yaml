@@ -1,0 +1,16 @@
+apiVersion: runfabric.io/plugin/v1
+kind: router
+id: cloudflare
+name: Cloudflare Router
+description: External router plugin for Cloudflare DNS/LB sync
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/cloudflare-router
+capabilities:
+  - sync
+permissions:
+  fs: true
+  env: true
+  network: true
+  cloud: true
+

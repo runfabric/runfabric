@@ -1,0 +1,16 @@
+apiVersion: runfabric.io/plugin/v1
+kind: secret-manager
+id: gcp-secret-manager
+name: GCP Secret Manager
+description: Resolves gcp-sm:// secret references via gcloud Secret Manager access
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/gcp-secret-manager
+capabilities:
+  - resolve-secret
+  - scheme:gcp-sm
+permissions:
+  fs: false
+  env: true
+  network: true
+  cloud: true

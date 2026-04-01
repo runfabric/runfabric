@@ -16,9 +16,10 @@ runfabric/
 │
 ├── bin/                      # built binaries (e.g. `bin/runfabric`, `bin/runfabricd`)
 │
-├── cmd/                      # binary entrypoints (runfabric, runfabricd)
-├── internal/                 # shared engine/internal source
-├── platform/                 # providers, runtime, extensions, state, observability
+├── cmd/                      # binary entrypoints (runfabric, runfabricd, runfabricw)
+├── internal/                 # CLI roots and internal engine/shared contracts
+├── extensions/               # built-in plugin implementations (providers/runtimes/routers/states/...)
+├── platform/                 # workflow app, deploy/controlplane, state/policy/observability, extension boundary glue
 │
 ├── packages/
 │   ├── node/

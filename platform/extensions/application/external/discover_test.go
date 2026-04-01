@@ -69,6 +69,64 @@ func TestDiscoverLatest_SelectsLatestVersionPerID(t *testing.T) {
 	}
 }
 
+func TestDiscoverLatest_SecretManagerKind(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv(envHome, tmp)
+
+	writePlugin(t, filepath.Join(tmp, "plugins", "secret-managers", "vault-sm", "1.0.0"), pluginYAML{
+		APIVersion:  "runfabric.io/plugin/v1",
+		Kind:        "secret-manager",
+		ID:          "vault-sm",
+		Name:        "Vault Secret Manager",
+		Description: "Vault-backed secret manager",
+		Version:     "1.0.0",
+		Executable:  "runfabric-secret-manager-vault",
+	})
+
+	plugins, err := DiscoverLatest()
+	if err != nil {
+		t.Fatalf("DiscoverLatest error: %v", err)
+	}
+	if len(plugins) != 1 {
+		t.Fatalf("expected 1 plugin, got %d", len(plugins))
+	}
+	if string(plugins[0].Kind) != "secret-manager" {
+		t.Fatalf("expected secret-manager kind, got %q", plugins[0].Kind)
+	}
+	if plugins[0].ID != "vault-sm" {
+		t.Fatalf("expected id vault-sm, got %q", plugins[0].ID)
+	}
+}
+
+func TestDiscoverLatest_StateKind(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv(envHome, tmp)
+
+	writePlugin(t, filepath.Join(tmp, "plugins", "states", "local", "1.0.0"), pluginYAML{
+		APIVersion:  "runfabric.io/plugin/v1",
+		Kind:        "state",
+		ID:          "local",
+		Name:        "Local State Backend",
+		Description: "Uses local file backend for state",
+		Version:     "1.0.0",
+		Executable:  "runfabric-state-local",
+	})
+
+	plugins, err := DiscoverLatest()
+	if err != nil {
+		t.Fatalf("DiscoverLatest error: %v", err)
+	}
+	if len(plugins) != 1 {
+		t.Fatalf("expected 1 plugin, got %d", len(plugins))
+	}
+	if string(plugins[0].Kind) != "state" {
+		t.Fatalf("expected state kind, got %q", plugins[0].Kind)
+	}
+	if plugins[0].ID != "local" {
+		t.Fatalf("expected id local, got %q", plugins[0].ID)
+	}
+}
+
 func TestDiscoverLatest_RejectsPluralPluginKind(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv(envHome, tmp)

@@ -1,0 +1,17 @@
+apiVersion: runfabric/v1
+kind: provider
+id: kubernetes
+name: kubernetes
+description: External provider plugin for Kubernetes
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/kubernetes-plugin
+capabilities: [doctor, plan, deploy, remove, invoke, logs]
+supportsRuntime: [nodejs, python]
+supportsTriggers: [http]
+supportsResources: []
+permissions:
+  fs: true
+  env: true
+  network: true
+  cloud: true

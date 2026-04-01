@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/runfabric/runfabric/platform/core/state/backends"
+	"github.com/runfabric/runfabric/platform/state/backends"
 )
 
 func BackendMigrate(configPath, stage, target string) (any, error) {

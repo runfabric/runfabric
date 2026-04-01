@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/runfabric/runfabric/platform/state/locking"
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
 )
 
 func LockSteal(configPath, stage string) (any, error) {
@@ -14,7 +14,7 @@ func LockSteal(configPath, stage string) (any, error) {
 	}
 
 	lb, ok := ctx.Backends.Locks.(interface {
-		Steal(service, stage, newOperation string, staleAfter time.Duration) (*locking.Handle, error)
+		Steal(service, stage, newOperation string, staleAfter time.Duration) (*statetypes.Handle, error)
 		Kind() string
 	})
 	if !ok {

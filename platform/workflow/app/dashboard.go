@@ -1,6 +1,7 @@
 package app
 
 import (
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 )
 
@@ -10,8 +11,8 @@ type DashboardData struct {
 	Stage            string
 	App              string // optional grouping (config.app)
 	Org              string // optional org/tenant (config.org)
-	Stages           []state.ReleaseEntry
-	Receipt          *state.Receipt
+	Stages           []statetypes.ReleaseEntry
+	Receipt          *statetypes.Receipt
 	HasDeployment    bool
 	WorkflowRunCount int
 	WorkflowCost     *state.WorkflowCostSummary

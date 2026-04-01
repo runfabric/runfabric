@@ -77,6 +77,11 @@ func NormalizeRuntimeID(runtime string) string {
 
 type nodeRuntime struct{}
 
+// NewNodeRuntime returns the built-in Node.js runtime plugin.
+func NewNodeRuntime() sdkruntime.Plugin {
+	return nodeRuntime{}
+}
+
 func (r nodeRuntime) Meta() sdkrouter.PluginMeta {
 	return sdkrouter.PluginMeta{ID: "nodejs", Name: "Node.js", Description: "Node.js runtime plugin (build/invoke)"}
 }
@@ -94,6 +99,11 @@ func (r nodeRuntime) Invoke(_ context.Context, req sdkruntime.InvokeRequest) (*s
 }
 
 type pythonRuntime struct{}
+
+// NewPythonRuntime returns the built-in Python runtime plugin.
+func NewPythonRuntime() sdkruntime.Plugin {
+	return pythonRuntime{}
+}
 
 func (r pythonRuntime) Meta() sdkrouter.PluginMeta {
 	return sdkrouter.PluginMeta{ID: "python", Name: "Python", Description: "Python runtime plugin (build/invoke)"}
@@ -122,8 +132,8 @@ func BuiltinRuntimeManifests() []sdkrouter.PluginMeta {
 // NewBuiltinRegistry returns a runtime registry pre-populated with built-in Node.js and Python runtimes.
 func NewBuiltinRegistry() *Registry {
 	reg := NewRegistry()
-	_ = reg.Register(nodeRuntime{})
-	_ = reg.Register(pythonRuntime{})
+	_ = reg.Register(NewNodeRuntime())
+	_ = reg.Register(NewPythonRuntime())
 	return reg
 }
 

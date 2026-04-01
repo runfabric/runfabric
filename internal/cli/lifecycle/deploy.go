@@ -1,12 +1,8 @@
 package lifecycle
 
 import (
-	"os"
-	"path/filepath"
-
 	"github.com/runfabric/runfabric/internal/cli/common"
 
-	"github.com/runfabric/runfabric/platform/deploy/source"
 	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
@@ -43,28 +39,32 @@ func newDeployCmd(opts *common.GlobalOptions) *cobra.Command {
 		Long:  "Deploy the service (all functions or a single function with --function). Use --preview <id> for preview environments (e.g. pr-123). Use --source <url> to deploy from an archive URL (e.g. GitHub tarball); use -c/--config <path> to supply runfabric.yml from outside the source (code from URL, config from file). Use --provider <key> when runfabric.yml has providerOverrides for multi-cloud (e.g. --provider aws --stage prod). Rollback precedence: CLI --rollback-on-failure/--no-rollback-on-failure, then runfabric.yml deploy.rollbackOnFailure, then RUNFABRIC_ROLLBACK_ON_FAILURE.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = outDir
-			runOpts := opts
+			stage := opts.Stage
+			if preview != "" {
+				stage = preview
+			}
 			if sourceURL != "" {
-				extractRoot, resolvedConfig, cleanup, err := source.FetchAndExtract(sourceURL)
+				common.StatusRunning(opts.JSONOutput, "Deploying...")
+				result, err := app.DeployFromSourceURL(
+					opts.ConfigPath,
+					sourceURL,
+					stage,
+					function,
+					rollbackOnFailure,
+					noRollbackOnFailure,
+					providerOverride,
+				)
 				if err != nil {
 					common.StatusFail(opts.JSONOutput, "Deploy from source failed.")
 					return common.PrintFailure("deploy", err)
 				}
-				defer cleanup()
-				// If user passed -c/--config to a path other than default, use that runfabric.yml (outside the source).
-				if opts.ConfigPath != "" && opts.ConfigPath != "runfabric.yml" && opts.ConfigPath != "runfabric.yaml" {
-					destConfig := filepath.Join(extractRoot, "runfabric.yml")
-					if err := copyFile(opts.ConfigPath, destConfig); err != nil {
-						common.StatusFail(opts.JSONOutput, "Deploy from source failed.")
-						return common.PrintFailure("deploy", err)
-					}
-					resolvedConfig = destConfig
+				common.StatusDone(opts.JSONOutput, "Deploy complete.")
+				if opts.JSONOutput {
+					return common.PrintJSONSuccess("deploy", result)
 				}
-				optsCopy := *opts
-				optsCopy.ConfigPath = resolvedConfig
-				runOpts = &optsCopy
+				return common.PrintSuccess("deploy", result)
 			}
-			return runDeploy(runOpts, function, rollbackOnFailure, noRollbackOnFailure, preview, providerOverride, "deploy")
+			return runDeploy(opts, function, rollbackOnFailure, noRollbackOnFailure, preview, providerOverride, "deploy")
 		},
 	}
 
@@ -162,13 +162,4 @@ func newDeployListCmd(opts *common.GlobalOptions) *cobra.Command {
 			return common.PrintSuccess("deploy list", result)
 		},
 	}
-}
-
-// copyFile copies the file at src to dst (overwrites if exists).
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0o644)
 }

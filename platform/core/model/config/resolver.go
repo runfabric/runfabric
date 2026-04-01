@@ -13,6 +13,9 @@ var envPattern = regexp.MustCompile(`\$\{env:([A-Za-z_][A-Za-z0-9_]*)(?:,([^}]+)
 
 func Resolve(cfg *Config, stage string) (*Config, error) {
 	out := *cfg
+	if err := secrets.ValidateForStage(out.Secrets, stage); err != nil {
+		return nil, err
+	}
 	resolvedSecrets := map[string]string{}
 	for k, v := range out.Secrets {
 		rv, err := resolveEnvAndSecretsStrict(v, out.Secrets)

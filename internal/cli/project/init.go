@@ -12,7 +12,10 @@ import (
 	"unicode"
 
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/platform/extensions/application/external"
+	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
+	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 	planner "github.com/runfabric/runfabric/platform/planner/engine"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -29,6 +32,7 @@ type initOpts struct {
 	Dir             string
 	Template        string
 	Provider        string
+	SecretManager   string
 	StateBackend    string
 	Lang            string
 	Service         string
@@ -70,6 +74,7 @@ func newInitCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd.Flags().StringVar(&initOpts.Dir, "dir", "", "Target directory (default: create folder named after service)")
 	cmd.Flags().StringVar(&initOpts.Template, "template", "", "Template/trigger: http|cron|queue|storage|eventbridge|pubsub")
 	cmd.Flags().StringVar(&initOpts.Provider, "provider", "", "Provider (e.g. aws-lambda, gcp-functions)")
+	cmd.Flags().StringVar(&initOpts.SecretManager, "secret-manager", "", "Secret manager plugin ID (dynamic). Use 'none' or empty for default env/secret:// resolution")
 	cmd.Flags().StringVar(&initOpts.StateBackend, "state-backend", "", "State backend: local|s3|gcs|azblob|postgres (default: prompt in interactive mode)")
 	cmd.Flags().StringVar(&initOpts.Lang, "lang", "", "Language: js|ts|python|go (default: prompt in interactive mode)")
 	cmd.Flags().StringVar(&initOpts.Service, "service", "", "Service name (default: from --dir)")
@@ -130,6 +135,9 @@ func runInit(o *initOpts) error {
 		if o.StateBackend == "" {
 			o.StateBackend = promptState()
 		}
+		if strings.TrimSpace(o.SecretManager) == "" {
+			o.SecretManager = promptSecretManager()
+		}
 		if o.Service == "" {
 			defaultService := "my-service"
 			if dir != "" {
@@ -168,6 +176,11 @@ func runInit(o *initOpts) error {
 	if o.Provider == "" {
 		o.Provider = "aws-lambda"
 	}
+	normalizedSecretManager, err := normalizeSecretManagerPlugin(o.SecretManager)
+	if err != nil {
+		return err
+	}
+	o.SecretManager = normalizedSecretManager
 	if isNodeLang(o.Lang) {
 		o.PM = strings.ToLower(strings.TrimSpace(o.PM))
 		if o.PM == "" {
@@ -425,6 +438,81 @@ func promptState() string {
 	return stateBackends[idx]
 }
 
+func promptSecretManager() string {
+	options := secretManagerPromptOptions()
+	idx := promptSelect("Select secret manager plugin", options, 0)
+	if idx <= 0 {
+		return ""
+	}
+	picked := strings.TrimSpace(options[idx])
+	if strings.EqualFold(picked, "none") {
+		return ""
+	}
+	return picked
+}
+
+func secretManagerPromptOptions() []string {
+	options := []string{"none"}
+	ids, err := listSecretManagerPluginIDs()
+	if err != nil {
+		return options
+	}
+	return append(options, ids...)
+}
+
+func listSecretManagerPluginIDs() ([]string, error) {
+	catalog, err := resolution.DiscoverPluginCatalog(external.DiscoverOptions{})
+	if err != nil {
+		return nil, err
+	}
+	items := catalog.Registry.List(manifests.KindSecretManager)
+	ids := make([]string, 0, len(items))
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			continue
+		}
+		key := strings.ToLower(id)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
+func normalizeSecretManagerPlugin(raw string) (string, error) {
+	v := strings.TrimSpace(raw)
+	switch v {
+	case "":
+		return "", nil
+	}
+	if strings.EqualFold(v, "none") {
+		return "", nil
+	}
+	ids, err := listSecretManagerPluginIDs()
+	if err != nil || len(ids) == 0 {
+		// Fallback when discovery is unavailable: accept explicit plugin IDs.
+		return v, nil
+	}
+	for _, id := range ids {
+		if strings.EqualFold(id, v) {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf(
+		"unsupported --secret-manager %q; available: none, %s",
+		raw,
+		strings.Join(ids, ", "),
+	)
+}
+
 func promptYesNoInit(msg string, defaultYes bool) bool {
 	defaultIdx := 0
 	if !defaultYes {
@@ -670,6 +758,12 @@ func generateRunfabricYAML(o *initOpts) string {
 			b.WriteString("  azblobContainer: ${env:RUNFABRIC_AZBLOB_CONTAINER}\n")
 			b.WriteString("  azblobPrefix: runfabric/dev\n")
 		}
+		b.WriteString("\n")
+	}
+
+	if o.SecretManager != "" {
+		b.WriteString("extensions:\n")
+		b.WriteString("  secretManagerPlugin: " + o.SecretManager + "\n")
 		b.WriteString("\n")
 	}
 

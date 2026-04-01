@@ -53,6 +53,22 @@
           "type": "string",
           "description": "Optional router plugin ID for runfabric router commands. Defaults to cloudflare when omitted."
         },
+        "secretManagerPlugin": {
+          "type": "string",
+          "description": "Optional secret-manager plugin ID used to resolve secret manager references (aws-sm://, gcp-sm://, azure-kv://, vault://)."
+        },
+        "secretManagerPluginVersion": {
+          "type": "string",
+          "description": "Optional version pin for extensions.secretManagerPlugin."
+        },
+        "statePlugin": {
+          "type": "string",
+          "description": "Optional state plugin ID used to select backend behavior (for example local, sqlite, postgres, dynamodb). Defaults to local backend when omitted."
+        },
+        "statePluginVersion": {
+          "type": "string",
+          "description": "Optional version pin for extensions.statePlugin."
+        },
         "router": {
           "$ref": "#/$defs/RouterExtensionConfig"
         },
@@ -101,6 +117,7 @@
     },
     "secrets": {
       "type": "object",
+      "description": "Secret map used by ${secret:KEY}. Values can be literals, ${env:VAR}, secret://KEY indirection, or secret manager refs (aws-sm://, gcp-sm://, azure-kv://, vault://) resolved by extensions.secretManagerPlugin.",
       "additionalProperties": {
         "type": "string"
       }

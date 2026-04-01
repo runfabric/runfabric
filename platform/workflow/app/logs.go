@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
+	"github.com/runfabric/runfabric/platform/state/receiptconv"
 	"github.com/runfabric/runfabric/platform/workflow/lifecycle"
 )
 
@@ -36,13 +37,13 @@ func logsSingle(ctx *AppContext, function string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	var receipt *state.Receipt
+	var receipt *statetypes.Receipt
 	if ctx.Backends != nil && ctx.Backends.Receipts != nil {
 		receipt, _ = ctx.Backends.Receipts.Load(ctx.Stage)
 	}
 	var result *providers.LogsResult
 	if provider.mode == dispatchAPI {
-		r, err := deployapi.Logs(context.Background(), provider.name, ctx.Config, ctx.Stage, function, ctx.RootDir, receipt)
+		r, err := deployapi.Logs(context.Background(), provider.name, ctx.Config, ctx.Stage, function, ctx.RootDir, receiptconv.ToCoreReceipt(receipt))
 		if err != nil {
 			return nil, err
 		}
@@ -64,7 +65,7 @@ func logsAll(ctx *AppContext) (any, error) {
 		return nil, err
 	}
 	byFunction := make(map[string]any)
-	var receipt *state.Receipt
+	var receipt *statetypes.Receipt
 	if ctx.Backends != nil && ctx.Backends.Receipts != nil {
 		receipt, _ = ctx.Backends.Receipts.Load(ctx.Stage)
 	}
@@ -72,7 +73,7 @@ func logsAll(ctx *AppContext) (any, error) {
 		var result *providers.LogsResult
 		var err error
 		if provider.mode == dispatchAPI {
-			result, err = deployapi.Logs(context.Background(), provider.name, ctx.Config, ctx.Stage, name, ctx.RootDir, receipt)
+			result, err = deployapi.Logs(context.Background(), provider.name, ctx.Config, ctx.Stage, name, ctx.RootDir, receiptconv.ToCoreReceipt(receipt))
 		} else {
 			result, err = lifecycle.Logs(ctx.Registry, ctx.Config, ctx.Stage, name)
 		}

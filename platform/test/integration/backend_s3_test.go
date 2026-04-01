@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	s3backend "github.com/runfabric/runfabric/platform/core/state/backends/s3"
+	"github.com/runfabric/runfabric/platform/state/backends"
 )
 
 func TestS3BackendIfEnabled(t *testing.T) {
@@ -19,12 +19,20 @@ func TestS3BackendIfEnabled(t *testing.T) {
 		t.Fatal("missing RUNFABRIC_S3_BUCKET or AWS_REGION")
 	}
 
-	client, err := s3backend.New(context.Background(), region, bucket, "runfabric-test")
+	bundle, err := backends.NewBundle(context.Background(), backends.Options{
+		Kind:      "s3",
+		AWSRegion: region,
+		S3Bucket:  bucket,
+		S3Prefix:  "runfabric-test",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if client == nil || client.S3 == nil {
-		t.Fatal("expected s3 client")
+	if bundle == nil || bundle.Receipts == nil {
+		t.Fatal("expected s3 backend bundle")
+	}
+	if got := bundle.Receipts.Kind(); got != "s3" {
+		t.Fatalf("receipt backend kind=%q want s3", got)
 	}
 }

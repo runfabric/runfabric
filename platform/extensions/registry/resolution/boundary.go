@@ -14,6 +14,7 @@ import (
 	"github.com/runfabric/runfabric/platform/extensions/application/external"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
+	"github.com/runfabric/runfabric/platform/state/backends"
 )
 
 // Boundary is the engine extension resolution boundary for provider/runtime resolution.
@@ -24,6 +25,8 @@ type Boundary struct {
 	runtimes           providerpolicy.RuntimeRegistry
 	simulators         providerpolicy.SimulatorRegistry
 	routers            providerpolicy.RouterRegistry
+	secretManagers     map[string]*external.ExternalSecretManagerAdapter
+	stateFactories     map[string]backends.BundleFactory
 	plugins            *manifests.PluginRegistry
 	internalProviderID map[string]struct{}
 	apiProviderID      map[string]struct{}
@@ -110,6 +113,10 @@ func (b *Boundary) ResolveRuntimePlugin(runtime string) (runtimecontracts.Runtim
 	return b.runtimes.Get(runtime)
 }
 
+func (b *Boundary) RegisterRuntime(runtime runtimecontracts.Runtime) error {
+	return b.runtimes.Register(runtime)
+}
+
 func (b *Boundary) ResolveSimulator(simulatorID string) (simulatorcontracts.Simulator, error) {
 	id := strings.TrimSpace(simulatorID)
 	if id == "" {
@@ -118,12 +125,54 @@ func (b *Boundary) ResolveSimulator(simulatorID string) (simulatorcontracts.Simu
 	return b.simulators.Get(id)
 }
 
+func (b *Boundary) RegisterSimulator(simulator simulatorcontracts.Simulator) error {
+	return b.simulators.Register(simulator)
+}
+
 func (b *Boundary) ResolveRouter(routerID string) (routercontracts.Router, error) {
 	id := strings.TrimSpace(routerID)
 	if id == "" {
 		return nil, fmt.Errorf("router id is required")
 	}
 	return b.routers.Get(id)
+}
+
+// ResolveSecretManager resolves a discovered secret-manager plugin adapter by ID.
+func (b *Boundary) ResolveSecretManager(id string) (*external.ExternalSecretManagerAdapter, error) {
+	normalized := strings.TrimSpace(id)
+	if normalized == "" {
+		return nil, fmt.Errorf("secret manager id is required")
+	}
+	adapter, ok := b.secretManagers[normalized]
+	if !ok {
+		return nil, fmt.Errorf("secret manager plugin %q is not registered", normalized)
+	}
+	return adapter, nil
+}
+
+func (b *Boundary) ResolveStateBundleFactory(kind string) (backends.BundleFactory, error) {
+	normalized := strings.ToLower(strings.TrimSpace(kind))
+	if normalized == "" {
+		return nil, fmt.Errorf("state backend kind is required")
+	}
+	factory, ok := b.stateFactories[normalized]
+	if !ok || factory == nil {
+		return nil, fmt.Errorf("state backend kind %q is not registered", normalized)
+	}
+	return factory, nil
+}
+
+func (b *Boundary) RegisterStateBundleFactory(kind string, factory backends.BundleFactory) error {
+	normalized := strings.ToLower(strings.TrimSpace(kind))
+	if normalized == "" {
+		return fmt.Errorf("state backend kind is required")
+	}
+	if factory == nil {
+		return fmt.Errorf("state backend factory is nil")
+	}
+	b.stateFactories[normalized] = factory
+	backends.RegisterBundleFactory(normalized, factory)
+	return nil
 }
 
 func (b *Boundary) SyncRouter(ctx context.Context, routerID string, req routercontracts.SyncRequest) (*routercontracts.SyncResult, error) {
@@ -233,7 +282,95 @@ func (b *Boundary) RefreshExternal() error {
 			_ = b.routers.Register(external.NewExternalRouterAdapter(m.ID, m.Executable, routercontracts.PluginMeta{
 				ID: m.ID, Name: m.Name, Version: m.Version, Description: m.Description,
 			}))
+		case manifests.KindRuntime:
+			if _, err := b.runtimes.Get(m.ID); err == nil && !b.discoverOptions.PreferExternal && !providerpolicy.IsExternalOnlyRuntime(m.ID) {
+				continue
+			}
+			_ = b.runtimes.Register(external.NewExternalRuntimeAdapter(m.ID, m.Executable, runtimecontracts.Meta{
+				ID: m.ID, Name: m.Name, Version: m.Version, Description: m.Description,
+			}))
+		case manifests.KindSimulator:
+			if _, err := b.simulators.Get(m.ID); err == nil && !b.discoverOptions.PreferExternal && !providerpolicy.IsExternalOnlySimulator(m.ID) {
+				continue
+			}
+			_ = b.simulators.Register(external.NewExternalSimulatorAdapter(m.ID, m.Executable, simulatorcontracts.Meta{
+				ID: m.ID, Name: m.Name, Description: m.Description,
+			}))
+		case manifests.KindSecretManager:
+			if _, ok := b.secretManagers[m.ID]; ok && !b.discoverOptions.PreferExternal && !providerpolicy.IsExternalOnlySecretManager(m.ID) {
+				continue
+			}
+			b.secretManagers[m.ID] = external.NewExternalSecretManagerAdapter(m.ID, m.Executable)
+		case manifests.KindState:
+			kind, ok := stateBackendKindFromPlugin(m.ID, m.Capabilities)
+			if !ok {
+				continue
+			}
+			if !shouldRegisterExternalStateFactory(kind, m.ID, b.discoverOptions.PreferExternal) {
+				continue
+			}
+			_ = b.RegisterStateBundleFactory(kind, external.NewExternalStateBundleFactory(m.ID, kind, m.Executable))
 		}
 	}
 	return nil
+}
+
+func shouldRegisterExternalStateFactory(kind, id string, preferExternal bool) bool {
+	if preferExternal || providerpolicy.IsExternalOnlyState(id) {
+		return true
+	}
+	return !isBuiltinStateBackendKind(kind)
+}
+
+func isBuiltinStateBackendKind(kind string) bool {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "local", "postgres", "sqlite", "dynamodb", "s3":
+		return true
+	default:
+		return false
+	}
+}
+
+func stateBackendKindFromPlugin(pluginID string, capabilities []string) (string, bool) {
+	for _, raw := range capabilities {
+		capability := strings.ToLower(strings.TrimSpace(raw))
+		if capability == "" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(capability, "backend:"):
+			capability = strings.TrimSpace(strings.TrimPrefix(capability, "backend:"))
+		case strings.HasPrefix(capability, "state:"):
+			capability = strings.TrimSpace(strings.TrimPrefix(capability, "state:"))
+		}
+		if kind, ok := normalizeStateBackendKindToken(capability); ok {
+			return kind, true
+		}
+	}
+	return normalizeStateBackendKindToken(pluginID)
+}
+
+func normalizeStateBackendKindToken(raw string) (string, bool) {
+	token := strings.ToLower(strings.TrimSpace(raw))
+	if token == "" {
+		return "", false
+	}
+	token = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			return r
+		}
+		return '-'
+	}, token)
+	token = strings.Trim(token, "-")
+	for strings.Contains(token, "--") {
+		token = strings.ReplaceAll(token, "--", "-")
+	}
+	if strings.Contains(token, "-") {
+		parts := strings.Split(token, "-")
+		token = strings.TrimSpace(parts[len(parts)-1])
+	}
+	if token == "" {
+		return "", false
+	}
+	return token, true
 }

@@ -4,10 +4,60 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
+	"sync"
 )
 
 var secretPattern = regexp.MustCompile(`\$\{secret:([A-Za-z0-9_.-]+)\}`)
+
+var (
+	referenceResolverMu sync.RWMutex
+	referenceResolver   ReferenceResolver
+
+	secretManagerSchemeMu sync.RWMutex
+	secretManagerSchemes  = map[string]struct{}{}
+)
+
+// ReferenceResolver resolves secret-manager references (for example
+// aws-sm://..., gcp-sm://..., azure-kv://..., vault://...) into concrete secret values.
+type ReferenceResolver func(ref string) (string, error)
+
+// SetReferenceResolver sets the process-wide secret-manager reference resolver and
+// returns a restore function that resets the previous resolver.
+func SetReferenceResolver(resolver ReferenceResolver) func() {
+	referenceResolverMu.Lock()
+	prev := referenceResolver
+	referenceResolver = resolver
+	referenceResolverMu.Unlock()
+	return func() {
+		referenceResolverMu.Lock()
+		referenceResolver = prev
+		referenceResolverMu.Unlock()
+	}
+}
+
+// SetSecretManagerRefSchemes sets allowed secret-manager reference URI schemes
+// (without ://) used by IsSecretManagerRef. It returns a restore function.
+func SetSecretManagerRefSchemes(schemes []string) func() {
+	normalized := make(map[string]struct{}, len(schemes))
+	for _, raw := range schemes {
+		if scheme := normalizeSecretManagerRefScheme(raw); scheme != "" {
+			normalized[scheme] = struct{}{}
+		}
+	}
+
+	secretManagerSchemeMu.Lock()
+	prev := cloneSchemeSet(secretManagerSchemes)
+	secretManagerSchemes = normalized
+	secretManagerSchemeMu.Unlock()
+
+	return func() {
+		secretManagerSchemeMu.Lock()
+		secretManagerSchemes = prev
+		secretManagerSchemeMu.Unlock()
+	}
+}
 
 // ResolveString resolves ${secret:key} placeholders.
 //
@@ -61,11 +111,99 @@ func resolveSecretKey(key string, configSecrets map[string]string, lookup Lookup
 				}
 				return resolveSecretKey(ref, configSecrets, lookup, depth+1)
 			}
-			return v, nil
+			return resolveSecretManagerRefValue(v)
 		}
 	}
 	if v, ok := lookup(key); ok && strings.TrimSpace(v) != "" {
-		return v, nil
+		return resolveSecretManagerRefValue(v)
 	}
 	return "", fmt.Errorf("config references ${secret:%s} but %s is not set", key, key)
+}
+
+func resolveSecretManagerRefValue(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", nil
+	}
+	if !IsSecretManagerRef(value) {
+		return value, nil
+	}
+	referenceResolverMu.RLock()
+	resolver := referenceResolver
+	referenceResolverMu.RUnlock()
+	if resolver == nil {
+		return "", fmt.Errorf(
+			"secret manager reference %q requires extensions.secretManagerPlugin to be installed and configured",
+			value,
+		)
+	}
+	resolved, err := resolver(value)
+	if err != nil {
+		return "", err
+	}
+	resolved = strings.TrimSpace(resolved)
+	if resolved == "" {
+		return "", fmt.Errorf("secret manager reference %q resolved to empty value", value)
+	}
+	return resolved, nil
+}
+
+// IsSecretManagerRef reports whether value uses a secret-manager reference
+// scheme resolved through a secret-manager plugin.
+func IsSecretManagerRef(value string) bool {
+	scheme := extractRefScheme(value)
+	if scheme == "" {
+		return false
+	}
+	secretManagerSchemeMu.RLock()
+	_, ok := secretManagerSchemes[scheme]
+	secretManagerSchemeMu.RUnlock()
+	return ok
+}
+
+// SecretManagerRefExamples returns configured secret-manager ref examples
+// suitable for help/error messages, e.g. "vault://, aws-sm://".
+func SecretManagerRefExamples() string {
+	secretManagerSchemeMu.RLock()
+	if len(secretManagerSchemes) == 0 {
+		secretManagerSchemeMu.RUnlock()
+		return "<scheme>://"
+	}
+	list := make([]string, 0, len(secretManagerSchemes))
+	for scheme := range secretManagerSchemes {
+		list = append(list, scheme)
+	}
+	secretManagerSchemeMu.RUnlock()
+
+	sort.Strings(list)
+	for i, item := range list {
+		list[i] = item + "://"
+	}
+	return strings.Join(list, ", ")
+}
+
+func extractRefScheme(value string) string {
+	trimmed := strings.TrimSpace(value)
+	sep := strings.Index(trimmed, "://")
+	if sep <= 0 {
+		return ""
+	}
+	return normalizeSecretManagerRefScheme(trimmed[:sep])
+}
+
+func normalizeSecretManagerRefScheme(raw string) string {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	s = strings.TrimSuffix(s, "://")
+	return strings.TrimSpace(s)
+}
+
+func cloneSchemeSet(src map[string]struct{}) map[string]struct{} {
+	if len(src) == 0 {
+		return map[string]struct{}{}
+	}
+	out := make(map[string]struct{}, len(src))
+	for k := range src {
+		out[k] = struct{}{}
+	}
+	return out
 }

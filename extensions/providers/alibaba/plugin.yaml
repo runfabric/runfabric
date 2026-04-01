@@ -1,0 +1,13 @@
+apiVersion: runfabric/v1
+kind: provider
+id: alibaba-fc
+name: alibaba-fc
+description: External provider plugin for Alibaba FC
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/alibaba-plugin
+capabilities: [doctor, plan, deploy, remove, invoke, logs]
+supportsRuntime: [nodejs, python]
+supportsTriggers: [http]
+supportsResources: []
+permissions: { fs: true, env: true, network: true, cloud: true }

@@ -64,7 +64,7 @@ type PublishInitOptions struct {
 	ID          string
 	Version     string
 	Type        string // addon | plugin
-	PluginKind  string // provider | runtime | simulator (for type=plugin)
+	PluginKind  string // provider | runtime | simulator | router | secret-manager | state (for type=plugin)
 	Files       []PublishFile
 	Timeout     time.Duration
 }

@@ -68,6 +68,7 @@ Interactive `init` prompts for:
 
 - template (`http`, `queue`, `cron`, `storage`, `eventbridge`, `pubsub`)
 - provider
+- optional secret manager plugin (`none` or a discovered `kind=secret-manager` plugin ID)
 - state backend (`local`, `postgres`, `s3`, `gcs`, `azblob`) with default `local`
 - language (`ts` or `js`)
 
@@ -128,6 +129,12 @@ Non-interactive with explicit state backend:
 
 ```bash
 pnpm run runfabric -- init --dir ./my-api --template http --provider aws-lambda --state-backend s3 --lang ts --skip-install
+```
+
+Non-interactive with secret manager selection:
+
+```bash
+pnpm run runfabric -- init --dir ./my-api --template http --provider aws-lambda --secret-manager vault-secret-manager --lang ts --skip-install
 ```
 
 If you used `--skip-install`, install project dependencies manually:

@@ -113,7 +113,7 @@ func newExtensionPublishInitCmd(opts *common.GlobalOptions) *cobra.Command {
 	cmd.Flags().StringVar(&version, "version", "", "Extension version to publish (required)")
 	cmd.Flags().StringVar(&artifactPath, "artifact", "", "Artifact file path to upload (required)")
 	cmd.Flags().StringVar(&typ, "type", "plugin", "Extension type: plugin or addon")
-	cmd.Flags().StringVar(&pluginKind, "plugin-kind", "provider", "Plugin kind when --type=plugin: provider, runtime, simulator, router")
+	cmd.Flags().StringVar(&pluginKind, "plugin-kind", "provider", "Plugin kind when --type=plugin: provider, runtime, simulator, router, secret-manager, state")
 	cmd.Flags().StringVar(&registry, "registry", "", "Registry base URL (default: https://registry.runfabric.cloud)")
 	cmd.Flags().StringVar(&registryToken, "registry-token", "", "Registry bearer token")
 	return cmd

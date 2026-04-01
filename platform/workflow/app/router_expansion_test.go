@@ -50,10 +50,10 @@ func TestApplyCanaryWeights_UnknownProvider(t *testing.T) {
 func TestGenerateRouterRoutingConfig_AppliesQualityScoring(t *testing.T) {
 	healthy := true
 	unhealthy := false
-	fabricState := &state.FabricState{
+	fabricState := &state.RunFabricState{
 		Service: "svc",
 		Stage:   "dev",
-		Endpoints: []state.FabricEndpoint{
+		Endpoints: []state.RunFabricEndpoint{
 			{Provider: "fast", URL: "https://fast.example.com", Healthy: &healthy},
 			{Provider: "slow", URL: "https://slow.example.com", Healthy: &unhealthy},
 		},

@@ -6,6 +6,7 @@ import (
 
 	routercontracts "github.com/runfabric/runfabric/platform/core/contracts/router"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )
 
 func TestResolveRuntime_NormalizesVersionedRuntimeIDs(t *testing.T) {
@@ -83,6 +84,28 @@ func TestResolveRouter_Builtin(t *testing.T) {
 	}
 }
 
+func TestPluginRegistry_IncludesBuiltinSecretManagers(t *testing.T) {
+	b, err := New(Options{IncludeExternal: false})
+	if err != nil {
+		t.Fatalf("new boundary: %v", err)
+	}
+	secretManagers := b.PluginRegistry().List(manifests.KindSecretManager)
+	if len(secretManagers) == 0 {
+		t.Fatal("expected built-in secret-manager manifests to be registered")
+	}
+}
+
+func TestPluginRegistry_IncludesBuiltinStates(t *testing.T) {
+	b, err := New(Options{IncludeExternal: false})
+	if err != nil {
+		t.Fatalf("new boundary: %v", err)
+	}
+	states := b.PluginRegistry().List(manifests.KindState)
+	if len(states) == 0 {
+		t.Fatal("expected built-in state manifests to be registered")
+	}
+}
+
 func TestResolveRouter_External(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("RUNFABRIC_HOME", home)
@@ -136,5 +159,90 @@ func TestSyncRouter_ExternalDispatchErrorBubblesUp(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected external router dispatch error for non-protocol executable")
+	}
+}
+
+func TestResolveRuntime_ExternalWhenPreferExternal(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("RUNFABRIC_HOME", home)
+	writeExternalRuntime(t, home, "nodejs", "0.1.0")
+
+	b, err := New(Options{IncludeExternal: true, PreferExternal: true})
+	if err != nil {
+		t.Fatalf("new boundary with external runtime: %v", err)
+	}
+	rt, err := b.ResolveRuntimePlugin("nodejs20.x")
+	if err != nil {
+		t.Fatalf("resolve runtime plugin nodejs20.x: %v", err)
+	}
+	if rt.Meta().ID != "nodejs" {
+		t.Fatalf("runtime plugin id = %q, want nodejs", rt.Meta().ID)
+	}
+}
+
+func TestResolveRuntime_ExternalOnlyUsesExternal(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("RUNFABRIC_HOME", home)
+	writeExternalRuntime(t, home, "nodejs", "0.1.0")
+
+	providerpolicy.ExternalOnlyRuntimes["nodejs"] = true
+	t.Cleanup(func() { delete(providerpolicy.ExternalOnlyRuntimes, "nodejs") })
+
+	b, err := New(Options{IncludeExternal: true})
+	if err != nil {
+		t.Fatalf("new boundary with external runtime: %v", err)
+	}
+	rt, err := b.ResolveRuntimePlugin("nodejs")
+	if err != nil {
+		t.Fatalf("resolve runtime plugin nodejs: %v", err)
+	}
+	if rt.Meta().ID != "nodejs" {
+		t.Fatalf("runtime plugin id = %q, want nodejs", rt.Meta().ID)
+	}
+}
+
+func TestResolveSimulator_ExternalWhenPreferExternal(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("RUNFABRIC_HOME", home)
+	writeExternalSimulator(t, home, "local", "0.1.0")
+
+	b, err := New(Options{IncludeExternal: true, PreferExternal: true})
+	if err != nil {
+		t.Fatalf("new boundary with external simulator: %v", err)
+	}
+	sim, err := b.ResolveSimulator("local")
+	if err != nil {
+		t.Fatalf("resolve simulator local: %v", err)
+	}
+	if sim.Meta().ID != "local" {
+		t.Fatalf("simulator id = %q, want local", sim.Meta().ID)
+	}
+}
+
+func TestResolveSecretManager_ExternalRegistration(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("RUNFABRIC_HOME", home)
+	writeExternalSecretManager(t, home, "stub-sm", "0.1.0")
+
+	b, err := New(Options{IncludeExternal: true})
+	if err != nil {
+		t.Fatalf("new boundary with external secret-manager: %v", err)
+	}
+	if _, err := b.ResolveSecretManager("stub-sm"); err != nil {
+		t.Fatalf("resolve secret manager stub-sm: %v", err)
+	}
+}
+
+func TestResolveStateBundleFactory_ExternalRegistration(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("RUNFABRIC_HOME", home)
+	writeExternalState(t, home, "custom-state", "0.1.0", "custom")
+
+	b, err := New(Options{IncludeExternal: true})
+	if err != nil {
+		t.Fatalf("new boundary with external state plugin: %v", err)
+	}
+	if _, err := b.ResolveStateBundleFactory("custom"); err != nil {
+		t.Fatalf("resolve state bundle factory custom: %v", err)
 	}
 }

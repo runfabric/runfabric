@@ -1,0 +1,17 @@
+apiVersion: runfabric.io/plugin/v1
+kind: secret-manager
+id: azure-key-vault-secret-manager
+name: Azure Key Vault Secret Manager
+description: Resolves azure-kv:// secret references via Azure Key Vault
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/azure-key-vault-secret-manager
+capabilities:
+  - resolve-secret
+  - scheme:azure-kv
+  - scheme:azure-keyvault
+permissions:
+  fs: false
+  env: true
+  network: true
+  cloud: true

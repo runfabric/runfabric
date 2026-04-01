@@ -19,6 +19,11 @@ type Registry struct {
 	simulators map[string]sdksimulator.Plugin
 }
 
+// NewLocalSimulator returns the built-in local simulator plugin.
+func NewLocalSimulator() sdksimulator.Plugin {
+	return localSimulator{}
+}
+
 func NewRegistry() *Registry {
 	return &Registry{simulators: map[string]sdksimulator.Plugin{}}
 }
@@ -215,6 +220,6 @@ func BuiltinSimulatorManifests() []sdkrouter.PluginMeta {
 
 func NewBuiltinRegistry() *Registry {
 	reg := NewRegistry()
-	_ = reg.Register(localSimulator{})
+	_ = reg.Register(NewLocalSimulator())
 	return reg
 }

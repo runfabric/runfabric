@@ -32,7 +32,10 @@ require (
 	modernc.org/sqlite v1.46.1
 )
 
-require github.com/aws/aws-sdk-go-v2/service/route53 v1.62.5 // indirect
+require (
+	github.com/aws/aws-sdk-go-v2/service/route53 v1.62.5 // indirect
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.5 // indirect
+)
 
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.7 // indirect

@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
@@ -158,5 +160,34 @@ func TestRouterDNSSyncWithOptions_PersistsBeforeAfterAndOperationMetadata(t *tes
 	}
 	if len(snapshot.Events) < 2 {
 		t.Fatalf("expected start + complete events, got %#v", snapshot.Events)
+	}
+}
+
+func TestSelectedRouterPlugin_ResolvesByName(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("RUNFABRIC_HOME", home)
+
+	pluginDir := filepath.Join(home, "plugins", "routers", "edge-router", "1.0.0")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("mkdir plugin dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "edge-router"), []byte("x"), 0o755); err != nil {
+		t.Fatalf("write executable: %v", err)
+	}
+	pluginYAML := []byte(`apiVersion: runfabric.io/plugin/v1
+kind: router
+id: edge-router
+name: Edge Router
+version: 1.0.0
+executable: edge-router
+`)
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.yaml"), pluginYAML, 0o644); err != nil {
+		t.Fatalf("write plugin.yaml: %v", err)
+	}
+
+	cfg := &config.Config{Extensions: map[string]any{"routerPlugin": "Edge Router"}}
+	got := SelectedRouterPlugin(cfg)
+	if got != "edge-router" {
+		t.Fatalf("SelectedRouterPlugin=%q want edge-router", got)
 	}
 }

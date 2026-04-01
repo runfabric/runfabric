@@ -10,6 +10,9 @@ import (
 	routercontracts "github.com/runfabric/runfabric/platform/core/contracts/router"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	statecore "github.com/runfabric/runfabric/platform/core/state/core"
+	"github.com/runfabric/runfabric/platform/extensions/application/external"
+	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
+	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 )
 
 type RouterDNSSyncOptions struct {
@@ -21,11 +24,16 @@ type RouterDNSSyncOptions struct {
 
 // SelectedRouterPlugin returns extensions.routerPlugin, defaulting to cloudflare.
 func SelectedRouterPlugin(cfg *config.Config) string {
-	id := strings.ToLower(strings.TrimSpace(config.ExtensionString(cfg, "routerPlugin")))
+	id := strings.TrimSpace(config.ExtensionString(cfg, "routerPlugin"))
 	if id == "" {
 		return "cloudflare"
 	}
-	return id
+	if catalog, err := resolution.DiscoverPluginCatalog(external.DiscoverOptions{}); err == nil && catalog != nil {
+		if normalizedID, nerr := normalizePluginIDByKind(manifests.KindRouter, id, catalog.Registry); nerr == nil && strings.TrimSpace(normalizedID) != "" {
+			return strings.ToLower(strings.TrimSpace(normalizedID))
+		}
+	}
+	return strings.ToLower(id)
 }
 
 // RouterDNSSync dispatches router DNS/LB sync through the configured router plugin.

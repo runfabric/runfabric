@@ -1,0 +1,18 @@
+apiVersion: runfabric.io/plugin/v1
+kind: runtime
+id: python
+name: Python Runtime
+description: External runtime plugin for Python build and invoke
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/python-runtime
+capabilities:
+  - build
+  - invoke
+supportsRuntime:
+  - python
+permissions:
+  fs: true
+  env: true
+  network: false
+  cloud: false

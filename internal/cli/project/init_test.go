@@ -41,6 +41,37 @@ func TestYAMLQuoted(t *testing.T) {
 	}
 }
 
+func TestNormalizeSecretManagerPlugin(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{in: "", want: ""},
+		{in: "none", want: ""},
+		{in: "AWS-SECRET-MANAGER", want: "aws-secret-manager"},
+		{in: "gcp-secret-manager", want: "gcp-secret-manager"},
+		{in: "azure-key-vault-secret-manager", want: "azure-key-vault-secret-manager"},
+		{in: "vault-secret-manager", want: "vault-secret-manager"},
+		{in: "bad-plugin", wantErr: true},
+	}
+	for _, tt := range tests {
+		got, err := normalizeSecretManagerPlugin(tt.in)
+		if tt.wantErr {
+			if err == nil {
+				t.Fatalf("normalizeSecretManagerPlugin(%q) expected error", tt.in)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("normalizeSecretManagerPlugin(%q): %v", tt.in, err)
+		}
+		if got != tt.want {
+			t.Fatalf("normalizeSecretManagerPlugin(%q)=%q want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestInit_ValidLang(t *testing.T) {
 	dir := t.TempDir()
 	opts := &common.GlobalOptions{}
@@ -56,6 +87,36 @@ func TestInit_ValidLang(t *testing.T) {
 	}
 }
 
+func TestInit_SecretManagerFlagWritesExtensions(t *testing.T) {
+	dir := t.TempDir()
+	opts := &common.GlobalOptions{}
+	cmd := newInitCmd(opts)
+	cmd.SetArgs([]string{
+		"--dir", dir,
+		"--lang", "ts",
+		"--no-interactive",
+		"--skip-install",
+		"--secret-manager", "vault-secret-manager",
+	})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("init with --secret-manager should succeed: %v", err)
+	}
+
+	cfg, err := os.ReadFile(filepath.Join(dir, "runfabric.yml"))
+	if err != nil {
+		t.Fatalf("read runfabric.yml: %v", err)
+	}
+	content := string(cfg)
+	if !strings.Contains(content, "extensions:") {
+		t.Fatalf("expected extensions block in runfabric.yml, got: %s", content)
+	}
+	if !strings.Contains(content, "secretManagerPlugin: vault-secret-manager") {
+		t.Fatalf("expected secret manager plugin in runfabric.yml, got: %s", content)
+	}
+}
+
 func TestInit_InvalidLang(t *testing.T) {
 	dir := t.TempDir()
 	opts := &common.GlobalOptions{}
@@ -65,6 +126,21 @@ func TestInit_InvalidLang(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil {
 		t.Error("init --lang rust should fail")
+	}
+}
+
+func TestInit_InvalidSecretManager(t *testing.T) {
+	dir := t.TempDir()
+	opts := &common.GlobalOptions{}
+	cmd := newInitCmd(opts)
+	cmd.SetArgs([]string{"--dir", dir, "--lang", "ts", "--no-interactive", "--secret-manager", "bad-sm"})
+	cmd.SetErr(&bytes.Buffer{})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("init --secret-manager bad-sm should fail")
+	}
+	if !strings.Contains(err.Error(), "unsupported --secret-manager") {
+		t.Fatalf("expected secret manager validation error, got: %v", err)
 	}
 }
 

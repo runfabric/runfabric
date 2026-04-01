@@ -10,7 +10,6 @@ import (
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	"github.com/runfabric/runfabric/platform/workflow/app"
-	"github.com/runfabric/runfabric/platform/workflow/lifecycle"
 	"github.com/spf13/cobra"
 )
 
@@ -97,20 +96,11 @@ func newPluginDoctorCmd(opts *common.GlobalOptions) *cobra.Command {
 		Use:   "doctor [name]",
 		Short: "Run doctor for a provider (optional: provider name; default from config)",
 		RunE: func(c *cobra.Command, args []string) error {
-			ctx, err := app.Bootstrap(opts.ConfigPath, opts.Stage, "")
-			if err != nil {
-				return err
-			}
-			providerName := ctx.Config.Provider.Name
+			providerName := ""
 			if len(args) > 0 {
 				providerName = args[0]
 			}
-			if _, ok := ctx.Registry.Get(providerName); !ok {
-				return fmt.Errorf("plugin %q not found", providerName)
-			}
-			cfg := *ctx.Config
-			cfg.Provider.Name = providerName
-			result, err := lifecycle.Doctor(ctx.Registry, &cfg, opts.Stage)
+			result, err := app.ProviderDoctor(opts.ConfigPath, opts.Stage, "", providerName)
 			if err != nil {
 				return err
 			}

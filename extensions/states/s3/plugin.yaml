@@ -1,0 +1,16 @@
+apiVersion: runfabric.io/plugin/v1
+kind: state
+id: s3
+name: S3 State Backend
+description: External state backend plugin for S3 receipts with local journals/locks
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/s3-state
+capabilities:
+  - state:s3
+  - backend:s3
+permissions:
+  fs: true
+  env: true
+  network: true
+  cloud: true

@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/runfabric/runfabric/platform/state/locking"
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
 )
 
-func StartHeartbeat(ctx context.Context, handle *locking.Handle, leaseFor, interval time.Duration) <-chan error {
+func StartHeartbeat(ctx context.Context, handle *statetypes.Handle, leaseFor, interval time.Duration) <-chan error {
 	errCh := make(chan error, 1)
 
 	go func() {

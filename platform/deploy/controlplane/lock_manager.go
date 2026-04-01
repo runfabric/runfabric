@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/runfabric/runfabric/platform/core/state/backends"
-	"github.com/runfabric/runfabric/platform/state/locking"
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
+	"github.com/runfabric/runfabric/platform/state/backends"
 )
 
 type LockManager struct {
@@ -16,7 +16,7 @@ type LockManager struct {
 }
 
 type ManagedLock struct {
-	Handle *locking.Handle
+	Handle *statetypes.Handle
 	cancel context.CancelFunc
 	errCh  <-chan error
 }

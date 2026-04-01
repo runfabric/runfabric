@@ -234,7 +234,7 @@ type registryInstallReceipt struct {
 }
 
 // InstallFromRegistry resolves an extension and installs it locally.
-// v1 supports only plugins (provider/runtime/simulator) as external on-disk plugins.
+// v1 supports plugins (provider/runtime/simulator/router/secret-manager/state) as external on-disk plugins.
 func InstallFromRegistry(opts InstallFromRegistryOptions, coreVersion string) (*InstallResult, error) {
 	rr, err := Resolve(ResolveOptions{
 		RegistryURL: opts.RegistryURL,

@@ -95,6 +95,11 @@ func Recover(configPath, stage string, mode recovery.Mode) (any, error) {
 	return out, nil
 }
 
+// RecoverByMode parses a textual recovery mode (rollback|resume|inspect) and delegates to Recover.
+func RecoverByMode(configPath, stage, mode string) (any, error) {
+	return Recover(configPath, stage, recovery.Mode(strings.ToLower(strings.TrimSpace(mode))))
+}
+
 func validateRecoveryResult(mode recovery.Mode, res *recovery.Result) error {
 	if res == nil {
 		return appErrs.Wrap(appErrs.CodeDeployFailed, fmt.Sprintf("recovery %q returned no result", mode), nil)

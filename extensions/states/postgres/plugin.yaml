@@ -1,0 +1,16 @@
+apiVersion: runfabric.io/plugin/v1
+kind: state
+id: postgres
+name: Postgres State Backend
+description: External state backend plugin for Postgres receipts with local journals/locks
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/postgres-state
+capabilities:
+  - state:postgres
+  - backend:postgres
+permissions:
+  fs: true
+  env: true
+  network: true
+  cloud: false

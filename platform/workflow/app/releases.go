@@ -1,11 +1,11 @@
 package app
 
-import state "github.com/runfabric/runfabric/platform/core/state/core"
+import statetypes "github.com/runfabric/runfabric/internal/state/types"
 
 // ReleasesResult is the result of Releases (deploy history per stage).
 type ReleasesResult struct {
-	Service  string               `json:"service"`
-	Releases []state.ReleaseEntry `json:"releases"`
+	Service  string                    `json:"service"`
+	Releases []statetypes.ReleaseEntry `json:"releases"`
 }
 
 // Releases returns deployment history (stages and updated timestamps) from the receipt backend.

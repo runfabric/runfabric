@@ -3,7 +3,7 @@ package app
 import (
 	"fmt"
 
-	state "github.com/runfabric/runfabric/platform/core/state/core"
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
 	workflow "github.com/runfabric/runfabric/platform/workflow/core"
 )
 
@@ -63,7 +63,7 @@ func ComposeDeploy(composePath, stage string, rollbackOnFailure, noRollbackOnFai
 			return &ComposeDeployResultList{Services: results}, err
 		}
 
-		var receipt *state.Receipt
+		var receipt *statetypes.Receipt
 		if ctx, err := Bootstrap(configPath, stage, ""); err == nil {
 			receipt, _ = ctx.Backends.Receipts.Load(stage)
 		}

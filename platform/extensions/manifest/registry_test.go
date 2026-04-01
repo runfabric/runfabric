@@ -75,6 +75,8 @@ func TestNormalizePluginKind(t *testing.T) {
 		{in: "runtime", want: KindRuntime},
 		{in: "simulator", want: KindSimulator},
 		{in: "router", want: KindRouter},
+		{in: "secret-manager", want: KindSecretManager},
+		{in: "state", want: KindState},
 		{in: "PROVIDER", want: KindProvider},
 		{in: "providers", want: "providers"},
 		{in: "unknown", want: "unknown"},
@@ -100,6 +102,12 @@ func TestIsSupportedPluginKind(t *testing.T) {
 	}
 	if !IsSupportedPluginKind(KindRouter) {
 		t.Fatal("router should be supported")
+	}
+	if !IsSupportedPluginKind(KindSecretManager) {
+		t.Fatal("secret-manager should be supported")
+	}
+	if !IsSupportedPluginKind(KindState) {
+		t.Fatal("state should be supported")
 	}
 	if IsSupportedPluginKind("providers") {
 		t.Fatal("raw alias should not be supported until normalized")

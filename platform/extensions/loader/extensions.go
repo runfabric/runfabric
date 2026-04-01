@@ -111,12 +111,20 @@ func (r boundaryRuntimeRegistry) Get(runtime string) (runtimecontracts.Runtime, 
 	return r.boundary.ResolveRuntimePlugin(runtime)
 }
 
+func (r boundaryRuntimeRegistry) Register(runtime runtimecontracts.Runtime) error {
+	return r.boundary.RegisterRuntime(runtime)
+}
+
 type boundarySimulatorRegistry struct {
 	boundary *resolution.Boundary
 }
 
 func (r boundarySimulatorRegistry) Get(simulatorID string) (simulatorcontracts.Simulator, error) {
 	return r.boundary.ResolveSimulator(simulatorID)
+}
+
+func (r boundarySimulatorRegistry) Register(simulator simulatorcontracts.Simulator) error {
+	return r.boundary.RegisterSimulator(simulator)
 }
 
 // DefaultLoader creates a loader with external plugins enabled and no version pinning.

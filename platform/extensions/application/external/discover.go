@@ -33,7 +33,7 @@ func HomeDir() (string, error) {
 
 type pluginYAML struct {
 	APIVersion        string   `yaml:"apiVersion"`
-	Kind              string   `yaml:"kind"` // provider | runtime | simulator
+	Kind              string   `yaml:"kind"` // provider | runtime | simulator | router | secret-manager | state
 	ID                string   `yaml:"id"`
 	Name              string   `yaml:"name"`
 	Description       string   `yaml:"description"`
@@ -140,6 +140,8 @@ func Discover(opts DiscoverOptions) (DiscoverResult, error) {
 		manifests.KindRuntime,
 		manifests.KindSimulator,
 		manifests.KindRouter,
+		manifests.KindSecretManager,
+		manifests.KindState,
 	} {
 		found, invalid := discoverKind(root, kind, opts)
 		res.Plugins = append(res.Plugins, found...)
@@ -432,6 +434,10 @@ func pluginKindDir(kind manifests.PluginKind) string {
 		return "simulators"
 	case manifests.KindRouter:
 		return "routers"
+	case manifests.KindSecretManager:
+		return "secret-managers"
+	case manifests.KindState:
+		return "states"
 	default:
 		return ""
 	}

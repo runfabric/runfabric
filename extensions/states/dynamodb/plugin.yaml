@@ -1,0 +1,16 @@
+apiVersion: runfabric.io/plugin/v1
+kind: state
+id: dynamodb
+name: DynamoDB State Backend
+description: External state backend plugin for DynamoDB receipts with local journals/locks
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/dynamodb-state
+capabilities:
+  - state:dynamodb
+  - backend:dynamodb
+permissions:
+  fs: true
+  env: true
+  network: true
+  cloud: true

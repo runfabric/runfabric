@@ -1,0 +1,16 @@
+apiVersion: runfabric.io/plugin/v1
+kind: secret-manager
+id: aws-secret-manager
+name: AWS Secret Manager
+description: Resolves aws-sm:// secret references from AWS Secrets Manager
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/aws-secret-manager
+capabilities:
+  - resolve-secret
+  - scheme:aws-sm
+permissions:
+  fs: false
+  env: true
+  network: true
+  cloud: true

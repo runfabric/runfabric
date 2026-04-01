@@ -23,6 +23,8 @@ func NewBuiltinSet() *BuiltinSet {
 	runtimesRegistry := loadBuiltinRuntimes(reg)
 	simulatorsRegistry := loadBuiltinSimulators(reg)
 	routersRegistry := loadBuiltinRouters(reg)
+	loadBuiltinSecretManagers(reg)
+	loadBuiltinStates(reg)
 
 	return &BuiltinSet{
 		Providers:      providersRegistry,

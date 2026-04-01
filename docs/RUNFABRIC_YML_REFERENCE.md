@@ -138,6 +138,8 @@ extensions:
   runtimePlugin: nodejs # kind=runtime
   simulatorPlugin: local # kind=simulator
   routerPlugin: cloudflare # kind=router (router command backend)
+  secretManagerPlugin: vault-secret-manager # kind=secret-manager (secret manager references)
+  secretManagerPluginVersion: 1.0.0 # optional pin
   router:
     autoApply:
       enabled: true
@@ -275,18 +277,27 @@ String values can also resolve `${secret:KEY}` placeholders. Resolution order:
 1. `secrets.KEY` from top-level config.
 2. Environment variable `KEY`.
 
-Top-level `secrets` entries support `secret://OTHER_KEY` indirection:
+Top-level `secrets` entries support `secret://OTHER_KEY` indirection and secret manager references:
 
 ```yaml
+extensions:
+  secretManagerPlugin: vault-secret-manager
+
 secrets:
   db_url: secret://DATABASE_URL
+  jwt_private_key: vault://apps/team/prod/jwt-private-key
 
 functions:
   - name: api
     entry: src/handler.default
     env:
       DATABASE_URL: "${secret:db_url}"
+      JWT_PRIVATE_KEY: "${secret:jwt_private_key}"
 ```
+
+Secret manager references (`aws-sm://...`, `gcp-sm://...`, `azure-kv://...`, `vault://...`) are resolved via `extensions.secretManagerPlugin`.
+
+Production stages (`prod`, `production`, `live`) reject static literal `secrets.*` values. Use `${env:VAR}`, `secret://KEY`, or secret manager references instead.
 
 If a `${secret:KEY}` reference cannot be resolved, config resolution fails with an explicit error.
 
@@ -649,7 +660,7 @@ Use `runfabric extensions addons list` to see the built-in catalog; if `addonCat
 
 When you want **active-active** deploy (same service in multiple regions or providers) with health checks and optional failover/latency routing, add a **`fabric`** block. It requires **`providerOverrides`**; each entry in `fabric.targets` is a provider key to deploy to.
 
-- **`targets`** (required): List of provider keys (e.g. `["aws-us", "aws-eu"]`) to deploy to. Use `runfabric router deploy` to deploy to all targets and record endpoints in `.runfabric/fabric-<stage>.json`.
+- **`targets`** (required): List of provider keys (e.g. `["aws-us", "aws-eu"]`) to deploy to. Use `runfabric router deploy` to deploy to all targets and record endpoints in `.runfabric/runfabric-state-<stage>.json`.
 - **`healthCheck`** (optional): Same shape as `deploy.healthCheck`; used when running health checks on fabric endpoints.
 - **`routing`** (optional): `failover`, `latency`, or `round-robin` — for documentation and future use; configure your DNS/load balancer (e.g. Route53) with the endpoints from `runfabric router endpoints`.
 

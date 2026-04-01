@@ -1,0 +1,13 @@
+apiVersion: runfabric/v1
+kind: provider
+id: ibm-openwhisk
+name: ibm-openwhisk
+description: External provider plugin for IBM OpenWhisk
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/ibm-plugin
+capabilities: [doctor, plan, deploy, remove, invoke, logs]
+supportsRuntime: [nodejs, python]
+supportsTriggers: [http]
+supportsResources: []
+permissions: { fs: true, env: true, network: true, cloud: true }

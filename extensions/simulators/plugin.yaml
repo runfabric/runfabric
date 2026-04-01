@@ -1,0 +1,16 @@
+apiVersion: runfabric.io/plugin/v1
+kind: simulator
+id: local
+name: Local Simulator
+description: External simulator plugin for local function simulation
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/local-simulator
+capabilities:
+  - simulate
+permissions:
+  fs: true
+  env: true
+  network: false
+  cloud: false
+

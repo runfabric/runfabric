@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/runfabric/runfabric/platform/core/state/backends"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
+	"github.com/runfabric/runfabric/platform/state/backends"
 )
 
 // StateListResult is the result of StateList / StatePull.
 type StateListResult struct {
-	Service  string               `json:"service"`
-	Backend  string               `json:"backend"`
-	Releases []state.ReleaseEntry `json:"releases"`
+	Service  string                    `json:"service"`
+	Backend  string                    `json:"backend"`
+	Releases []statetypes.ReleaseEntry `json:"releases"`
 }
 
 // StateList returns release entries (stages and timestamps) from the configured receipt backend.
@@ -41,10 +41,10 @@ func StatePull(configPath, stage string) (any, error) {
 
 // StateBackupSnapshot is the JSON shape written by StateBackup and read by StateRestore.
 type StateBackupSnapshot struct {
-	Backend  string                    `json:"backend"`
-	Service  string                    `json:"service"`
-	Releases []state.ReleaseEntry      `json:"releases"`
-	Receipts map[string]*state.Receipt `json:"receipts"`
+	Backend  string                         `json:"backend"`
+	Service  string                         `json:"service"`
+	Releases []statetypes.ReleaseEntry      `json:"releases"`
+	Receipts map[string]*statetypes.Receipt `json:"receipts"`
 }
 
 // StateBackup writes all receipts from the configured backend to a JSON file.
@@ -64,7 +64,7 @@ func StateBackup(configPath, stage, outPath string) (any, error) {
 		Backend:  ctx.Backends.Receipts.Kind(),
 		Service:  ctx.Config.Service,
 		Releases: releases,
-		Receipts: make(map[string]*state.Receipt),
+		Receipts: make(map[string]*statetypes.Receipt),
 	}
 	for _, e := range releases {
 		r, err := ctx.Backends.Receipts.Load(e.Stage)

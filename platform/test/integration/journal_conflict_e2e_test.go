@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	s3backend "github.com/runfabric/runfabric/platform/core/state/backends/s3"
-	"github.com/runfabric/runfabric/platform/core/state/transactions"
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
+	"github.com/runfabric/runfabric/platform/state/backends"
 )
 
 func TestJournalConflictE2EWithS3IfEnabled(t *testing.T) {
@@ -24,24 +24,27 @@ func TestJournalConflictE2EWithS3IfEnabled(t *testing.T) {
 		prefix = "runfabric-test"
 	}
 
-	client, err := s3backend.New(context.Background(), region, bucket, prefix)
+	bundle, err := backends.NewBundle(context.Background(), backends.Options{
+		Kind:      "s3",
+		AWSRegion: region,
+		S3Bucket:  bucket,
+		S3Prefix:  prefix,
+	})
 	if err != nil {
 		t.Fatalf("init s3 backend failed: %v", err)
 	}
+	if bundle == nil || bundle.Journals == nil {
+		t.Fatal("expected s3 journal backend bundle")
+	}
 
-	backend := s3backend.NewJournalBackend(context.Background(), client)
+	backend := bundle.Journals
 
-	j := &transactions.JournalFile{
+	j := &statetypes.JournalFile{
 		Service:   "conflict-svc",
 		Stage:     "dev",
 		Operation: "deploy",
 		Version:   10,
 	}
-	sum, err := transactions.ComputeChecksum(j)
-	if err != nil {
-		t.Fatalf("checksum failed: %v", err)
-	}
-	j.Checksum = sum
 
 	if err := backend.Save(j); err != nil {
 		t.Fatalf("initial backend save failed: %v", err)
@@ -49,11 +52,6 @@ func TestJournalConflictE2EWithS3IfEnabled(t *testing.T) {
 
 	stale := *j
 	stale.Version = 9
-	sum2, err := transactions.ComputeChecksum(&stale)
-	if err != nil {
-		t.Fatalf("checksum stale failed: %v", err)
-	}
-	stale.Checksum = sum2
 
 	err = backend.Save(&stale)
 	if err == nil {

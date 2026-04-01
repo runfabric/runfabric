@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"testing"
+
+	secretpolicy "github.com/runfabric/runfabric/platform/core/policy/secrets"
 )
 
 func TestResolve_EnvInterpolation(t *testing.T) {
@@ -199,5 +201,48 @@ func TestResolve_ScalingDefaults(t *testing.T) {
 	if out.Functions["worker"].ReservedConcurrency != 5 || out.Functions["worker"].ProvisionedConcurrency != 1 {
 		t.Errorf("worker: expected reserved=5 provisioned=1, got reserved=%d provisioned=%d",
 			out.Functions["worker"].ReservedConcurrency, out.Functions["worker"].ProvisionedConcurrency)
+	}
+}
+
+func TestResolve_RejectsStaticSecretsInProd(t *testing.T) {
+	cfg := &Config{
+		Service:  "svc",
+		Provider: ProviderConfig{Name: "aws-lambda", Runtime: "nodejs"},
+		Secrets: map[string]string{
+			"db_password": "static-value",
+		},
+		Functions: map[string]FunctionConfig{
+			"api": {Handler: "src/handler", Runtime: "nodejs20.x", Environment: map[string]string{"DB_PASSWORD": "${secret:db_password}"}},
+		},
+	}
+	if _, err := Resolve(cfg, "prod"); err == nil {
+		t.Fatal("expected prod stage static secret rejection")
+	}
+}
+
+func TestResolve_SecretManagerReference(t *testing.T) {
+	restore := secretpolicy.SetReferenceResolver(func(ref string) (string, error) {
+		return "resolved:" + ref, nil
+	})
+	defer restore()
+	resetSchemes := secretpolicy.SetSecretManagerRefSchemes([]string{"vault"})
+	defer resetSchemes()
+
+	cfg := &Config{
+		Service:  "svc",
+		Provider: ProviderConfig{Name: "aws-lambda", Runtime: "nodejs"},
+		Secrets: map[string]string{
+			"db_password": "vault://apps/team/prod/db-password",
+		},
+		Functions: map[string]FunctionConfig{
+			"api": {Handler: "src/handler", Runtime: "nodejs20.x", Environment: map[string]string{"DB_PASSWORD": "${secret:db_password}"}},
+		},
+	}
+	out, err := Resolve(cfg, "prod")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if got := out.Functions["api"].Environment["DB_PASSWORD"]; got != "resolved:vault://apps/team/prod/db-password" {
+		t.Fatalf("DB_PASSWORD=%q", got)
 	}
 }

@@ -1,0 +1,16 @@
+apiVersion: runfabric.io/plugin/v1
+kind: state
+id: sqlite
+name: SQLite State Backend
+description: External state backend plugin for SQLite receipts with local journals/locks
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/sqlite-state
+capabilities:
+  - state:sqlite
+  - backend:sqlite
+permissions:
+  fs: true
+  env: true
+  network: false
+  cloud: false

@@ -55,14 +55,14 @@ func newRouteDeployCmd(opts *common.GlobalOptions) *cobra.Command {
 				common.StatusFail(opts.JSONOutput, "Router deploy failed.")
 				return common.PrintFailure("router deploy", err)
 			}
-			targets := app.FabricTargets(ctx.Config)
+			targets := app.RunFabricTargets(ctx.Config)
 			if len(targets) == 0 {
 				if !opts.JSONOutput {
 					fmt.Fprintf(cmd.OutOrStdout(), "No router targets; add fabric.targets (provider keys) and providerOverrides to runfabric.yml.\n")
 				}
 				return nil
 			}
-			fabricState, err := app.FabricDeploy(opts.ConfigPath, opts.Stage, rollbackOnFailure, noRollbackOnFailure)
+			fabricState, err := app.RunFabricDeploy(opts.ConfigPath, opts.Stage, rollbackOnFailure, noRollbackOnFailure)
 			if err != nil {
 				common.StatusFail(opts.JSONOutput, "Router deploy failed.")
 				return common.PrintFailure("router deploy", err)
@@ -131,7 +131,7 @@ func newRouteStatusCmd(opts *common.GlobalOptions) *cobra.Command {
 		Short: "Check health of router endpoints",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			common.StatusRunning(opts.JSONOutput, "Router status...")
-			fabricState, err := app.FabricHealth(opts.ConfigPath, opts.Stage)
+			fabricState, err := app.RunFabricHealth(opts.ConfigPath, opts.Stage)
 			if err != nil {
 				common.StatusFail(opts.JSONOutput, "Router status failed.")
 				return common.PrintFailure("router status", err)
@@ -171,7 +171,7 @@ func newRouteEndpointsCmd(opts *common.GlobalOptions) *cobra.Command {
 			if err != nil {
 				return common.PrintFailure("router endpoints", err)
 			}
-			fabricState, err := state.LoadFabricState(ctx.RootDir, opts.Stage)
+			fabricState, err := state.LoadRunFabricState(ctx.RootDir, opts.Stage)
 			if err != nil || fabricState == nil {
 				if !opts.JSONOutput {
 					fmt.Fprintf(cmd.OutOrStdout(), "No router state; run 'runfabric router deploy' first.\n")
@@ -206,7 +206,7 @@ func newRouteRoutingCmd(opts *common.GlobalOptions) *cobra.Command {
 				}
 				return nil
 			}
-			fabricState, err := state.LoadFabricState(ctx.RootDir, opts.Stage)
+			fabricState, err := state.LoadRunFabricState(ctx.RootDir, opts.Stage)
 			if err != nil || fabricState == nil {
 				if !opts.JSONOutput {
 					fmt.Fprintf(cmd.OutOrStdout(), "No router state; run 'runfabric router deploy' first.\n")
@@ -243,7 +243,7 @@ func newRouteSimulateCmd(opts *common.GlobalOptions) *cobra.Command {
 				}
 				return nil
 			}
-			fabricState, err := state.LoadFabricState(ctx.RootDir, opts.Stage)
+			fabricState, err := state.LoadRunFabricState(ctx.RootDir, opts.Stage)
 			if err != nil || fabricState == nil {
 				if !opts.JSONOutput {
 					fmt.Fprintf(cmd.OutOrStdout(), "No router state; run 'runfabric router deploy' first.\n")
@@ -289,7 +289,7 @@ func newRouteChaosVerifyCmd(opts *common.GlobalOptions) *cobra.Command {
 				}
 				return nil
 			}
-			fabricState, err := state.LoadFabricState(ctx.RootDir, opts.Stage)
+			fabricState, err := state.LoadRunFabricState(ctx.RootDir, opts.Stage)
 			if err != nil || fabricState == nil {
 				if !opts.JSONOutput {
 					fmt.Fprintf(cmd.OutOrStdout(), "No router state; run 'runfabric router deploy' first.\n")
@@ -354,7 +354,7 @@ Use --dry-run to preview planned changes without modifying the provider.`,
 				}
 				return nil
 			}
-			fabricState, err := state.LoadFabricState(ctx.RootDir, opts.Stage)
+			fabricState, err := state.LoadRunFabricState(ctx.RootDir, opts.Stage)
 			if err != nil || fabricState == nil {
 				if !opts.JSONOutput {
 					fmt.Fprintf(cmd.OutOrStdout(), "No router state; run 'runfabric router deploy' first.\n")
@@ -421,7 +421,7 @@ func newRouteDNSShiftCmd(opts *common.GlobalOptions) *cobra.Command {
 				}
 				return nil
 			}
-			fabricState, err := state.LoadFabricState(ctx.RootDir, opts.Stage)
+			fabricState, err := state.LoadRunFabricState(ctx.RootDir, opts.Stage)
 			if err != nil || fabricState == nil {
 				if !opts.JSONOutput {
 					fmt.Fprintf(cmd.OutOrStdout(), "No router state; run 'runfabric router deploy' first.\n")
@@ -499,7 +499,7 @@ func newRouteDNSReconcileCmd(opts *common.GlobalOptions) *cobra.Command {
 				}
 				return nil
 			}
-			fabricState, err := state.LoadFabricState(ctx.RootDir, opts.Stage)
+			fabricState, err := state.LoadRunFabricState(ctx.RootDir, opts.Stage)
 			if err != nil || fabricState == nil {
 				if !opts.JSONOutput {
 					fmt.Fprintf(cmd.OutOrStdout(), "No router state; run 'runfabric router deploy' first.\n")

@@ -10,9 +10,9 @@ import (
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 )
 
-// FabricDeploy runs deploy for each target in cfg.Fabric.Targets (provider keys), collects the primary URL from each receipt, and saves fabric state.
+// RunFabricDeploy runs deploy for each target in cfg.Fabric.Targets (provider keys), collects the primary URL from each receipt, and saves fabric state.
 // Requires cfg.Fabric and cfg.ProviderOverrides; each target must be a key in ProviderOverrides.
-func FabricDeploy(configPath, stage string, rollbackOnFailure, noRollbackOnFailure bool) (*state.FabricState, error) {
+func RunFabricDeploy(configPath, stage string, rollbackOnFailure, noRollbackOnFailure bool) (*state.RunFabricState, error) {
 	ctx, err := Bootstrap(configPath, stage, "")
 	if err != nil {
 		return nil, err
@@ -24,7 +24,7 @@ func FabricDeploy(configPath, stage string, rollbackOnFailure, noRollbackOnFailu
 		return nil, nil
 	}
 
-	var endpoints []state.FabricEndpoint
+	var endpoints []state.RunFabricEndpoint
 	for _, providerKey := range ctx.Config.Fabric.Targets {
 		if _, ok := ctx.Config.ProviderOverrides[providerKey]; !ok {
 			continue
@@ -46,31 +46,31 @@ func FabricDeploy(configPath, stage string, rollbackOnFailure, noRollbackOnFailu
 				}
 			}
 		}
-		endpoints = append(endpoints, state.FabricEndpoint{
+		endpoints = append(endpoints, state.RunFabricEndpoint{
 			Provider:  providerKey,
 			URL:       url,
 			UpdatedAt: receipt.UpdatedAt,
 		})
 	}
 
-	fabricState := &state.FabricState{
+	fabricState := &state.RunFabricState{
 		Service:   ctx.Config.Service,
 		Stage:     stage,
 		Endpoints: endpoints,
 	}
-	if err := state.SaveFabricState(ctx.RootDir, fabricState); err != nil {
+	if err := state.SaveRunFabricState(ctx.RootDir, fabricState); err != nil {
 		return nil, err
 	}
 	return fabricState, nil
 }
 
-// FabricHealth runs HTTP GET on each endpoint in fabric state and sets Healthy. Uses cfg if non-nil for optional health check URL path.
-func FabricHealth(configPath, stage string) (*state.FabricState, error) {
+// RunFabricHealth runs HTTP GET on each endpoint in fabric state and sets Healthy. Uses cfg if non-nil for optional health check URL path.
+func RunFabricHealth(configPath, stage string) (*state.RunFabricState, error) {
 	ctx, err := Bootstrap(configPath, stage, "")
 	if err != nil {
 		return nil, err
 	}
-	fabricState, err := state.LoadFabricState(ctx.RootDir, stage)
+	fabricState, err := state.LoadRunFabricState(ctx.RootDir, stage)
 	if err != nil || fabricState == nil {
 		return nil, err
 	}
@@ -99,8 +99,8 @@ func FabricHealth(configPath, stage string) (*state.FabricState, error) {
 	return fabricState, nil
 }
 
-// FabricTargets returns the list of provider keys to use for fabric deploy. If cfg has no fabric or no targets, returns nil.
-func FabricTargets(cfg *config.Config) []string {
+// RunFabricTargets returns the list of provider keys to use for fabric deploy. If cfg has no fabric or no targets, returns nil.
+func RunFabricTargets(cfg *config.Config) []string {
 	if cfg == nil || cfg.Fabric == nil || len(cfg.Fabric.Targets) == 0 {
 		return nil
 	}

@@ -40,18 +40,50 @@ func toPluginMetaList(items any) []routercontracts.PluginMeta {
 
 type runtimeRegistry struct {
 	raw any
+	mu  sync.RWMutex
+	ext map[string]runtimecontracts.Runtime
 }
 
 func newRuntimeRegistry(raw any) RuntimeRegistry {
-	return &runtimeRegistry{raw: raw}
+	return &runtimeRegistry{raw: raw, ext: map[string]runtimecontracts.Runtime{}}
 }
 
 func (r *runtimeRegistry) Get(runtime string) (runtimecontracts.Runtime, error) {
+	normalized := NormalizeRuntimeID(runtime)
+	if isExternalOnlyRuntime(normalized) {
+		r.mu.RLock()
+		extPlugin, ok := r.ext[normalized]
+		r.mu.RUnlock()
+		if ok {
+			return extPlugin, nil
+		}
+		return nil, fmt.Errorf("runtime %q is configured external-only", normalized)
+	}
+	r.mu.RLock()
+	extPlugin, ok := r.ext[normalized]
+	r.mu.RUnlock()
+	if ok {
+		return extPlugin, nil
+	}
 	rawPlugin, err := callMethod(r.raw, "Get", runtime)
 	if err != nil {
 		return nil, err
 	}
 	return &runtimePlugin{plugin: rawPlugin}, nil
+}
+
+func (r *runtimeRegistry) Register(runtime runtimecontracts.Runtime) error {
+	if runtime == nil {
+		return fmt.Errorf("runtime plugin is nil")
+	}
+	id := NormalizeRuntimeID(strings.TrimSpace(runtime.Meta().ID))
+	if id == "" {
+		return fmt.Errorf("runtime plugin id is required")
+	}
+	r.mu.Lock()
+	r.ext[id] = runtime
+	r.mu.Unlock()
+	return nil
 }
 
 type runtimePlugin struct {
@@ -106,18 +138,50 @@ func (p *runtimePlugin) Invoke(ctx context.Context, req runtimecontracts.InvokeR
 
 type simulatorRegistry struct {
 	raw any
+	mu  sync.RWMutex
+	ext map[string]simulatorcontracts.Simulator
 }
 
 func newSimulatorRegistry(raw any) SimulatorRegistry {
-	return &simulatorRegistry{raw: raw}
+	return &simulatorRegistry{raw: raw, ext: map[string]simulatorcontracts.Simulator{}}
 }
 
 func (r *simulatorRegistry) Get(simulatorID string) (simulatorcontracts.Simulator, error) {
+	id := strings.TrimSpace(simulatorID)
+	if isExternalOnlySimulator(id) {
+		r.mu.RLock()
+		extPlugin, ok := r.ext[id]
+		r.mu.RUnlock()
+		if ok {
+			return extPlugin, nil
+		}
+		return nil, fmt.Errorf("simulator %q is configured external-only", id)
+	}
+	r.mu.RLock()
+	extPlugin, ok := r.ext[id]
+	r.mu.RUnlock()
+	if ok {
+		return extPlugin, nil
+	}
 	rawPlugin, err := callMethod(r.raw, "Get", simulatorID)
 	if err != nil {
 		return nil, err
 	}
 	return &simulatorPlugin{plugin: rawPlugin}, nil
+}
+
+func (r *simulatorRegistry) Register(simulator simulatorcontracts.Simulator) error {
+	if simulator == nil {
+		return fmt.Errorf("simulator plugin is nil")
+	}
+	id := strings.TrimSpace(simulator.Meta().ID)
+	if id == "" {
+		return fmt.Errorf("simulator plugin id is required")
+	}
+	r.mu.Lock()
+	r.ext[id] = simulator
+	r.mu.Unlock()
+	return nil
 }
 
 type simulatorPlugin struct {
@@ -159,6 +223,15 @@ func (r *routerRegistry) Get(routerID string) (routercontracts.Router, error) {
 	id := strings.ToLower(strings.TrimSpace(routerID))
 	if id == "" {
 		return nil, fmt.Errorf("router plugin id is required")
+	}
+	if isExternalOnlyRouter(id) {
+		r.mu.RLock()
+		extPlugin, ok := r.ext[id]
+		r.mu.RUnlock()
+		if ok {
+			return extPlugin, nil
+		}
+		return nil, fmt.Errorf("router %q is configured external-only", id)
 	}
 	r.mu.RLock()
 	extPlugin, ok := r.ext[id]
