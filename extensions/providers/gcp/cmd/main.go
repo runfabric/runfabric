@@ -1,12 +1,12 @@
 package main
 
 import (
-"context"
-"fmt"
-"os"
+	"context"
+	"fmt"
+	"os"
 
-gcpprovider "github.com/runfabric/runfabric/extensions/providers/gcp"
-sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
+	gcpprovider "github.com/runfabric/runfabric/extensions/providers/gcp"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func main() {

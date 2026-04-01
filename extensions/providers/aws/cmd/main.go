@@ -1,12 +1,12 @@
 package main
 
 import (
-"context"
-"fmt"
-"os"
+	"context"
+	"fmt"
+	"os"
 
-awsprovider "github.com/runfabric/runfabric/extensions/providers/aws"
-sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
+	awsprovider "github.com/runfabric/runfabric/extensions/providers/aws"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func main() {

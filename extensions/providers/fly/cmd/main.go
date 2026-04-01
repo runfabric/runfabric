@@ -1,12 +1,12 @@
 package main
 
 import (
-"context"
-"fmt"
-"os"
+	"context"
+	"fmt"
+	"os"
 
-flyprovider "github.com/runfabric/runfabric/extensions/providers/fly"
-sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
+	flyprovider "github.com/runfabric/runfabric/extensions/providers/fly"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func main() {

@@ -1,12 +1,12 @@
 package main
 
 import (
-"context"
-"fmt"
-"os"
+	"context"
+	"fmt"
+	"os"
 
-netlifyprovider "github.com/runfabric/runfabric/extensions/providers/netlify"
-sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
+	netlifyprovider "github.com/runfabric/runfabric/extensions/providers/netlify"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func main() {

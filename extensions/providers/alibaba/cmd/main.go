@@ -1,12 +1,12 @@
 package main
 
 import (
-"context"
-"fmt"
-"os"
+	"context"
+	"fmt"
+	"os"
 
-alibabaprovider "github.com/runfabric/runfabric/extensions/providers/alibaba"
-sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
+	alibabaprovider "github.com/runfabric/runfabric/extensions/providers/alibaba"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func main() {

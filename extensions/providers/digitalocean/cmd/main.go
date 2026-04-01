@@ -1,12 +1,12 @@
 package main
 
 import (
-"context"
-"fmt"
-"os"
+	"context"
+	"fmt"
+	"os"
 
-digitaloceanprovider "github.com/runfabric/runfabric/extensions/providers/digitalocean"
-sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
+	digitaloceanprovider "github.com/runfabric/runfabric/extensions/providers/digitalocean"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func main() {

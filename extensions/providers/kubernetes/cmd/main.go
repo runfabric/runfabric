@@ -1,12 +1,12 @@
 package main
 
 import (
-"context"
-"fmt"
-"os"
+	"context"
+	"fmt"
+	"os"
 
-kubernetesprovider "github.com/runfabric/runfabric/extensions/providers/kubernetes"
-sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
+	kubernetesprovider "github.com/runfabric/runfabric/extensions/providers/kubernetes"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 func main() {
