@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	ibmprovider "github.com/runfabric/runfabric/extensions/providers/ibm"
+	ibmprovider "github.com/runfabric/runfabric/extensions/providers/ibm-openwhisk"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 

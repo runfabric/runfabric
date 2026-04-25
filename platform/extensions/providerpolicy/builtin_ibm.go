@@ -4,10 +4,10 @@ package providerpolicy
 
 // To move ibm-openwhisk to an external binary plugin:
 //   1. Build with -tags no_builtin_ibm  OR  delete this file.
-//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/ibm-openwhisk/ibm-plugin ./extensions/providers/ibm/cmd/
+//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/ibm-openwhisk/ibm-plugin ./extensions/providers/ibm-openwhisk/cmd/
 
 import (
-	ibmprovider "github.com/runfabric/runfabric/extensions/providers/ibm"
+	ibmprovider "github.com/runfabric/runfabric/extensions/providers/ibm-openwhisk"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )
