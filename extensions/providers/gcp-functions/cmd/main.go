@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	gcpprovider "github.com/runfabric/runfabric/extensions/providers/gcp"
+	gcpprovider "github.com/runfabric/runfabric/extensions/providers/gcp-functions"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 

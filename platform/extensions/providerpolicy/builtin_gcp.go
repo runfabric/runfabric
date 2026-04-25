@@ -4,10 +4,10 @@ package providerpolicy
 
 // To move gcp-functions to an external binary plugin:
 //   1. Build with -tags no_builtin_gcp  OR  delete this file.
-//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/gcp-functions/gcp-plugin ./extensions/providers/gcp/cmd/
+//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/gcp-functions/gcp-plugin ./extensions/providers/gcp-functions/cmd/
 
 import (
-	gcpprovider "github.com/runfabric/runfabric/extensions/providers/gcp"
+	gcpprovider "github.com/runfabric/runfabric/extensions/providers/gcp-functions"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )
