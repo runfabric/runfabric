@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	azureprovider "github.com/runfabric/runfabric/extensions/providers/azure"
+	azureprovider "github.com/runfabric/runfabric/extensions/providers/azure-functions"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 

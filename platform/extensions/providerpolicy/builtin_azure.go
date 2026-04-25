@@ -4,10 +4,10 @@ package providerpolicy
 
 // To move azure-functions to an external binary plugin:
 //   1. Build with -tags no_builtin_azure  OR  delete this file.
-//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/azure-functions/azure-plugin ./extensions/providers/azure/cmd/
+//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/azure-functions/azure-plugin ./extensions/providers/azure-functions/cmd/
 
 import (
-	azureprovider "github.com/runfabric/runfabric/extensions/providers/azure"
+	azureprovider "github.com/runfabric/runfabric/extensions/providers/azure-functions"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )
