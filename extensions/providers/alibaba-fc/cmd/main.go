@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	alibabaprovider "github.com/runfabric/runfabric/extensions/providers/alibaba"
+	alibabaprovider "github.com/runfabric/runfabric/extensions/providers/alibaba-fc"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 

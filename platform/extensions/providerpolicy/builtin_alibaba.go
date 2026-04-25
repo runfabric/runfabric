@@ -4,10 +4,10 @@ package providerpolicy
 
 // To move alibaba-fc to an external binary plugin:
 //   1. Build with -tags no_builtin_alibaba  OR  delete this file.
-//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/alibaba-fc/alibaba-plugin ./extensions/providers/alibaba/cmd/
+//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/alibaba-fc/alibaba-plugin ./extensions/providers/alibaba-fc/cmd/
 
 import (
-	alibabaprovider "github.com/runfabric/runfabric/extensions/providers/alibaba"
+	alibabaprovider "github.com/runfabric/runfabric/extensions/providers/alibaba-fc"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )
