@@ -4,10 +4,10 @@ package providerpolicy
 
 // To move digitalocean-functions to an external binary plugin:
 //   1. Build with -tags no_builtin_digitalocean  OR  delete this file.
-//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/digitalocean-functions/digitalocean-plugin ./extensions/providers/digitalocean/cmd/
+//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/digitalocean-functions/digitalocean-plugin ./extensions/providers/digitalocean-functions/cmd/
 
 import (
-	digitaloceanprovider "github.com/runfabric/runfabric/extensions/providers/digitalocean"
+	digitaloceanprovider "github.com/runfabric/runfabric/extensions/providers/digitalocean-functions"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )

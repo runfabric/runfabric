@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	digitaloceanprovider "github.com/runfabric/runfabric/extensions/providers/digitalocean"
+	digitaloceanprovider "github.com/runfabric/runfabric/extensions/providers/digitalocean-functions"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
