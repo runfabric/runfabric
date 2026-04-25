@@ -4,11 +4,11 @@ package providerpolicy
 
 // To move aws-lambda to an external binary plugin:
 //   1. Build with -tags no_builtin_aws  OR  delete this file.
-//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/aws-lambda/aws-plugin ./extensions/providers/aws/cmd/
-//   3. The plugin.yaml in extensions/providers/aws/ defines the manifest.
+//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/aws-lambda/aws-plugin ./extensions/providers/aws-lambda/cmd/
+//   3. The plugin.yaml in extensions/providers/aws-lambda/ defines the manifest.
 
 import (
-	awsprovider "github.com/runfabric/runfabric/extensions/providers/aws"
+	awsprovider "github.com/runfabric/runfabric/extensions/providers/aws-lambda"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )

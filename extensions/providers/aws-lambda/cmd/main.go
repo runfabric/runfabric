@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	awsprovider "github.com/runfabric/runfabric/extensions/providers/aws"
+	awsprovider "github.com/runfabric/runfabric/extensions/providers/aws-lambda"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
