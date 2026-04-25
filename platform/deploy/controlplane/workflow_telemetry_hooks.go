@@ -1,7 +1,14 @@
 package controlplane
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -20,14 +27,24 @@ type NoopTelemetryHook struct{}
 func (NoopTelemetryHook) RecordStep(_ *state.WorkflowRun, _ state.WorkflowStepRun, _ *StepExecutionResult, _ time.Duration, _ error) {
 }
 
-// AWSCloudWatchHook records step metrics in AWS CloudWatch custom metrics format.
-// In production this would call cloudwatch.PutMetricData; here it constructs the envelope.
+// telemetryClient is a shared HTTP client for all telemetry hooks.
+// Short timeout: telemetry must not block workflow execution.
+var telemetryClient = &http.Client{Timeout: 5 * time.Second}
+
+// AWSCloudWatchHook records step metrics via CloudWatch PutMetricData.
 type AWSCloudWatchHook struct {
-	Namespace string // e.g. "RunFabric/Workflow"; defaults to "RunFabric/Workflow" if empty.
+	Namespace string // defaults to "RunFabric/Workflow" if empty
 	Region    string
 }
 
 func (h AWSCloudWatchHook) RecordStep(run *state.WorkflowRun, step state.WorkflowStepRun, _ *StepExecutionResult, elapsed time.Duration, err error) {
+	region := h.Region
+	if region == "" {
+		region = os.Getenv("AWS_REGION")
+	}
+	if region == "" {
+		return
+	}
 	ns := h.Namespace
 	if ns == "" {
 		ns = "RunFabric/Workflow"
@@ -36,73 +53,150 @@ func (h AWSCloudWatchHook) RecordStep(run *state.WorkflowRun, step state.Workflo
 	if err != nil {
 		status = "Error"
 	}
-	// Metric envelope — production callers replace this with a real PutMetricData call.
-	_ = map[string]any{
-		"Namespace": ns,
-		"MetricData": []map[string]any{{
-			"MetricName": "StepDuration",
-			"Dimensions": []map[string]string{
-				{"Name": "WorkflowHash", "Value": run.WorkflowHash},
-				{"Name": "StepKind", "Value": step.Kind},
-				{"Name": "Status", "Value": status},
-				{"Name": "Region", "Value": h.Region},
-			},
-			"Value": elapsed.Milliseconds(),
-			"Unit":  "Milliseconds",
-		}},
+
+	form := url.Values{}
+	form.Set("Action", "PutMetricData")
+	form.Set("Version", "2010-08-01")
+	form.Set("Namespace", ns)
+	form.Set("MetricData.member.1.MetricName", "StepDuration")
+	form.Set("MetricData.member.1.Unit", "Milliseconds")
+	form.Set("MetricData.member.1.Value", fmt.Sprintf("%d", elapsed.Milliseconds()))
+	form.Set("MetricData.member.1.Dimensions.member.1.Name", "WorkflowHash")
+	form.Set("MetricData.member.1.Dimensions.member.1.Value", run.WorkflowHash)
+	form.Set("MetricData.member.1.Dimensions.member.2.Name", "StepKind")
+	form.Set("MetricData.member.1.Dimensions.member.2.Value", step.Kind)
+	form.Set("MetricData.member.1.Dimensions.member.3.Name", "Status")
+	form.Set("MetricData.member.1.Dimensions.member.3.Value", status)
+	form.Set("MetricData.member.1.Dimensions.member.4.Name", "Region")
+	form.Set("MetricData.member.1.Dimensions.member.4.Value", region)
+	body := []byte(form.Encode())
+
+	cwURL := fmt.Sprintf("https://monitoring.%s.amazonaws.com/", region)
+	req, err2 := http.NewRequestWithContext(context.Background(), http.MethodPost, cwURL, bytes.NewReader(body))
+	if err2 != nil {
+		return
 	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if signErr := signAWSRequest(req, body, region, "monitoring"); signErr != nil {
+		return
+	}
+	resp, err2 := telemetryClient.Do(req)
+	if err2 != nil {
+		return
+	}
+	io.Copy(io.Discard, resp.Body) //nolint:errcheck
+	resp.Body.Close()
 }
 
-// GCPCloudMonitoringHook records step metrics in GCP Cloud Monitoring time-series format.
-// In production this would call monitoring.ProjectsTimeSeriesCreate.
+// GCPCloudMonitoringHook records step metrics via Cloud Monitoring timeSeries.create.
 type GCPCloudMonitoringHook struct {
-	Project string // GCP project ID; defaults to "runfabric-project" if empty.
+	Project string // GCP project ID; falls back to RUNFABRIC_GCP_PROJECT_ID / GOOGLE_CLOUD_PROJECT
 	Region  string
 }
 
 func (h GCPCloudMonitoringHook) RecordStep(run *state.WorkflowRun, step state.WorkflowStepRun, _ *StepExecutionResult, elapsed time.Duration, err error) {
 	project := h.Project
 	if project == "" {
-		project = "runfabric-project"
+		project = os.Getenv("RUNFABRIC_GCP_PROJECT_ID")
 	}
+	if project == "" {
+		project = os.Getenv("GOOGLE_CLOUD_PROJECT")
+	}
+	token := strings.TrimSpace(os.Getenv("RUNFABRIC_GCP_ACCESS_TOKEN"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("GOOGLE_ACCESS_TOKEN"))
+	}
+	if project == "" || token == "" {
+		return
+	}
+
 	status := "OK"
 	if err != nil {
 		status = "ERROR"
 	}
-	_ = map[string]any{
-		"name":   fmt.Sprintf("projects/%s/timeSeries", project),
-		"metric": "custom.googleapis.com/runfabric/step_duration",
-		"resource": map[string]string{
-			"type":    "global",
-			"project": project,
-			"region":  h.Region,
-		},
-		"points": []map[string]any{{
-			"interval": map[string]string{"endTime": time.Now().UTC().Format(time.RFC3339)},
-			"value":    map[string]any{"doubleValue": elapsed.Seconds()},
+
+	payload := map[string]any{
+		"timeSeries": []map[string]any{{
+			"metric": map[string]any{
+				"type": "custom.googleapis.com/runfabric/step_duration",
+				"labels": map[string]string{
+					"workflow_hash": run.WorkflowHash,
+					"step_kind":     step.Kind,
+					"status":        status,
+				},
+			},
+			"resource": map[string]any{
+				"type":   "global",
+				"labels": map[string]string{"project_id": project},
+			},
+			"points": []map[string]any{{
+				"interval": map[string]string{"endTime": time.Now().UTC().Format(time.RFC3339)},
+				"value":    map[string]any{"doubleValue": elapsed.Seconds()},
+			}},
 		}},
-		"labels": map[string]string{
-			"workflow_hash": run.WorkflowHash,
-			"step_kind":     step.Kind,
-			"status":        status,
-		},
 	}
+	body, err2 := json.Marshal(payload)
+	if err2 != nil {
+		return
+	}
+
+	gcpURL := fmt.Sprintf("https://monitoring.googleapis.com/v3/projects/%s/timeSeries", project)
+	req, err2 := http.NewRequestWithContext(context.Background(), http.MethodPost, gcpURL, bytes.NewReader(body))
+	if err2 != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err2 := telemetryClient.Do(req)
+	if err2 != nil {
+		return
+	}
+	io.Copy(io.Discard, resp.Body) //nolint:errcheck
+	resp.Body.Close()
 }
 
-// AzureMonitorHook records step metrics in Azure Monitor custom metrics format.
-// In production this would POST to the Azure Monitor ingestion endpoint.
+// AzureMonitorHook records step metrics via Azure Monitor custom metrics ingestion.
+// Requires AZURE_MONITOR_ACCESS_TOKEN (Azure AD bearer token).
+// Subscription and ResourceGroup fall back to AZURE_SUBSCRIPTION_ID / AZURE_RESOURCE_GROUP
+// if not set on the struct. AppName falls back to AZURE_FUNCTION_APP_NAME.
 type AzureMonitorHook struct {
 	Subscription  string
 	ResourceGroup string
 	Region        string
+	AppName       string
 }
 
 func (h AzureMonitorHook) RecordStep(run *state.WorkflowRun, step state.WorkflowStepRun, _ *StepExecutionResult, elapsed time.Duration, err error) {
+	sub := h.Subscription
+	if sub == "" {
+		sub = os.Getenv("AZURE_SUBSCRIPTION_ID")
+	}
+	rg := h.ResourceGroup
+	if rg == "" {
+		rg = os.Getenv("AZURE_RESOURCE_GROUP")
+	}
+	appName := h.AppName
+	if appName == "" {
+		appName = os.Getenv("AZURE_FUNCTION_APP_NAME")
+	}
+	token := os.Getenv("AZURE_MONITOR_ACCESS_TOKEN")
+	if sub == "" || rg == "" || appName == "" || token == "" {
+		return
+	}
+
 	status := "Succeeded"
 	if err != nil {
 		status = "Failed"
 	}
-	_ = map[string]any{
+
+	// Azure Monitor custom metrics:
+	// https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/metrics-store-custom-rest-api
+	azURL := fmt.Sprintf(
+		"https://%s.monitoring.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Web/sites/%s/metrics",
+		h.Region, sub, rg, appName,
+	)
+
+	payload := map[string]any{
 		"time": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]any{
 			"baseData": map[string]any{
@@ -117,6 +211,23 @@ func (h AzureMonitorHook) RecordStep(run *state.WorkflowRun, step state.Workflow
 			},
 		},
 	}
+	body, err2 := json.Marshal(payload)
+	if err2 != nil {
+		return
+	}
+
+	req, err2 := http.NewRequestWithContext(context.Background(), http.MethodPost, azURL, bytes.NewReader(body))
+	if err2 != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err2 := telemetryClient.Do(req)
+	if err2 != nil {
+		return
+	}
+	io.Copy(io.Discard, resp.Body) //nolint:errcheck
+	resp.Body.Close()
 }
 
 // ProviderTelemetryHook returns a provider-appropriate StepTelemetryHook.

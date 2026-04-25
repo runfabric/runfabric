@@ -217,25 +217,34 @@ func (c *BedrockLLMClient) Evaluate(ctx context.Context, model, content, criteri
 	return parseEvalScore(text)
 }
 
-// signBedrockRequest applies AWS SigV4 to an HTTP request using env credentials.
+// signBedrockRequest applies AWS SigV4 for the Bedrock service.
 func signBedrockRequest(req *http.Request, body []byte, region string) error {
+	return signAWSRequest(req, body, region, "bedrock")
+}
+
+// signAWSRequest applies AWS SigV4 to an HTTP request for the given service using env credentials.
+func signAWSRequest(req *http.Request, body []byte, region, service string) error {
 	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 	sessionToken := os.Getenv("AWS_SESSION_TOKEN")
 	if accessKey == "" || secretKey == "" {
-		return fmt.Errorf("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set for Bedrock")
+		return fmt.Errorf("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set")
 	}
 
 	now := time.Now().UTC()
 	dateTime := now.Format("20060102T150405Z")
 	date := now.Format("20060102")
-	service := "bedrock"
 
 	bodyHash := sha256Hex(body)
 	req.Header.Set("X-Amz-Date", dateTime)
 	req.Header.Set("X-Amz-Content-Sha256", bodyHash)
 	if sessionToken != "" {
 		req.Header.Set("X-Amz-Security-Token", sessionToken)
+	}
+
+	host := req.Host
+	if host == "" {
+		host = req.URL.Host
 	}
 
 	signedHeaders := "content-type;host;x-amz-content-sha256;x-amz-date"
@@ -245,7 +254,7 @@ func signBedrockRequest(req *http.Request, body []byte, region string) error {
 
 	canonicalHeaders := fmt.Sprintf(
 		"content-type:%s\nhost:%s\nx-amz-content-sha256:%s\nx-amz-date:%s\n",
-		req.Header.Get("Content-Type"), req.Host, bodyHash, dateTime,
+		req.Header.Get("Content-Type"), host, bodyHash, dateTime,
 	)
 	if sessionToken != "" {
 		canonicalHeaders += fmt.Sprintf("x-amz-security-token:%s\n", sessionToken)
