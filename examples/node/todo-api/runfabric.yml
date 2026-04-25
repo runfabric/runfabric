@@ -1,0 +1,47 @@
+service: todo-api
+
+provider:
+  name: kubernetes
+  runtime: nodejs
+  serviceType: ClusterIP
+
+deploy:
+  strategy: per-function
+
+stages:
+  "*":
+    provider:
+      serviceType: LoadBalancer
+  "feature-*":
+    provider:
+      serviceType: ClusterIP
+      namespace: preview
+  "prod-*":
+    provider:
+      serviceType: LoadBalancer
+      namespace: ${stage}
+  dev:
+    provider:
+      serviceType: LoadBalancer
+
+functions:
+  - name: list
+    entry: src/list.ts
+    triggers:
+      - type: http
+        method: GET
+        path: /todos
+
+  - name: get
+    entry: src/get.ts
+    triggers:
+      - type: http
+        method: GET
+        path: /todos/{id}
+
+  - name: create
+    entry: src/create.ts
+    triggers:
+      - type: http
+        method: POST
+        path: /todos

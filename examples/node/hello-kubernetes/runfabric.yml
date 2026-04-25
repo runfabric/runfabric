@@ -1,0 +1,38 @@
+service: hello-k8s
+
+provider:
+  name: kubernetes
+  runtime: nodejs
+  image: nginx:alpine
+  serviceType: ClusterIP
+
+stages:
+  # "*" applies to every stage not explicitly overridden
+  "*":
+    provider:
+      serviceType: LoadBalancer
+
+  # glob: any stage starting with "feature-" gets ClusterIP + preview namespace
+  "feature-*":
+    provider:
+      serviceType: ClusterIP
+      namespace: preview
+
+  # glob: any prod-region stage (prod-us, prod-eu, prod-ap...) gets its own namespace
+  "prod-*":
+    provider:
+      serviceType: LoadBalancer
+      namespace: ${stage}
+
+  # exact: dev gets a public LoadBalancer for direct access
+  dev:
+    provider:
+      serviceType: LoadBalancer
+
+functions:
+  - name: hello
+    entry: src/handler.hello
+    triggers:
+      - type: http
+        path: /hello
+        method: GET

@@ -131,8 +131,8 @@ func Validate(cfg *Config) error {
 
 	if cfg.Deploy != nil {
 		s := strings.TrimSpace(strings.ToLower(cfg.Deploy.Strategy))
-		if s != "" && s != "all-at-once" && s != "canary" && s != "blue-green" {
-			return fmt.Errorf("deploy.strategy must be all-at-once, canary, or blue-green (got %q)", cfg.Deploy.Strategy)
+		if s != "" && s != "all-at-once" && s != "canary" && s != "blue-green" && s != "per-function" {
+			return fmt.Errorf("deploy.strategy must be all-at-once, canary, blue-green, or per-function (got %q)", cfg.Deploy.Strategy)
 		}
 		if s == "canary" {
 			if cfg.Deploy.CanaryPercent < 0 || cfg.Deploy.CanaryPercent > 100 {

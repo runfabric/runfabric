@@ -195,6 +195,73 @@
         "version": {
           "type": "string",
           "description": "External provider plugin version pin (used when source=external)."
+        },
+        "serviceType": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+          "description": "Kubernetes only: Service type. ClusterIP (default) | NodePort | LoadBalancer."
+        },
+        "image": {
+          "type": "string",
+          "description": "Kubernetes only: Container image to deploy (e.g. nginx:alpine). Falls back to KUBERNETES_IMAGE env var."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Kubernetes only: Namespace override. Defaults to {service}-{stage}."
+        }
+      },
+      "additionalProperties": false
+    },
+    "StageProviderConfig": {
+      "type": "object",
+      "description": "Per-stage provider overrides. All fields optional — only set fields that differ from the top-level provider.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "aws-lambda",
+            "gcp-functions",
+            "azure-functions",
+            "kubernetes",
+            "cloudflare-workers",
+            "vercel",
+            "netlify",
+            "alibaba-fc",
+            "digitalocean-functions",
+            "fly-machines",
+            "ibm-openwhisk"
+          ],
+          "description": "Provider ID."
+        },
+        "runtime": {
+          "type": "string",
+          "description": "Runtime identifier (e.g. nodejs20.x, python3.11)."
+        },
+        "region": {
+          "type": "string",
+          "description": "Optional region; default from env (e.g. AWS_REGION)."
+        },
+        "source": {
+          "type": "string",
+          "enum": ["builtin", "external"],
+          "description": "Provider resolution source."
+        },
+        "version": {
+          "type": "string",
+          "description": "External provider plugin version pin."
+        },
+        "serviceType": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+          "description": "Kubernetes only: Service type."
+        },
+        "image": {
+          "type": "string",
+          "description": "Kubernetes only: Container image to deploy."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Kubernetes only: Namespace override. Defaults to {service}-{stage}."
         }
       },
       "additionalProperties": false
@@ -589,7 +656,7 @@
       "description": "Stage override; can override provider, backend, http, functions.",
       "properties": {
         "provider": {
-          "$ref": "#/$defs/ProviderConfig"
+          "$ref": "#/$defs/StageProviderConfig"
         },
         "backend": {
           "$ref": "#/$defs/BackendConfig"
@@ -820,6 +887,11 @@
       "properties": {
         "rollbackOnFailure": {
           "type": "boolean"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": ["all-at-once", "canary", "blue-green", "per-function"],
+          "description": "Deployment strategy. 'per-function' creates a separate pod and service for each function (Kubernetes only)."
         }
       }
     },

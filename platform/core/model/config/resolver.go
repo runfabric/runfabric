@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/runfabric/runfabric/platform/core/policy/secrets"
@@ -27,7 +28,9 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 	out.Secrets = resolvedSecrets
 
 	var err error
+	// resolveValue expands ${env:VAR,default} and ${stage} tokens.
 	resolveValue := func(v string) (string, error) {
+		v = strings.ReplaceAll(v, "${stage}", stage)
 		return resolveEnvAndSecretsStrict(v, out.Secrets)
 	}
 	out.Service, err = resolveValue(out.Service)
@@ -272,105 +275,9 @@ func Resolve(cfg *Config, stage string) (*Config, error) {
 	out.Functions = resolvedFunctions
 
 	if stage != "" && out.Stages != nil {
-		if stageCfg, ok := out.Stages[stage]; ok {
-
-			if stageCfg.Provider != nil {
-				if stageCfg.Provider.Name != "" {
-					out.Provider.Name, err = resolveValue(stageCfg.Provider.Name)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if stageCfg.Provider.Runtime != "" {
-					out.Provider.Runtime, err = resolveValue(stageCfg.Provider.Runtime)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if stageCfg.Provider.Region != "" {
-					out.Provider.Region, err = resolveValue(stageCfg.Provider.Region)
-					if err != nil {
-						return nil, err
-					}
-				}
-			}
-
-			if stageCfg.Backend != nil {
-				if out.Backend == nil {
-					out.Backend = &BackendConfig{}
-				}
-				if stageCfg.Backend.Kind != "" {
-					out.Backend.Kind, err = resolveValue(stageCfg.Backend.Kind)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if stageCfg.Backend.S3Bucket != "" {
-					out.Backend.S3Bucket, err = resolveValue(stageCfg.Backend.S3Bucket)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if stageCfg.Backend.S3Prefix != "" {
-					out.Backend.S3Prefix, err = resolveValue(stageCfg.Backend.S3Prefix)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if stageCfg.Backend.GCSBucket != "" {
-					out.Backend.GCSBucket, err = resolveValue(stageCfg.Backend.GCSBucket)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if stageCfg.Backend.GCSPrefix != "" {
-					out.Backend.GCSPrefix, err = resolveValue(stageCfg.Backend.GCSPrefix)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if stageCfg.Backend.AzblobContainer != "" {
-					out.Backend.AzblobContainer, err = resolveValue(stageCfg.Backend.AzblobContainer)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if stageCfg.Backend.AzblobPrefix != "" {
-					out.Backend.AzblobPrefix, err = resolveValue(stageCfg.Backend.AzblobPrefix)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if stageCfg.Backend.LockTable != "" {
-					out.Backend.LockTable, err = resolveValue(stageCfg.Backend.LockTable)
-					if err != nil {
-						return nil, err
-					}
-				}
-			}
-
-			if stageCfg.HTTP != nil {
-				// merge into a stage-aware runtime representation if you already have one
-				// or preserve on out.Stages[stage]
-			}
-			for fnName, fnOverride := range stageCfg.Functions {
-				base := out.Functions[fnName]
-				if fnOverride.Handler != "" {
-					base.Handler, err = resolveValue(fnOverride.Handler)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if fnOverride.Runtime != "" {
-					base.Runtime, err = resolveValue(fnOverride.Runtime)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if len(fnOverride.Events) > 0 {
-					base.Events = fnOverride.Events
-				}
-				out.Functions[fnName] = base
+		for _, key := range stageResolutionOrder(stage, out.Stages) {
+			if err = applyStageOverride(&out, out.Stages[key], resolveValue); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -471,4 +378,199 @@ func copyEventConfig(e EventConfig) EventConfig {
 		out.RabbitMQ = &RabbitMQEvent{URL: e.RabbitMQ.URL, Queue: e.RabbitMQ.Queue}
 	}
 	return out
+}
+
+// stageResolutionOrder returns stage keys to apply in order: least-specific first, most-specific last.
+// Merge order: "*" → glob patterns (ascending specificity) → exact match.
+func stageResolutionOrder(stage string, stages map[string]StageConfig) []string {
+	var order []string
+
+	// 1. Default wildcard — applies to all stages.
+	if _, ok := stages["*"]; ok {
+		order = append(order, "*")
+	}
+
+	// 2. Glob patterns — sorted ascending by specificity so more specific patterns win.
+	type globEntry struct{ key string; specificity int }
+	var globs []globEntry
+	for key := range stages {
+		if key == "*" || key == stage {
+			continue
+		}
+		if stageGlobHasWildcard(key) && stageGlobMatch(key, stage) {
+			globs = append(globs, globEntry{key, stageGlobSpecificity(key)})
+		}
+	}
+	sort.Slice(globs, func(i, j int) bool { return globs[i].specificity < globs[j].specificity })
+	for _, g := range globs {
+		order = append(order, g.key)
+	}
+
+	// 3. Exact match — highest specificity, applied last.
+	if _, ok := stages[stage]; ok {
+		order = append(order, stage)
+	}
+
+	return order
+}
+
+// stageGlobMatch reports whether pattern (supporting * and ?) matches stage.
+func stageGlobMatch(pattern, stage string) bool {
+	return globMatch(pattern, stage)
+}
+
+// stageGlobHasWildcard reports whether a pattern contains glob characters.
+func stageGlobHasWildcard(s string) bool {
+	return strings.ContainsAny(s, "*?")
+}
+
+// stageGlobSpecificity returns the number of literal (non-wildcard) characters.
+// Higher = more specific.
+func stageGlobSpecificity(pattern string) int {
+	n := 0
+	for _, c := range pattern {
+		if c != '*' && c != '?' {
+			n++
+		}
+	}
+	return n
+}
+
+// globMatch implements simple * / ? glob matching.
+// * matches any sequence of characters; ? matches exactly one character.
+func globMatch(pattern, s string) bool {
+	for len(pattern) > 0 {
+		switch pattern[0] {
+		case '*':
+			// Skip consecutive stars.
+			for len(pattern) > 0 && pattern[0] == '*' {
+				pattern = pattern[1:]
+			}
+			if len(pattern) == 0 {
+				return true
+			}
+			// Try matching the rest of the pattern at every position in s.
+			for i := 0; i <= len(s); i++ {
+				if globMatch(pattern, s[i:]) {
+					return true
+				}
+			}
+			return false
+		case '?':
+			if len(s) == 0 {
+				return false
+			}
+			pattern = pattern[1:]
+			s = s[1:]
+		default:
+			if len(s) == 0 || pattern[0] != s[0] {
+				return false
+			}
+			pattern = pattern[1:]
+			s = s[1:]
+		}
+	}
+	return len(s) == 0
+}
+
+// applyStageOverride merges a StageConfig layer into out. Only non-empty fields override.
+func applyStageOverride(out *Config, stageCfg StageConfig, resolveValue func(string) (string, error)) error {
+	var err error
+	if stageCfg.Provider != nil {
+		if stageCfg.Provider.Name != "" {
+			if out.Provider.Name, err = resolveValue(stageCfg.Provider.Name); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Provider.Runtime != "" {
+			if out.Provider.Runtime, err = resolveValue(stageCfg.Provider.Runtime); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Provider.Region != "" {
+			if out.Provider.Region, err = resolveValue(stageCfg.Provider.Region); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Provider.ServiceType != "" {
+			if out.Provider.ServiceType, err = resolveValue(stageCfg.Provider.ServiceType); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Provider.Image != "" {
+			if out.Provider.Image, err = resolveValue(stageCfg.Provider.Image); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Provider.Namespace != "" {
+			if out.Provider.Namespace, err = resolveValue(stageCfg.Provider.Namespace); err != nil {
+				return err
+			}
+		}
+	}
+
+	if stageCfg.Backend != nil {
+		if out.Backend == nil {
+			out.Backend = &BackendConfig{}
+		}
+		if stageCfg.Backend.Kind != "" {
+			if out.Backend.Kind, err = resolveValue(stageCfg.Backend.Kind); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Backend.S3Bucket != "" {
+			if out.Backend.S3Bucket, err = resolveValue(stageCfg.Backend.S3Bucket); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Backend.S3Prefix != "" {
+			if out.Backend.S3Prefix, err = resolveValue(stageCfg.Backend.S3Prefix); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Backend.GCSBucket != "" {
+			if out.Backend.GCSBucket, err = resolveValue(stageCfg.Backend.GCSBucket); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Backend.GCSPrefix != "" {
+			if out.Backend.GCSPrefix, err = resolveValue(stageCfg.Backend.GCSPrefix); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Backend.AzblobContainer != "" {
+			if out.Backend.AzblobContainer, err = resolveValue(stageCfg.Backend.AzblobContainer); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Backend.AzblobPrefix != "" {
+			if out.Backend.AzblobPrefix, err = resolveValue(stageCfg.Backend.AzblobPrefix); err != nil {
+				return err
+			}
+		}
+		if stageCfg.Backend.LockTable != "" {
+			if out.Backend.LockTable, err = resolveValue(stageCfg.Backend.LockTable); err != nil {
+				return err
+			}
+		}
+	}
+
+	for fnName, fnOverride := range stageCfg.Functions {
+		base := out.Functions[fnName]
+		if fnOverride.Handler != "" {
+			if base.Handler, err = resolveValue(fnOverride.Handler); err != nil {
+				return err
+			}
+		}
+		if fnOverride.Runtime != "" {
+			if base.Runtime, err = resolveValue(fnOverride.Runtime); err != nil {
+				return err
+			}
+		}
+		if len(fnOverride.Events) > 0 {
+			base.Events = fnOverride.Events
+		}
+		out.Functions[fnName] = base
+	}
+	return nil
 }

@@ -204,12 +204,15 @@ type FunctionOverrideConfig struct {
 }
 
 type ProviderConfig struct {
-	Name    string         `yaml:"name"`
-	Runtime string         `yaml:"runtime"`
-	Region  string         `yaml:"region,omitempty"`
-	Source  string         `yaml:"source,omitempty"`  // builtin (default) | external
-	Version string         `yaml:"version,omitempty"` // external plugin version pin
-	Backend *BackendConfig `yaml:"backend,omitempty"` // optional per-provider state backend (e.g. s3 for aws, gcs for gcp)
+	Name        string         `yaml:"name"`
+	Runtime     string         `yaml:"runtime"`
+	Region      string         `yaml:"region,omitempty"`
+	Source      string         `yaml:"source,omitempty"`      // builtin (default) | external
+	Version     string         `yaml:"version,omitempty"`     // external plugin version pin
+	ServiceType string         `yaml:"serviceType,omitempty"` // kubernetes: ClusterIP | NodePort | LoadBalancer
+	Image       string         `yaml:"image,omitempty"`       // kubernetes: container image (e.g. nginx:alpine)
+	Namespace   string         `yaml:"namespace,omitempty"`   // kubernetes: namespace override (default: {service}-{stage})
+	Backend     *BackendConfig `yaml:"backend,omitempty"`     // optional per-provider state backend (e.g. s3 for aws, gcs for gcp)
 }
 
 type BackendConfig struct {
