@@ -4,10 +4,10 @@ package providerpolicy
 
 // To move cloudflare-workers to an external binary plugin:
 //   1. Build with -tags no_builtin_cloudflare  OR  delete this file.
-//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/cloudflare-workers/cloudflare-plugin ./extensions/providers/cloudflare/cmd/
+//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/cloudflare-workers/cloudflare-plugin ./extensions/providers/cloudflare-workers/cmd/
 
 import (
-	cfprovider "github.com/runfabric/runfabric/extensions/providers/cloudflare"
+	cfprovider "github.com/runfabric/runfabric/extensions/providers/cloudflare-workers"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	cloudflareprovider "github.com/runfabric/runfabric/extensions/providers/cloudflare"
+	cloudflareprovider "github.com/runfabric/runfabric/extensions/providers/cloudflare-workers"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
