@@ -7,6 +7,12 @@ type Journal struct {
 	backend Backend
 }
 
+// NewJournalFromFile wraps an existing JournalFile so the engine can resume from
+// previously completed checkpoints rather than starting fresh.
+func NewJournalFromFile(file *JournalFile, backend Backend) *Journal {
+	return &Journal{file: file, backend: backend}
+}
+
 func NewJournal(service, stage, operation string, backend Backend) *Journal {
 	now := time.Now().UTC().Format(time.RFC3339)
 

@@ -8,6 +8,7 @@ import (
 
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
+	deployexec "github.com/runfabric/runfabric/platform/deploy/exec"
 )
 
 // Run deploys via the provider's API and returns a DeployResult. Saves receipt to root.
@@ -20,7 +21,10 @@ func Run(ctx context.Context, provider string, cfg *config.Config, stage, root s
 	}
 	changeset := computeChangeset(cfg, stage, root)
 	ctx = providers.ContextWithChangeset(ctx, changeset)
-	result, err := p.Deploy(ctx, cfg, stage, root)
+	journal := deployexec.OpenDeployJournal(cfg.Service, stage, root)
+	result, err := deployexec.RunDeploy(ctx, cfg, stage, root, deployexec.FaultConfig{}, journal, func(ctx context.Context) (*providers.DeployResult, error) {
+		return p.Deploy(ctx, cfg, stage, root)
+	})
 	if err != nil {
 		return nil, err
 	}
