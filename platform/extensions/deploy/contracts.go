@@ -9,6 +9,7 @@ import (
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 // Provider is the unified internal API-dispatch interface used by deploy/core/api.
@@ -78,7 +79,28 @@ func (p *apiProvider) Deploy(ctx context.Context, cfg *config.Config, stage, roo
 	if err != nil {
 		return nil, err
 	}
+	if cs := providers.ChangesetFromContext(ctx); cs != nil {
+		ctx = sdkprovider.ContextWithChangeset(ctx, convertChangeset(cs))
+	}
 	return p.runner.Deploy(ctx, tc, stage, root)
+}
+
+func convertChangeset(cs *providers.Changeset) *sdkprovider.Changeset {
+	out := &sdkprovider.Changeset{
+		Service:  cs.Service,
+		Stage:    cs.Stage,
+		Provider: cs.Provider,
+	}
+	for _, rc := range cs.Functions {
+		out.Functions = append(out.Functions, sdkprovider.ResourceChange{
+			Name:   rc.Name,
+			Op:     sdkprovider.ChangeOp(rc.Op),
+			Before: rc.Before,
+			After:  rc.After,
+			Reason: rc.Reason,
+		})
+	}
+	return out
 }
 
 func (p *apiProvider) Remove(ctx context.Context, cfg *config.Config, stage, root string, receipt *state.Receipt) (*providers.RemoveResult, error) {

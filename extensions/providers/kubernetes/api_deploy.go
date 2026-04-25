@@ -98,6 +98,8 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	result.Metadata["namespace"] = namespace
 	result.Metadata["serviceType"] = string(svcType)
 
+	cs := sdkprovider.ChangesetFromContext(ctx)
+
 	if kc.Deploy.Strategy == "per-function" {
 		routes, _ := extractBuildRoutes(cfg)
 		seen := map[string]bool{}
@@ -107,6 +109,11 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 				continue
 			}
 			seen[fnName] = true
+
+			if cs != nil && !changesetNeedsWork(cs, fnName) {
+				continue
+			}
+
 			depName := kc.Service + "-" + fnName
 			if err := upsertDeployment(ctx, clientset, namespace, depName, image, containerPort,
 				[]corev1.EnvVar{{Name: "RUNFABRIC_FN", Value: fnName}}); err != nil {
@@ -248,3 +255,14 @@ func isAlreadyExists(err error) bool {
 }
 
 func intOrStr(v int32) intstr.IntOrString { return intstr.FromInt(int(v)) }
+
+// changesetNeedsWork returns true when the function has a create, update, or delete op.
+// Returns true when the function is absent from the changeset (conservative: deploy it).
+func changesetNeedsWork(cs *sdkprovider.Changeset, fnName string) bool {
+	for _, rc := range cs.Functions {
+		if rc.Name == fnName {
+			return rc.Op != sdkprovider.ChangeOpNoOp
+		}
+	}
+	return true
+}

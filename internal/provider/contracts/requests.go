@@ -38,9 +38,10 @@ type PlanRequest struct {
 
 // DeployRequest is the input to Deploy.
 type DeployRequest struct {
-	Config *config.Config
-	Stage  string
-	Root   string
+	Config    *config.Config
+	Stage     string
+	Root      string
+	Changeset *Changeset // pre-computed diff; nil means provider computes diff internally
 }
 
 // RemoveRequest is the input to Remove.

@@ -11,11 +11,15 @@ import (
 )
 
 // Run deploys via the provider's API and returns a DeployResult. Saves receipt to root.
+// It computes a Changeset from the last receipt before calling the provider so providers
+// can skip unchanged functions and precisely delete removed ones.
 func Run(ctx context.Context, provider string, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
 	p, ok := getProvider(provider)
 	if !ok {
 		return nil, fmt.Errorf("deploy via API is not supported for unregistered provider %q", provider)
 	}
+	changeset := computeChangeset(cfg, stage, root)
+	ctx = providers.ContextWithChangeset(ctx, changeset)
 	result, err := p.Deploy(ctx, cfg, stage, root)
 	if err != nil {
 		return nil, err
