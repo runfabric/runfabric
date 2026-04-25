@@ -1,4 +1,4 @@
-package daemoncmd
+package server
 
 import (
 	"bytes"
@@ -20,8 +20,8 @@ const (
 	defaultAPICacheStagePrefix = "runfabric:daemon:api:stage:"
 )
 
-// daemonAPICache backs Config API responses in Redis (validate, resolve, plan, releases). Invalidate on deploy/remove.
-type daemonAPICache struct {
+// apiCache backs Config API responses in Redis (validate, resolve, plan, releases). Invalidate on deploy/remove.
+type apiCache struct {
 	client      *redis.Client
 	ttl         time.Duration
 	keyPrefix   string
@@ -34,7 +34,7 @@ type cachedResponse struct {
 	Body   []byte `json:"body"`
 }
 
-func newDaemonAPICache(redisURL string, ttl time.Duration) *daemonAPICache {
+func newAPICache(redisURL string, ttl time.Duration) *apiCache {
 	redisURL = strings.TrimSpace(redisURL)
 	if redisURL == "" || (!strings.HasPrefix(redisURL, "redis://") && !strings.HasPrefix(redisURL, "rediss://")) {
 		return nil
@@ -51,7 +51,7 @@ func newDaemonAPICache(redisURL string, ttl time.Duration) *daemonAPICache {
 		keyPrefix += ":"
 	}
 	stagePrefix := keyPrefix + "stage:"
-	return &daemonAPICache{
+	return &apiCache{
 		client:      redis.NewClient(opt),
 		ttl:         ttl,
 		keyPrefix:   keyPrefix,
@@ -59,15 +59,15 @@ func newDaemonAPICache(redisURL string, ttl time.Duration) *daemonAPICache {
 	}
 }
 
-func (c *daemonAPICache) key(endpoint, bodyHash, stage string) string {
+func (c *apiCache) key(endpoint, bodyHash, stage string) string {
 	return c.keyPrefix + endpoint + ":" + bodyHash + ":" + stage
 }
 
-func (c *daemonAPICache) stageSetKey(stage string) string {
+func (c *apiCache) stageSetKey(stage string) string {
 	return c.stagePrefix + stage
 }
 
-func (c *daemonAPICache) get(endpoint, bodyHash, stage string) (status int, body []byte, ok bool) {
+func (c *apiCache) get(endpoint, bodyHash, stage string) (status int, body []byte, ok bool) {
 	if c == nil || c.client == nil {
 		return 0, nil, false
 	}
@@ -88,7 +88,7 @@ func (c *daemonAPICache) get(endpoint, bodyHash, stage string) (status int, body
 	return cr.Status, cr.Body, true
 }
 
-func (c *daemonAPICache) set(endpoint, bodyHash, stage string, status int, body []byte, ttl time.Duration) {
+func (c *apiCache) set(endpoint, bodyHash, stage string, status int, body []byte, ttl time.Duration) {
 	if c == nil || c.client == nil {
 		return
 	}
@@ -104,7 +104,7 @@ func (c *daemonAPICache) set(endpoint, bodyHash, stage string, status int, body 
 	_ = c.client.SAdd(ctx, c.stageSetKey(stage), k).Err()
 }
 
-func (c *daemonAPICache) invalidateStage(stage string) {
+func (c *apiCache) invalidateStage(stage string) {
 	if c == nil || c.client == nil {
 		return
 	}
@@ -134,7 +134,7 @@ func apiCacheTTL(endpoint string) time.Duration {
 }
 
 // apiCacheMiddleware wraps the Config API handler with Redis caching for validate, resolve, plan, releases. On deploy/remove success, invalidates cache for that stage.
-func apiCacheMiddleware(cache *daemonAPICache, defaultStage string, next http.Handler) http.Handler {
+func apiCacheMiddleware(cache *apiCache, defaultStage string, next http.Handler) http.Handler {
 	cacheable := map[string]bool{"validate": true, "resolve": true, "plan": true, "releases": true}
 	mutating := map[string]bool{"deploy": true, "remove": true}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

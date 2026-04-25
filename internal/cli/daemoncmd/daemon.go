@@ -16,44 +16,10 @@ import (
 	"time"
 
 	"github.com/runfabric/runfabric/internal/cli/common"
-	"github.com/runfabric/runfabric/platform/daemon/configapi"
-	runfabricruntime "github.com/runfabric/runfabric/platform/extensions/registry/loader/runtime"
-	"github.com/runfabric/runfabric/platform/observability/telemetry"
+	daemonserver "github.com/runfabric/runfabric/platform/daemon/server"
 	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
-
-// daemonOtelMiddleware creates a span per request when OpenTelemetry is configured.
-func daemonOtelMiddleware(tr trace.Tracer, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, span := tr.Start(r.Context(), r.Method+" "+r.URL.Path)
-		defer span.End()
-		span.SetAttributes(
-			attribute.String("http.method", r.Method),
-			attribute.String("http.route", r.URL.Path),
-		)
-		r = r.WithContext(ctx)
-		rec := &otelResponseRecorder{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(rec, r)
-		if rec.status >= 400 {
-			span.SetStatus(codes.Error, http.StatusText(rec.status))
-			span.SetAttributes(attribute.Int("http.status_code", rec.status))
-		}
-	})
-}
-
-type otelResponseRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (o *otelResponseRecorder) WriteHeader(code int) {
-	o.status = code
-	o.ResponseWriter.WriteHeader(code)
-}
 
 // NewDaemonCmd returns the daemon command with the provided Use token.
 // Typical value is "runfabricd" for the daemon binary root.
@@ -93,168 +59,131 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 				return fmt.Errorf("--dashboard requires --config (path to runfabric.yml)")
 			}
 
-			srv := configapi.NewServer(stage)
-			srv.APIKey = apiKey
-			srv.RateLimitN = rateLimit
-			apiHandler := srv.Handler()
-
-			cacheURLVal := cacheURL
-			if cacheURLVal == "" {
-				cacheURLVal = os.Getenv("RUNFABRIC_DAEMON_CACHE_URL")
-			}
-			cacheURLVal = strings.TrimSpace(cacheURLVal)
-			usingRedis := cacheURLVal != "" && (strings.HasPrefix(cacheURLVal, "redis://") || strings.HasPrefix(cacheURLVal, "rediss://"))
-
-			// Distributed API cache (validate, resolve, plan, releases) when --cache-url is Redis
-			var apiCache *daemonAPICache
-			if usingRedis {
-				apiTTL := cacheTTL
-				if apiTTL <= 0 {
-					apiTTL = 5 * time.Minute
-				}
-				apiCache = newDaemonAPICache(cacheURLVal, apiTTL)
-				if apiCache != nil {
-					apiHandler = apiCacheMiddleware(apiCache, stage, apiHandler)
-				}
-			}
-
-			mux := http.NewServeMux()
-			// Readiness/liveness and version (no auth, no cache)
-			mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "text/plain")
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte("ok"))
+			srv := daemonserver.New(daemonserver.Options{
+				Address:   address,
+				Port:      port,
+				Stage:     stage,
+				APIKey:    apiKey,
+				RateLimit: rateLimit,
+				CacheURL:  cacheURL,
+				CacheTTL:  cacheTTL,
 			})
-			mux.HandleFunc("GET /version", func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"version":  runfabricruntime.Version,
-					"protocol": runfabricruntime.ProtocolVersion,
-				})
-			})
-			// Config API: POST /validate, /resolve, /plan, /deploy, /remove, /releases (wrapped with API cache when cache-url set)
-			mux.HandleFunc("POST /validate", apiHandler.ServeHTTP)
-			mux.HandleFunc("POST /resolve", apiHandler.ServeHTTP)
-			mux.HandleFunc("POST /plan", apiHandler.ServeHTTP)
-			mux.HandleFunc("POST /deploy", apiHandler.ServeHTTP)
-			mux.HandleFunc("POST /remove", apiHandler.ServeHTTP)
-			mux.HandleFunc("POST /releases", apiHandler.ServeHTTP)
 
-			if withDashboard {
-				mux.HandleFunc("POST /action/plan", func(w http.ResponseWriter, r *http.Request) {
-					st := r.URL.Query().Get("stage")
-					if st == "" {
-						st = "dev"
-					}
-					result, err := service.Plan(configPath, st, "")
-					writeDaemonActionJSON(w, result, err)
-				})
-				mux.HandleFunc("POST /action/deploy", func(w http.ResponseWriter, r *http.Request) {
-					st := r.URL.Query().Get("stage")
-					if st == "" {
-						st = "dev"
-					}
-					result, err := service.Deploy(configPath, st, "", false, false, nil, "")
-					if err == nil && apiCache != nil {
-						apiCache.invalidateStage(st)
-					}
-					writeDaemonActionJSON(w, result, err)
-				})
-				mux.HandleFunc("POST /action/remove", func(w http.ResponseWriter, r *http.Request) {
-					st := r.URL.Query().Get("stage")
-					if st == "" {
-						st = "dev"
-					}
-					result, err := service.Remove(configPath, st, "")
-					if err == nil && apiCache != nil {
-						apiCache.invalidateStage(st)
-					}
-					writeDaemonActionJSON(w, result, err)
-				})
-				mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-					if r.URL.Path != "/" {
-						http.NotFound(w, r)
-						return
-					}
-					stageParam := r.URL.Query().Get("stage")
-					st := stage
-					if stageParam != "" {
-						st = stageParam
-					}
-					d, err := app.Dashboard(configPath, st)
-					if err != nil || d == nil {
-						http.Error(w, "failed to load dashboard data", http.StatusInternalServerError)
-						return
-					}
-					d.Stage = st
-					w.Header().Set("Content-Type", "text/html; charset=utf-8")
-					stagesBlock := ""
-					if len(d.Stages) > 0 {
-						stagesBlock = "<div class=\"stages\">Stages: "
-						for _, e := range d.Stages {
-							stagesBlock += fmt.Sprintf("<a href=\"/?stage=%s\">%s</a> ", e.Stage, e.Stage)
+			handler := srv.Handler(func(mux *http.ServeMux) {
+				if withDashboard {
+					mux.HandleFunc("POST /action/plan", func(w http.ResponseWriter, r *http.Request) {
+						st := r.URL.Query().Get("stage")
+						if st == "" {
+							st = "dev"
 						}
-						stagesBlock += "</div>"
-					}
-					deployBlock := "<p class=\"none\">No deployment for this stage yet.</p>"
-					if d.HasDeployment && d.Receipt != nil {
-						deployBlock = fmt.Sprintf(
-							"<p class=\"meta\">Deployment: <code>%s</code> · Updated: %s</p>",
-							d.Receipt.DeploymentID,
-							d.Receipt.UpdatedAt,
-						)
-						if len(d.Receipt.Outputs) > 0 {
-							deployBlock += "<dl class=\"outputs\">"
-							for k, v := range d.Receipt.Outputs {
-								deployBlock += fmt.Sprintf("<dt>%s</dt><dd>%s</dd>", k, v)
-							}
-							deployBlock += "</dl>"
-						}
-					}
-					appOrgBlock := ""
-					if d.App != "" || d.Org != "" {
-						appOrgBlock = fmt.Sprintf("<p class=\"meta\">App: %s · Org: %s</p>",
-							html.EscapeString(d.App), html.EscapeString(d.Org))
-					}
-					workflowBlock := "<div class=\"card\"><p class=\"card-title\">Workflows</p>"
-					if d.WorkflowRunCount > 0 {
-						workflowBlock += fmt.Sprintf("<p class=\"meta\">Runs: %d</p>", d.WorkflowRunCount)
-						if d.WorkflowCost != nil {
-							workflowBlock += fmt.Sprintf("<p class=\"meta\">Input tokens: %d · Output tokens: %d · Est. cost: $%.4f</p>",
-								d.WorkflowCost.TotalInputTokens, d.WorkflowCost.TotalOutputTokens, d.WorkflowCost.EstimatedCostUSD)
-						}
-					} else {
-						workflowBlock += "<p class=\"none\">No workflow runs yet. Use <code>runfabric workflow run</code>.</p>"
-					}
-					workflowBlock += "</div>"
-					_, _ = fmt.Fprintf(w, common.DashboardHTML, d.Service, d.Service, d.Stage, appOrgBlock, stagesBlock, deployBlock, workflowBlock)
-				})
-			} else {
-				mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-					if r.URL.Path != "/" {
-						http.NotFound(w, r)
-						return
-					}
-					w.Header().Set("Content-Type", "application/json")
-					_ = json.NewEncoder(w).Encode(map[string]any{
-						"service":   "runfabric-daemon",
-						"api":       "POST /validate, /resolve, /plan, /deploy, /remove, /releases",
-						"dashboard": "run with --dashboard and --config for GET /",
+						result, err := service.Plan(configPath, st, "")
+						writeDaemonActionJSON(w, result, err)
 					})
-				})
-			}
+					mux.HandleFunc("POST /action/deploy", func(w http.ResponseWriter, r *http.Request) {
+						st := r.URL.Query().Get("stage")
+						if st == "" {
+							st = "dev"
+						}
+						result, err := service.Deploy(configPath, st, "", false, false, nil, "")
+						if err == nil {
+							srv.InvalidateStage(st)
+						}
+						writeDaemonActionJSON(w, result, err)
+					})
+					mux.HandleFunc("POST /action/remove", func(w http.ResponseWriter, r *http.Request) {
+						st := r.URL.Query().Get("stage")
+						if st == "" {
+							st = "dev"
+						}
+						result, err := service.Remove(configPath, st, "")
+						if err == nil {
+							srv.InvalidateStage(st)
+						}
+						writeDaemonActionJSON(w, result, err)
+					})
+					mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+						if r.URL.Path != "/" {
+							http.NotFound(w, r)
+							return
+						}
+						stageParam := r.URL.Query().Get("stage")
+						st := stage
+						if stageParam != "" {
+							st = stageParam
+						}
+						d, err := app.Dashboard(configPath, st)
+						if err != nil || d == nil {
+							http.Error(w, "failed to load dashboard data", http.StatusInternalServerError)
+							return
+						}
+						d.Stage = st
+						w.Header().Set("Content-Type", "text/html; charset=utf-8")
+						stagesBlock := ""
+						if len(d.Stages) > 0 {
+							stagesBlock = "<div class=\"stages\">Stages: "
+							for _, e := range d.Stages {
+								stagesBlock += fmt.Sprintf("<a href=\"/?stage=%s\">%s</a> ", e.Stage, e.Stage)
+							}
+							stagesBlock += "</div>"
+						}
+						deployBlock := "<p class=\"none\">No deployment for this stage yet.</p>"
+						if d.HasDeployment && d.Receipt != nil {
+							deployBlock = fmt.Sprintf(
+								"<p class=\"meta\">Deployment: <code>%s</code> · Updated: %s</p>",
+								d.Receipt.DeploymentID,
+								d.Receipt.UpdatedAt,
+							)
+							if len(d.Receipt.Outputs) > 0 {
+								deployBlock += "<dl class=\"outputs\">"
+								for k, v := range d.Receipt.Outputs {
+									deployBlock += fmt.Sprintf("<dt>%s</dt><dd>%s</dd>", k, v)
+								}
+								deployBlock += "</dl>"
+							}
+						}
+						appOrgBlock := ""
+						if d.App != "" || d.Org != "" {
+							appOrgBlock = fmt.Sprintf("<p class=\"meta\">App: %s · Org: %s</p>",
+								html.EscapeString(d.App), html.EscapeString(d.Org))
+						}
+						workflowBlock := "<div class=\"card\"><p class=\"card-title\">Workflows</p>"
+						if d.WorkflowRunCount > 0 {
+							workflowBlock += fmt.Sprintf("<p class=\"meta\">Runs: %d</p>", d.WorkflowRunCount)
+							if d.WorkflowCost != nil {
+								workflowBlock += fmt.Sprintf("<p class=\"meta\">Input tokens: %d · Output tokens: %d · Est. cost: $%.4f</p>",
+									d.WorkflowCost.TotalInputTokens, d.WorkflowCost.TotalOutputTokens, d.WorkflowCost.EstimatedCostUSD)
+							}
+						} else {
+							workflowBlock += "<p class=\"none\">No workflow runs yet. Use <code>runfabric workflow run</code>.</p>"
+						}
+						workflowBlock += "</div>"
+						_, _ = fmt.Fprintf(w, common.DashboardHTML, d.Service, d.Service, d.Stage, appOrgBlock, stagesBlock, deployBlock, workflowBlock)
+					})
+				} else {
+					mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+						if r.URL.Path != "/" {
+							http.NotFound(w, r)
+							return
+						}
+						w.Header().Set("Content-Type", "application/json")
+						_ = json.NewEncoder(w).Encode(map[string]any{
+							"service":   "runfabric-daemon",
+							"api":       "POST /validate, /resolve, /plan, /deploy, /remove, /releases",
+							"dashboard": "run with --dashboard and --config for GET /",
+						})
+					})
+				}
+			})
 
-			addr := address + ":" + strconv.Itoa(port)
-			handler := daemonOtelMiddleware(telemetry.Tracer("runfabric/daemon"), mux)
-			if sockPath := listenOnSocket(handler); sockPath != "" {
+			addr := srv.Addr()
+			if sockPath := daemonserver.ListenOnSocket(handler); sockPath != "" {
 				fmt.Fprintf(c.OutOrStdout(), "  Unix socket: %s\n", sockPath)
 			}
 			fmt.Fprintf(c.OutOrStdout(), "Daemon listening on http://%s\n", addr)
 			if withDashboard {
 				fmt.Fprintf(c.OutOrStdout(), "  Dashboard: GET /\n")
 			}
-			if apiCache != nil {
+			if srv.UsingCache() {
 				fmt.Fprintf(c.OutOrStdout(), "  API cache: distributed (Redis), validate/resolve/plan/releases\n")
 			}
 			fmt.Fprintf(c.OutOrStdout(), "  API: POST /validate, /resolve, /plan, /deploy, /remove, /releases\n")
@@ -336,7 +265,6 @@ func runDaemonStatus(c *cobra.Command, _ []string) error {
 	b, err := os.ReadFile(pidPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// PID file missing: maybe daemon is still running (file was deleted). Probe default port.
 			if daemonPortResponding("127.0.0.1", 8766) {
 				fmt.Fprintf(c.OutOrStdout(), "daemon: no pid file but something is listening on http://127.0.0.1:8766 (daemon may still be running; use 'lsof -i :8766' to find PID, then kill)\n")
 			} else {
@@ -359,7 +287,6 @@ func runDaemonStatus(c *cobra.Command, _ []string) error {
 		return nil
 	}
 	if runtime.GOOS != "windows" {
-		// Signal 0 checks if the process exists (no signal sent). Not implemented on Windows.
 		if err := proc.Signal(syscall.Signal(0)); err != nil {
 			fmt.Fprintf(c.OutOrStdout(), "daemon: not running (PID %d gone, removed stale pid file)\n", pid)
 			_ = os.Remove(pidPath)
@@ -391,7 +318,6 @@ func runDaemonStart(c *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("executable path: %w", err)
 	}
-	// Build argv: same as current but remove "start" or "restart" so child runs foreground daemon.
 	argv := os.Args[1:]
 	var newArgs []string
 	for _, a := range argv {
