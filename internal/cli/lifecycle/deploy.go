@@ -1,8 +1,11 @@
 package lifecycle
 
 import (
-	"github.com/runfabric/runfabric/internal/cli/common"
+	"encoding/json"
+	"fmt"
 
+	"github.com/runfabric/runfabric/internal/cli/common"
+	daemonclient "github.com/runfabric/runfabric/platform/daemon/client"
 	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
 )
@@ -10,11 +13,30 @@ import (
 // runDeploy runs app.Deploy and prints result; used by deploy, deploy fn, deploy function, deploy-function.
 // If preview is non-empty, it is used as the stage (e.g. --preview pr-123 => stage pr-123 for preview environments).
 // providerOverride is the key from providerOverrides in runfabric.yml (e.g. aws, gcp) for multi-cloud; use "" for single provider.
+// When the local daemon is running and no per-function or override flags are set, the request is proxied through it.
 func runDeploy(opts *common.GlobalOptions, functionName string, rollbackOnFailure, noRollbackOnFailure bool, preview, providerOverride, label string) error {
 	stage := opts.Stage
 	if preview != "" {
 		stage = preview
 	}
+
+	// Proxy through the daemon when it is running and no flags require direct execution.
+	if functionName == "" && !rollbackOnFailure && !noRollbackOnFailure && providerOverride == "" {
+		if dc := daemonclient.Discover(); dc != nil {
+			common.StatusRunning(opts.JSONOutput, "Deploying via daemon...")
+			raw, err := dc.Deploy(opts.ConfigPath, stage)
+			if err != nil {
+				common.StatusFail(opts.JSONOutput, "Deploy failed.")
+				return common.PrintFailure(label, fmt.Errorf("daemon deploy: %w", err))
+			}
+			common.StatusDone(opts.JSONOutput, "Deploy complete.")
+			if opts.JSONOutput {
+				return common.PrintJSONSuccess(label, json.RawMessage(raw))
+			}
+			return common.PrintSuccess(label, json.RawMessage(raw))
+		}
+	}
+
 	service := resolveAppService(opts)
 	common.StatusRunning(opts.JSONOutput, "Deploying...")
 	result, err := service.Deploy(opts.ConfigPath, stage, functionName, rollbackOnFailure, noRollbackOnFailure, nil, providerOverride)

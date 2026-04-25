@@ -246,6 +246,10 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 			}
 
 			addr := address + ":" + strconv.Itoa(port)
+			handler := daemonOtelMiddleware(telemetry.Tracer("runfabric/daemon"), mux)
+			if sockPath := listenOnSocket(handler); sockPath != "" {
+				fmt.Fprintf(c.OutOrStdout(), "  Unix socket: %s\n", sockPath)
+			}
 			fmt.Fprintf(c.OutOrStdout(), "Daemon listening on http://%s\n", addr)
 			if withDashboard {
 				fmt.Fprintf(c.OutOrStdout(), "  Dashboard: GET /\n")
@@ -255,7 +259,6 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 			}
 			fmt.Fprintf(c.OutOrStdout(), "  API: POST /validate, /resolve, /plan, /deploy, /remove, /releases\n")
 			fmt.Fprintf(c.OutOrStdout(), "  Health: GET /healthz  Version: GET /version\n")
-			handler := daemonOtelMiddleware(telemetry.Tracer("runfabric/daemon"), mux)
 			if err := http.ListenAndServe(addr, handler); err != nil {
 				if strings.Contains(err.Error(), "address already in use") {
 					fmt.Fprintf(os.Stderr, "Error: %v - try: runfabricd stop (or use --port to pick another port)\n", err)
