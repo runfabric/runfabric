@@ -1,4 +1,4 @@
-package app
+package alerts
 
 import (
 	"context"
@@ -17,7 +17,7 @@ type capturedAlertRequest struct {
 	Body map[string]any
 }
 
-func TestNotifyAlertsForError_SendsWebhookAndSlackOnError(t *testing.T) {
+func TestNotifyOnError_SendsWebhookAndSlackOnError(t *testing.T) {
 	var mu sync.Mutex
 	var requests []capturedAlertRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +34,7 @@ func TestNotifyAlertsForError_SendsWebhookAndSlackOnError(t *testing.T) {
 	defer server.Close()
 
 	cfgPath := writeAlertsConfig(t, t.TempDir(), server.URL+"/webhook", server.URL+"/slack", true, false)
-	notifyAlertsForError(cfgPath, "dev", "plan", errors.New("boom"))
+	NotifyOnError(cfgPath, "dev", "plan", errors.New("boom"))
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -53,7 +53,7 @@ func TestNotifyAlertsForError_SendsWebhookAndSlackOnError(t *testing.T) {
 	}
 }
 
-func TestNotifyAlertsForError_TimeoutHonorsOnTimeout(t *testing.T) {
+func TestNotifyOnError_TimeoutHonorsOnTimeout(t *testing.T) {
 	var count int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count++
@@ -62,13 +62,13 @@ func TestNotifyAlertsForError_TimeoutHonorsOnTimeout(t *testing.T) {
 	defer server.Close()
 
 	cfgPath := writeAlertsConfig(t, t.TempDir(), server.URL+"/webhook", "", false, true)
-	notifyAlertsForError(cfgPath, "dev", "invoke", context.DeadlineExceeded)
+	NotifyOnError(cfgPath, "dev", "invoke", context.DeadlineExceeded)
 	if count != 1 {
 		t.Fatalf("expected timeout alert to be sent once, got %d", count)
 	}
 }
 
-func TestNotifyAlertsForError_DisabledDoesNothing(t *testing.T) {
+func TestNotifyOnError_DisabledDoesNothing(t *testing.T) {
 	var count int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count++
@@ -77,7 +77,7 @@ func TestNotifyAlertsForError_DisabledDoesNothing(t *testing.T) {
 	defer server.Close()
 
 	cfgPath := writeAlertsConfig(t, t.TempDir(), server.URL+"/webhook", "", false, false)
-	notifyAlertsForError(cfgPath, "dev", "remove", errors.New("boom"))
+	NotifyOnError(cfgPath, "dev", "remove", errors.New("boom"))
 	if count != 0 {
 		t.Fatalf("expected no alerts when disabled, got %d", count)
 	}

@@ -1,4 +1,6 @@
-package app
+// Package alerts sends webhook and Slack notifications when operations fail.
+// Reads alert config from runfabric.yml (alerts.webhook, alerts.slack, alerts.onError, alerts.onTimeout).
+package alerts
 
 import (
 	"bytes"
@@ -24,7 +26,9 @@ type alertPayload struct {
 	Timestamp string `json:"timestamp"`
 }
 
-func notifyAlertsForError(configPath, stage, operation string, err error) {
+// NotifyOnError fires configured webhooks/Slack when err is non-nil.
+// It is a no-op when configPath is empty, the config cannot be loaded, or no alerts are configured.
+func NotifyOnError(configPath, stage, operation string, err error) {
 	if err == nil || strings.TrimSpace(configPath) == "" {
 		return
 	}
@@ -66,9 +70,19 @@ func notifyAlertsForError(configPath, stage, operation string, err error) {
 	}
 	if cfg.Alerts.Slack != "" {
 		postJSON(client, cfg.Alerts.Slack, map[string]any{
-			"text": fmt.Sprintf("RunFabric %s %s for service=%s stage=%s provider=%s: %s", operation, trigger, cfg.Service, stage, cfg.Provider.Name, err.Error()),
+			"text": fmt.Sprintf("RunFabric %s %s for service=%s stage=%s provider=%s: %s",
+				operation, trigger, cfg.Service, stage, cfg.Provider.Name, err.Error()),
 		})
 	}
+}
+
+// WrapOperation calls fn and fires alert notifications when it returns an error.
+func WrapOperation[T any](configPath, stage, operation string, fn func() (T, error)) (T, error) {
+	result, err := fn()
+	if err != nil {
+		NotifyOnError(configPath, stage, operation, err)
+	}
+	return result, err
 }
 
 func isTimeoutError(err error) bool {
@@ -100,12 +114,4 @@ func postJSON(client *http.Client, url string, body any) {
 		return
 	}
 	defer resp.Body.Close()
-}
-
-func withAlertOnError[T any](configPath, stage, operation string, fn func() (T, error)) (T, error) {
-	result, err := fn()
-	if err != nil {
-		notifyAlertsForError(configPath, stage, operation, err)
-	}
-	return result, err
 }
