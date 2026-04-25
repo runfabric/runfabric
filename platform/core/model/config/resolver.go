@@ -391,7 +391,10 @@ func stageResolutionOrder(stage string, stages map[string]StageConfig) []string 
 	}
 
 	// 2. Glob patterns — sorted ascending by specificity so more specific patterns win.
-	type globEntry struct{ key string; specificity int }
+	type globEntry struct {
+		key         string
+		specificity int
+	}
 	var globs []globEntry
 	for key := range stages {
 		if key == "*" || key == stage {
