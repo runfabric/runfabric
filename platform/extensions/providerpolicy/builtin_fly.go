@@ -4,10 +4,10 @@ package providerpolicy
 
 // To move fly-machines to an external binary plugin:
 //   1. Build with -tags no_builtin_fly  OR  delete this file.
-//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/fly-machines/fly-plugin ./extensions/providers/fly/cmd/
+//   2. Install the binary: go build -o ~/.runfabric/plugins/provider/fly-machines/fly-plugin ./extensions/providers/fly-machines/cmd/
 
 import (
-	flyprovider "github.com/runfabric/runfabric/extensions/providers/fly"
+	flyprovider "github.com/runfabric/runfabric/extensions/providers/fly-machines"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )

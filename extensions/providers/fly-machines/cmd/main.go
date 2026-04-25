@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	flyprovider "github.com/runfabric/runfabric/extensions/providers/fly"
+	flyprovider "github.com/runfabric/runfabric/extensions/providers/fly-machines"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
