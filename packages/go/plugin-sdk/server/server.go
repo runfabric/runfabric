@@ -78,7 +78,7 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 			continue
 		}
 
-		res := s.handle(ctx, req)
+		res := s.handle(ctx, req, w)
 		if err := writeResponseLine(w, res); err != nil {
 			return err
 		}
@@ -89,7 +89,9 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	return nil
 }
 
-func (s *Server) handle(ctx context.Context, req protocol.Request) protocol.Response {
+func (s *Server) handle(ctx context.Context, req protocol.Request, w *bufio.Writer) protocol.Response {
+	em := newEmitter(req.ID, w)
+	ctx = contextWithEmitter(ctx, em)
 	method := strings.TrimSpace(req.Method)
 	if method == "" {
 		return protocol.Response{

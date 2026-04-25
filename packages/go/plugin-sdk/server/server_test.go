@@ -63,6 +63,67 @@ func TestServerHandshakeAndMethodDispatch(t *testing.T) {
 	}
 }
 
+func TestServerStreamingEvents(t *testing.T) {
+	s := New(Options{
+		ProtocolVersion: "2025-01-01",
+		Methods: map[string]MethodFunc{
+			"Deploy": func(ctx context.Context, params json.RawMessage) (any, error) {
+				em := EmitterFromContext(ctx)
+				if em == nil {
+					t.Error("emitter missing from context")
+					return nil, nil
+				}
+				em.Progress("building image")
+				em.Log("info", "handler loaded")
+				em.Warn("no GHCR_TOKEN set")
+				return map[string]any{"url": "http://1.2.3.4"}, nil
+			},
+		},
+	})
+
+	in := bytes.NewBufferString(`{"id":"req-1","method":"Deploy"}` + "\n")
+	var out bytes.Buffer
+	if err := s.Serve(context.Background(), in, &out); err != nil {
+		t.Fatalf("serve: %v", err)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(out.Bytes()), []byte("\n"))
+	// 3 events + 1 final response
+	if len(lines) != 4 {
+		t.Fatalf("expected 4 lines, got %d:\n%s", len(lines), out.String())
+	}
+
+	// First three must be events (have "type", no "id")
+	for i, wantType := range []string{"progress", "log", "warn"} {
+		var ev map[string]any
+		if err := json.Unmarshal(lines[i], &ev); err != nil {
+			t.Fatalf("line %d: %v", i, err)
+		}
+		if ev["type"] != wantType {
+			t.Errorf("line %d: type=%v want %s", i, ev["type"], wantType)
+		}
+		if ev["requestId"] != "req-1" {
+			t.Errorf("line %d: requestId=%v want req-1", i, ev["requestId"])
+		}
+		if _, hasID := ev["id"]; hasID {
+			t.Errorf("line %d: event must not have 'id' field", i)
+		}
+	}
+
+	// Last line is the final response
+	var resp map[string]any
+	if err := json.Unmarshal(lines[3], &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["id"] != "req-1" {
+		t.Errorf("response id=%v want req-1", resp["id"])
+	}
+	result, _ := resp["result"].(map[string]any)
+	if result["url"] != "http://1.2.3.4" {
+		t.Errorf("result=%v", result)
+	}
+}
+
 func TestServerDefaultProtocolVersionAndErrorSurface(t *testing.T) {
 	s := New(Options{
 		Methods: map[string]MethodFunc{

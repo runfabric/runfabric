@@ -94,7 +94,10 @@ func GenerateRouterRoutingConfig(fabricState *state.RunFabricState, cfg *config.
 	}
 
 	ttl := defaultRoutingTTL(strategy)
-	hostname := cfg.Service
+	hostname := routerHostname(cfg)
+	if hostname == "" {
+		hostname = cfg.Service
+	}
 	if hostname == "" {
 		hostname = "service"
 	}

@@ -1010,6 +1010,10 @@
       "type": "object",
       "description": "Router extension settings for DNS/LB sync automation, approvals, and credential env wiring.",
       "properties": {
+        "hostname": {
+          "type": "string",
+          "description": "DNS hostname for this service (e.g. api.example.com). Used by Kubernetes to create an Ingress and by all providers as the DNS sync target."
+        },
         "autoApply": {
           "description": "Enable automatic post-deploy router DNS sync. Use boolean for all stages or object for stage-scoped policy.",
           "oneOf": [

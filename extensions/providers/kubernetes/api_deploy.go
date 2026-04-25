@@ -9,6 +9,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
@@ -139,6 +140,8 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 		}
 	}
 
+	domain := readDomain(cfg)
+
 	result := sdkprovider.BuildDeployResult("kubernetes", cfg, stage)
 	result.Outputs["namespace"] = namespace
 	result.Outputs["context"] = restConfig.Host
@@ -165,11 +168,22 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 			if err := waitUntilDeploymentReady(ctx, clientset, namespace, depName); err != nil {
 				return nil, fmt.Errorf("wait %s: %w", fnName, err)
 			}
-			if svcType == corev1.ServiceTypeLoadBalancer {
+			if domain == "" && svcType == corev1.ServiceTypeLoadBalancer {
 				if ip, err := waitUntilServiceHasIP(ctx, clientset, namespace, depName); err == nil {
 					result.Outputs["url."+fnName] = "http://" + ip
 				}
 			}
+		}
+		if domain != "" {
+			ingressName := appName + "-ingress"
+			paths := buildIngressRules(appName, routes)
+			if err := upsertIngress(ctx, clientset, namespace, ingressName, domain, paths); err != nil {
+				return nil, fmt.Errorf("ingress: %w", err)
+			}
+			if ip, err := waitUntilIngressHasIP(ctx, clientset, namespace, ingressName); err == nil {
+				result.Outputs["ingress.ip"] = ip
+			}
+			result.Outputs["url"] = "http://" + domain
 		}
 	} else {
 		if err := upsertDeployment(ctx, clientset, namespace, appName, image, containerPort, nil); err != nil {
@@ -181,7 +195,27 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 		if err := waitUntilDeploymentReady(ctx, clientset, namespace, appName); err != nil {
 			return nil, fmt.Errorf("wait for deployment %s: %w", appName, err)
 		}
-		if svcType == corev1.ServiceTypeLoadBalancer {
+		if domain != "" {
+			ingressName := appName + "-ingress"
+			prefix := networkingv1.PathTypePrefix
+			paths := []networkingv1.HTTPIngressPath{{
+				Path:     "/",
+				PathType: &prefix,
+				Backend: networkingv1.IngressBackend{
+					Service: &networkingv1.IngressServiceBackend{
+						Name: appName,
+						Port: networkingv1.ServiceBackendPort{Number: 80},
+					},
+				},
+			}}
+			if err := upsertIngress(ctx, clientset, namespace, ingressName, domain, paths); err != nil {
+				return nil, fmt.Errorf("ingress: %w", err)
+			}
+			if ip, err := waitUntilIngressHasIP(ctx, clientset, namespace, ingressName); err == nil {
+				result.Outputs["ingress.ip"] = ip
+			}
+			result.Outputs["url"] = "http://" + domain
+		} else if svcType == corev1.ServiceTypeLoadBalancer {
 			if ip, err := waitUntilServiceHasIP(ctx, clientset, namespace, appName); err == nil {
 				result.Outputs["url"] = "http://" + ip
 			}

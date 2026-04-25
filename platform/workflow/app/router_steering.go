@@ -179,6 +179,15 @@ func rebalanceEndpointWeights(endpoints []RouterRoutingEndpoint, target int) {
 	}
 }
 
+// routerHostname returns extensions.router.hostname when set, else empty string.
+func routerHostname(cfg *config.Config) string {
+	obj := routerExtensionObject(cfg)
+	if v, ok := obj["hostname"].(string); ok {
+		return v
+	}
+	return ""
+}
+
 func routerExtensionObject(cfg *config.Config) map[string]any {
 	if cfg == nil || cfg.Extensions == nil {
 		return map[string]any{}
