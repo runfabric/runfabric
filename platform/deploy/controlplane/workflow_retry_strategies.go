@@ -118,7 +118,8 @@ func (s AzureRetryStrategy) ShouldRetry(attempt int, err error) bool {
 }
 
 func (s AzureRetryStrategy) Backoff(attempt int) time.Duration {
-	// Azure recommends 20s base + incremental per attempt.
+	// Fixed formula: 20s base + 10s per attempt. Caller cannot read Retry-After
+	// from the HTTP response through this interface, so we use a conservative default.
 	return 20*time.Second + time.Duration(attempt)*10*time.Second
 }
 

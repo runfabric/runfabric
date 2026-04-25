@@ -1,4 +1,4 @@
-package controlplane
+package cluster
 
 import (
 	"context"

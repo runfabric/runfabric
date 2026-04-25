@@ -3,7 +3,6 @@ package controlplane
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,37 +18,6 @@ const (
 	StepKindAIEval        = "ai-eval"
 	StepKindHumanApproval = "human-approval"
 )
-
-// NoopMCPClient is a deterministic MCP client for local runtime/testing.
-type NoopMCPClient struct{}
-
-func (NoopMCPClient) CallTool(_ context.Context, server, name string, args map[string]any) (map[string]any, error) {
-	return map[string]any{
-		"type":   "tool",
-		"server": server,
-		"name":   name,
-		"args":   args,
-	}, nil
-}
-
-func (NoopMCPClient) ReadResource(_ context.Context, server, uri string) (map[string]any, error) {
-	return map[string]any{
-		"type":   "resource",
-		"server": server,
-		"uri":    uri,
-		"value":  fmt.Sprintf("resource:%s", uri),
-	}, nil
-}
-
-func (NoopMCPClient) GetPrompt(_ context.Context, server, ref string, args map[string]any) (map[string]any, error) {
-	return map[string]any{
-		"type":   "prompt",
-		"server": server,
-		"ref":    ref,
-		"text":   fmt.Sprintf("prompt:%s", ref),
-		"args":   args,
-	}, nil
-}
 
 // CodeStepRunner executes code step kinds.
 type CodeStepRunner interface {
@@ -114,7 +82,7 @@ type TypedStepHandler struct {
 
 func NewTypedStepHandler(integrations config.MCPIntegrationsConfig, policy config.MCPPolicyConfig, mcp MCPClient) *TypedStepHandler {
 	if mcp == nil {
-		mcp = NoopMCPClient{}
+		mcp = NewHTTPMCPClient(integrations)
 	}
 	mcpRuntime := NewMCPRuntime(mcp, integrations, policy)
 	aiRunner := NewDefaultAIStepRunner(mcpRuntime, DeterministicPromptRenderer{})
@@ -158,6 +126,7 @@ func NewTypedStepHandlerFromConfig(cfg *config.Config, mcp MCPClient) (*TypedSte
 			runner.ModelSelector = modelSelector
 			runner.RetryStrategy = ProviderRetryStrategy(provider)
 			runner.CostTracker = ProviderCostTracker(provider)
+			runner.LLMClient = ProviderLLMClient(provider, region)
 		}
 	}
 	return h, nil
@@ -212,82 +181,4 @@ func (h *TypedStepHandler) ExecuteStep(ctx context.Context, run *state.WorkflowR
 	return result, err
 }
 
-func appendMCPCorrelation(metadata map[string]any, typ, server, target string, run *state.WorkflowRun, step state.WorkflowStepRun) {
-	record := map[string]any{
-		"type":         typ,
-		"server":       server,
-		"target":       target,
-		"runId":        run.RunID,
-		"stepId":       step.StepID,
-		"workflowHash": run.WorkflowHash,
-	}
-	raw := metadata["mcpCalls"]
-	if raw == nil {
-		metadata["mcpCalls"] = []any{record}
-		return
-	}
-	arr, ok := raw.([]any)
-	if !ok {
-		metadata["mcpCalls"] = []any{record}
-		return
-	}
-	metadata["mcpCalls"] = append(arr, record)
-}
 
-func ruleSetByAction(set config.MCPPolicyRuleSet, action string) []string {
-	switch action {
-	case "tool":
-		return set.Tools
-	case "resource":
-		return set.Resources
-	case "prompt":
-		return set.Prompts
-	default:
-		return nil
-	}
-}
-
-func wildcardMatch(pattern, value string) bool {
-	p := strings.TrimSpace(pattern)
-	v := strings.TrimSpace(value)
-	if p == "" {
-		return false
-	}
-	if p == "*" || p == v {
-		return true
-	}
-	if strings.HasSuffix(p, "*") {
-		prefix := strings.TrimSuffix(p, "*")
-		return strings.HasPrefix(v, prefix)
-	}
-	return false
-}
-
-func asInputString(obj map[string]any, key string) string {
-	if obj == nil {
-		return ""
-	}
-	s, _ := obj[key].(string)
-	return strings.TrimSpace(s)
-}
-
-func asFloat(v any) (float64, bool) {
-	switch n := v.(type) {
-	case float64:
-		return n, true
-	case float32:
-		return float64(n), true
-	case int:
-		return float64(n), true
-	case int64:
-		return float64(n), true
-	case int32:
-		return float64(n), true
-	case string:
-		f, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
-		if err == nil {
-			return f, true
-		}
-	}
-	return 0, false
-}

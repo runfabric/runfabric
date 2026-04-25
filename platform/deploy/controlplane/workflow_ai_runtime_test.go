@@ -10,6 +10,20 @@ import (
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 )
 
+type fakeLLMClient struct{}
+
+func (fakeLLMClient) Generate(_ context.Context, _, _ string) (string, error) {
+	return "llm-response", nil
+}
+
+func (fakeLLMClient) GenerateJSON(_ context.Context, _, _ string, _ map[string]any) (map[string]any, error) {
+	return map[string]any{"result": "structured"}, nil
+}
+
+func (fakeLLMClient) Evaluate(_ context.Context, _, _, _ string) (float64, error) {
+	return 0.9, nil
+}
+
 type failingMCPClient struct {
 	err error
 }
@@ -90,6 +104,7 @@ func TestDefaultAIStepRunner_AIGenerate_ShapesOutputAndMergesToolResult(t *testi
 		),
 		DeterministicPromptRenderer{},
 	)
+	runner.LLMClient = fakeLLMClient{}
 
 	run := &state.WorkflowRun{RunID: "run-1", WorkflowHash: "wf-abc"}
 	step := state.WorkflowStepRun{
@@ -120,8 +135,8 @@ func TestDefaultAIStepRunner_AIGenerate_ShapesOutputAndMergesToolResult(t *testi
 	if !ok || modelOutput["type"] != "text" {
 		t.Fatalf("expected shaped text model output, got %+v", res.Output["modelOutput"])
 	}
-	if !strings.Contains(asInputString(res.Output, "text"), "MCP Prompt:") {
-		t.Fatalf("expected rendered prompt pipeline in output text, got %q", asInputString(res.Output, "text"))
+	if text := asInputString(res.Output, "text"); text == "" {
+		t.Fatalf("expected non-empty text in ai-generate output, got %q", text)
 	}
 }
 

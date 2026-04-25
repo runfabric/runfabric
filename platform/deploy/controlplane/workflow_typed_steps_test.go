@@ -39,6 +39,9 @@ func TestTypedStepHandler_AIGenerate_LogsMCPCorrelation(t *testing.T) {
 		},
 		fakeMCPClient{},
 	)
+	if runner, ok := handler.AIRunner.(*DefaultAIStepRunner); ok {
+		runner.LLMClient = fakeLLMClient{}
+	}
 	run := &state.WorkflowRun{RunID: "run-1", WorkflowHash: "wf-abc"}
 	step := state.WorkflowStepRun{
 		StepID: "s1",
@@ -62,8 +65,8 @@ func TestTypedStepHandler_AIGenerate_LogsMCPCorrelation(t *testing.T) {
 		t.Fatal("expected non-nil execution result output")
 	}
 	text, _ := res.Output["text"].(string)
-	if !strings.Contains(text, "generated(s1)") {
-		t.Fatalf("expected generated text envelope, got %q", text)
+	if text == "" {
+		t.Fatalf("expected non-empty text in ai-generate output")
 	}
 	calls, ok := res.Metadata["mcpCalls"].([]any)
 	if !ok || len(calls) != 2 {
@@ -348,21 +351,24 @@ func (r *customApprovalRunner) ExecuteStep(_ *state.WorkflowRun, _ state.Workflo
 
 func TestTypedStepHandler_AIStructured_ProducesObjectOutput(t *testing.T) {
 	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	if runner, ok := handler.AIRunner.(*DefaultAIStepRunner); ok {
+		runner.LLMClient = fakeLLMClient{}
+	}
 	run := &state.WorkflowRun{RunID: "run-struct", WorkflowHash: "wf"}
 	step := state.WorkflowStepRun{
 		StepID: "extract",
 		Kind:   StepKindAIStructured,
 		Input: map[string]any{
 			"schema": map[string]any{"type": "object", "properties": map[string]any{"name": "string"}},
-			"data":   map[string]any{"name": "alice"},
+			"prompt": "extract the name field",
 		},
 	}
 	res, err := handler.ExecuteStep(context.Background(), run, step)
 	if err != nil {
 		t.Fatalf("ai-structured step returned error: %v", err)
 	}
-	if _, ok := res.Output["object"]; !ok {
-		t.Fatalf("expected object field in output, got %+v", res.Output)
+	if _, ok := res.Output["object"].(map[string]any); !ok {
+		t.Fatalf("expected object map in output, got %+v", res.Output)
 	}
 	if _, ok := res.Output["schema"]; !ok {
 		t.Fatalf("expected schema field in output, got %+v", res.Output)
@@ -503,6 +509,9 @@ func TestWorkflowRuntime_CodeStepEndToEnd(t *testing.T) {
 func TestWorkflowRuntime_AIStepEndToEnd(t *testing.T) {
 	root := t.TempDir()
 	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	if runner, ok := handler.AIRunner.(*DefaultAIStepRunner); ok {
+		runner.LLMClient = fakeLLMClient{}
+	}
 	rt := NewWorkflowRuntime(root, handler)
 
 	run, err := rt.StartRun(context.Background(), WorkflowRunSpec{
@@ -575,6 +584,9 @@ func TestWorkflowRuntime_HumanApprovalFullLifecycle(t *testing.T) {
 func TestWorkflowRuntime_MixedStepsStateTransitions(t *testing.T) {
 	root := t.TempDir()
 	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	if runner, ok := handler.AIRunner.(*DefaultAIStepRunner); ok {
+		runner.LLMClient = fakeLLMClient{}
+	}
 	rt := NewWorkflowRuntime(root, handler)
 
 	run, err := rt.StartRun(context.Background(), WorkflowRunSpec{

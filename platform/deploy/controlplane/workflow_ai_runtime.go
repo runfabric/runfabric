@@ -49,6 +49,8 @@ func (DeterministicPromptRenderer) Render(in PromptRenderInput) string {
 type DefaultAIStepRunner struct {
 	MCPRuntime     *MCPRuntime
 	PromptRenderer PromptRenderer
+	// LLMClient makes actual text generation calls to a cloud LLM API. Required for ai-generate, ai-structured, and ai-eval (content mode).
+	LLMClient LLMClient
 	// ToolMapper normalizes provider-specific tool call result shapes. Optional.
 	ToolMapper ToolResultMapper
 	// OutputShaper enriches model output with provider metadata. Optional.
@@ -89,9 +91,9 @@ func (r *DefaultAIStepRunner) ExecuteStep(ctx context.Context, run *state.Workfl
 	case StepKindAIGenerate:
 		result, err = r.executeAIGenerate(ctx, run, step, output, metadata)
 	case StepKindAIStructured:
-		result, err = r.executeAIStructured(step, output, metadata)
+		result, err = r.executeAIStructured(ctx, step, output, metadata)
 	case StepKindAIEval:
-		result, err = r.executeAIEval(step, output, metadata)
+		result, err = r.executeAIEval(ctx, step, output, metadata)
 	default:
 		return nil, fmt.Errorf("unsupported ai step kind %q", step.Kind)
 	}
@@ -181,7 +183,14 @@ func (r *DefaultAIStepRunner) executeAIGenerate(ctx context.Context, run *state.
 		Step:       step,
 		Run:        run,
 	})
-	text := fmt.Sprintf("generated(%s): %s", step.StepID, renderedPrompt)
+	if r.LLMClient == nil {
+		return nil, fmt.Errorf("step %s kind ai-generate requires an LLMClient: set RUNFABRIC_LLM_ENDPOINT or configure a cloud provider", step.StepID)
+	}
+	model, _ := metadata["selectedModel"].(string)
+	text, err := r.LLMClient.Generate(ctx, model, renderedPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("step %s ai-generate: %w", step.StepID, err)
+	}
 	output["text"] = text
 	rawOut := map[string]any{"type": "text", "text": text}
 	rawOut = withSelectedModel(rawOut, metadata)
@@ -192,19 +201,22 @@ func (r *DefaultAIStepRunner) executeAIGenerate(ctx context.Context, run *state.
 	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
 }
 
-func (r *DefaultAIStepRunner) executeAIStructured(step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
+func (r *DefaultAIStepRunner) executeAIStructured(ctx context.Context, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
 	schemaObj, ok := step.Input["schema"].(map[string]any)
 	if !ok || len(schemaObj) == 0 {
 		return nil, fmt.Errorf("step %s kind ai-structured requires input.schema object", step.StepID)
 	}
-	obj := map[string]any{
-		"schemaValidated": true,
-		"stepId":          step.StepID,
+	if r.LLMClient == nil {
+		return nil, fmt.Errorf("step %s kind ai-structured requires an LLMClient: set RUNFABRIC_LLM_ENDPOINT or configure a cloud provider", step.StepID)
 	}
-	if data, ok := step.Input["data"].(map[string]any); ok {
-		for k, v := range data {
-			obj[k] = v
-		}
+	prompt := strings.TrimSpace(asInputString(step.Input, "prompt"))
+	if prompt == "" {
+		prompt = "Generate a structured response that matches the provided JSON schema."
+	}
+	model, _ := metadata["selectedModel"].(string)
+	obj, err := r.LLMClient.GenerateJSON(ctx, model, prompt, schemaObj)
+	if err != nil {
+		return nil, fmt.Errorf("step %s ai-structured: %w", step.StepID, err)
 	}
 	output["object"] = obj
 	output["schema"] = schemaObj
@@ -217,14 +229,49 @@ func (r *DefaultAIStepRunner) executeAIStructured(step state.WorkflowStepRun, ou
 	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
 }
 
-func (r *DefaultAIStepRunner) executeAIEval(step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
-	score, ok := asFloat(step.Input["score"])
-	if !ok {
-		return nil, fmt.Errorf("step %s kind ai-eval requires numeric input.score", step.StepID)
+func (r *DefaultAIStepRunner) executeAIEval(ctx context.Context, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
+	// Direct score mode: caller supplies score — no LLM call needed.
+	if rawScore, hasScore := step.Input["score"]; hasScore {
+		score, ok := asFloat(rawScore)
+		if !ok {
+			return nil, fmt.Errorf("step %s kind ai-eval requires numeric input.score", step.StepID)
+		}
+		threshold := 0.5
+		if v, ok := asFloat(step.Input["threshold"]); ok {
+			threshold = v
+		}
+		pass := score >= threshold
+		output["score"] = score
+		output["threshold"] = threshold
+		output["pass"] = pass
+		rawOut := map[string]any{"type": "eval", "pass": pass, "score": score, "threshold": threshold}
+		rawOut = withSelectedModel(rawOut, metadata)
+		if r.OutputShaper != nil {
+			rawOut = r.OutputShaper.ShapeOutput(step.Kind, step.StepID, rawOut)
+		}
+		output["modelOutput"] = rawOut
+		return &StepExecutionResult{Output: output, Metadata: metadata}, nil
+	}
+	// LLM evaluation mode: evaluate input.content against input.criteria.
+	content := strings.TrimSpace(asInputString(step.Input, "content"))
+	if content == "" {
+		return nil, fmt.Errorf("step %s kind ai-eval requires input.score (direct mode) or input.content (llm mode)", step.StepID)
+	}
+	if r.LLMClient == nil {
+		return nil, fmt.Errorf("step %s kind ai-eval with content requires an LLMClient: set RUNFABRIC_LLM_ENDPOINT or configure a cloud provider", step.StepID)
+	}
+	criteria := strings.TrimSpace(asInputString(step.Input, "criteria"))
+	if criteria == "" {
+		criteria = "quality, accuracy, and relevance"
 	}
 	threshold := 0.5
 	if v, ok := asFloat(step.Input["threshold"]); ok {
 		threshold = v
+	}
+	model, _ := metadata["selectedModel"].(string)
+	score, err := r.LLMClient.Evaluate(ctx, model, content, criteria)
+	if err != nil {
+		return nil, fmt.Errorf("step %s ai-eval: %w", step.StepID, err)
 	}
 	pass := score >= threshold
 	output["score"] = score
@@ -239,34 +286,32 @@ func (r *DefaultAIStepRunner) executeAIEval(step state.WorkflowStepRun, output, 
 	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
 }
 
-func (r *DefaultAIStepRunner) callToolWithRetry(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any) (map[string]any, error) {
+func (r *DefaultAIStepRunner) withMCPRetry(fn func() (map[string]any, error)) (map[string]any, error) {
 	for attempt := 1; ; attempt++ {
-		result, err := r.MCPRuntime.CallTool(ctx, run, step, b, metadata)
+		result, err := fn()
 		if err == nil || r.RetryStrategy == nil || !r.RetryStrategy.ShouldRetry(attempt, err) {
 			return result, err
 		}
 		time.Sleep(r.RetryStrategy.Backoff(attempt))
 	}
+}
+
+func (r *DefaultAIStepRunner) callToolWithRetry(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any) (map[string]any, error) {
+	return r.withMCPRetry(func() (map[string]any, error) {
+		return r.MCPRuntime.CallTool(ctx, run, step, b, metadata)
+	})
 }
 
 func (r *DefaultAIStepRunner) readResourceWithRetry(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any) (map[string]any, error) {
-	for attempt := 1; ; attempt++ {
-		result, err := r.MCPRuntime.ReadResource(ctx, run, step, b, metadata)
-		if err == nil || r.RetryStrategy == nil || !r.RetryStrategy.ShouldRetry(attempt, err) {
-			return result, err
-		}
-		time.Sleep(r.RetryStrategy.Backoff(attempt))
-	}
+	return r.withMCPRetry(func() (map[string]any, error) {
+		return r.MCPRuntime.ReadResource(ctx, run, step, b, metadata)
+	})
 }
 
 func (r *DefaultAIStepRunner) getPromptWithRetry(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any) (map[string]any, error) {
-	for attempt := 1; ; attempt++ {
-		result, err := r.MCPRuntime.GetPrompt(ctx, run, step, b, metadata)
-		if err == nil || r.RetryStrategy == nil || !r.RetryStrategy.ShouldRetry(attempt, err) {
-			return result, err
-		}
-		time.Sleep(r.RetryStrategy.Backoff(attempt))
-	}
+	return r.withMCPRetry(func() (map[string]any, error) {
+		return r.MCPRuntime.GetPrompt(ctx, run, step, b, metadata)
+	})
 }
 
 func withSelectedModel(rawOut, metadata map[string]any) map[string]any {

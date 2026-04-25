@@ -168,8 +168,7 @@ func (r *MCPRuntime) ensureAllowed(action, server, target string, metadata map[s
 		return &MCPPolicyError{Action: action, Server: server, Target: target, Reason: reason}
 	}
 
-	appendMCPPolicyDecision(metadata, action, server, target, "allowed", "allowed by default (defaultDeny=false)")
-	// Provider-specific policy enforcement.
+	// Provider-specific policy enforcement runs before the final allowed record.
 	if r.Provider != "" && len(r.Policy.Providers) > 0 {
 		if pp, ok := r.Policy.Providers[r.Provider]; ok {
 			if err := r.enforceProviderPolicy(server, target, action, pp, metadata); err != nil {
@@ -177,6 +176,7 @@ func (r *MCPRuntime) ensureAllowed(action, server, target string, metadata map[s
 			}
 		}
 	}
+	appendMCPPolicyDecision(metadata, action, server, target, "allowed", "allowed by default (defaultDeny=false)")
 	return nil
 }
 
@@ -215,8 +215,7 @@ func appendMCPPolicyDecision(metadata map[string]any, action, server, target, ou
 	}
 	arr, ok := raw.([]any)
 	if !ok {
-		metadata["mcpPolicy"] = []any{record}
-		return
+		panic(fmt.Sprintf("metadata[mcpPolicy] has unexpected type %T", raw))
 	}
 	metadata["mcpPolicy"] = append(arr, record)
 }
@@ -228,4 +227,54 @@ func firstMatch(patterns []string, value string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func appendMCPCorrelation(metadata map[string]any, typ, server, target string, run *state.WorkflowRun, step state.WorkflowStepRun) {
+	record := map[string]any{
+		"type":         typ,
+		"server":       server,
+		"target":       target,
+		"runId":        run.RunID,
+		"stepId":       step.StepID,
+		"workflowHash": run.WorkflowHash,
+	}
+	raw := metadata["mcpCalls"]
+	if raw == nil {
+		metadata["mcpCalls"] = []any{record}
+		return
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		panic(fmt.Sprintf("metadata[mcpCalls] has unexpected type %T", raw))
+	}
+	metadata["mcpCalls"] = append(arr, record)
+}
+
+func ruleSetByAction(set config.MCPPolicyRuleSet, action string) []string {
+	switch action {
+	case "tool":
+		return set.Tools
+	case "resource":
+		return set.Resources
+	case "prompt":
+		return set.Prompts
+	default:
+		return nil
+	}
+}
+
+func wildcardMatch(pattern, value string) bool {
+	p := strings.TrimSpace(pattern)
+	v := strings.TrimSpace(value)
+	if p == "" {
+		return false
+	}
+	if p == "*" || p == v {
+		return true
+	}
+	if strings.HasSuffix(p, "*") {
+		prefix := strings.TrimSuffix(p, "*")
+		return strings.HasPrefix(v, prefix)
+	}
+	return false
 }

@@ -416,15 +416,8 @@ audit-unused:
 		echo "[1] go vet ./..."; \
 		go vet ./... 2>&1 || true; \
 		echo; \
-		echo "[2] staticcheck U1000 (pinned fallback for toolchain compatibility)"; \
-		if command -v staticcheck >/dev/null 2>&1; then \
-			staticcheck -checks U1000 ./... 2>&1 || { \
-				echo "local staticcheck failed; retrying with pinned v0.6.1"; \
-				go run honnef.co/go/tools/cmd/staticcheck@v0.6.1 -checks U1000 ./... 2>&1 || true; \
-			}; \
-		else \
-			go run honnef.co/go/tools/cmd/staticcheck@v0.6.1 -checks U1000 ./... 2>&1 || true; \
-		fi; \
+		echo "[2] staticcheck U1000"; \
+		go run honnef.co/go/tools/cmd/staticcheck@v0.6.1 -checks U1000 ./... 2>&1 || true; \
 		echo; \
 		echo "[3] go mod tidy -diff"; \
 		go mod tidy -diff 2>&1 || true; \

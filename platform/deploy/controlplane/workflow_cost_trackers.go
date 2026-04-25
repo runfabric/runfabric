@@ -20,41 +20,46 @@ func (NoopCostTracker) RecordCost(_, _ string, _, _ int) {}
 func (NoopCostTracker) TotalCostUSD() float64            { return 0 }
 func (NoopCostTracker) Summary() map[string]any          { return map[string]any{} }
 
-// costRecord holds one recorded model invocation.
-type costRecord struct {
-	Provider     string
-	Model        string
+// costBucket aggregates cost for a (provider, model) pair.
+type costBucket struct {
 	InputTokens  int
 	OutputTokens int
+	CallCount    int
 	CostUSD      float64
 }
 
-// InMemoryCostTracker accumulates cost records in memory.
+// InMemoryCostTracker aggregates cost per (provider, model) pair in memory.
 // Embed this in provider-specific trackers for shared ledger logic.
 type InMemoryCostTracker struct {
 	mu      sync.Mutex
-	records []costRecord
+	buckets map[string]*costBucket // key: "provider/model"
 }
 
 func (t *InMemoryCostTracker) record(provider, model string, inputTokens, outputTokens int, costPerInput, costPerOutput float64) {
 	cost := float64(inputTokens)*costPerInput + float64(outputTokens)*costPerOutput
+	key := provider + "/" + model
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.records = append(t.records, costRecord{
-		Provider:     provider,
-		Model:        model,
-		InputTokens:  inputTokens,
-		OutputTokens: outputTokens,
-		CostUSD:      cost,
-	})
+	if t.buckets == nil {
+		t.buckets = map[string]*costBucket{}
+	}
+	b := t.buckets[key]
+	if b == nil {
+		b = &costBucket{}
+		t.buckets[key] = b
+	}
+	b.InputTokens += inputTokens
+	b.OutputTokens += outputTokens
+	b.CallCount++
+	b.CostUSD += cost
 }
 
 func (t *InMemoryCostTracker) TotalCostUSD() float64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	var total float64
-	for _, r := range t.records {
-		total += r.CostUSD
+	for _, b := range t.buckets {
+		total += b.CostUSD
 	}
 	return total
 }
@@ -64,14 +69,21 @@ func (t *InMemoryCostTracker) Summary() map[string]any {
 	defer t.mu.Unlock()
 	total := 0.0
 	perProvider := map[string]float64{}
-	for _, r := range t.records {
-		total += r.CostUSD
-		perProvider[r.Provider] += r.CostUSD
+	recordCount := 0
+	for key, b := range t.buckets {
+		total += b.CostUSD
+		recordCount += b.CallCount
+		// key is "provider/model" — extract provider prefix
+		provider := key
+		if idx := strings.Index(key, "/"); idx >= 0 {
+			provider = key[:idx]
+		}
+		perProvider[provider] += b.CostUSD
 	}
 	return map[string]any{
 		"totalCostUSD": total,
 		"perProvider":  perProvider,
-		"recordCount":  len(t.records),
+		"recordCount":  recordCount,
 	}
 }
 

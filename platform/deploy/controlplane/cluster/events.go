@@ -1,4 +1,4 @@
-package controlplane
+package cluster
 
 type Event struct {
 	Type    string

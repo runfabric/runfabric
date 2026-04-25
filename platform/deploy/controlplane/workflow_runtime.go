@@ -169,11 +169,6 @@ func (r *WorkflowRuntime) ResumeRun(ctx context.Context, stage, runID string) (*
 	}
 
 	for idx := range run.Steps {
-		run, err = state.LoadWorkflowRun(r.RootDir, stage, runID)
-		if err != nil {
-			return nil, err
-		}
-
 		step := run.Steps[idx]
 		if replayStartIdx >= 0 && idx < replayStartIdx {
 			continue
@@ -185,14 +180,14 @@ func (r *WorkflowRuntime) ResumeRun(ctx context.Context, stage, runID string) (*
 			decision, _ := step.Input["approvalDecision"].(string)
 			if decision == "" {
 				run.Status = state.RunStatusPaused
-				run.Checkpoint = checkpoint(step.StepID, string(state.StepStatusPaused), "awaiting human approval")
+				run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusPaused), "awaiting human approval")
 				if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 					return nil, err
 				}
 				return run, nil
 			}
 			run.Steps[idx].Status = state.StepStatusPending
-			run.Checkpoint = checkpoint(step.StepID, string(state.StepStatusPending), "approval decision received")
+			run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusPending), "approval decision received")
 			if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 				return nil, err
 			}
@@ -204,7 +199,7 @@ func (r *WorkflowRuntime) ResumeRun(ctx context.Context, stage, runID string) (*
 				// did not reach a terminal transition and should be retried.
 				run.Steps[idx].AttemptCount--
 			}
-			run.Checkpoint = checkpoint(step.StepID, string(state.StepStatusPending), "resumed after restart")
+			run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusPending), "resumed after restart")
 			if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 				return nil, err
 			}
@@ -226,7 +221,7 @@ func (r *WorkflowRuntime) ResumeRun(ctx context.Context, stage, runID string) (*
 	run.Status = state.RunStatusOK
 	run.EndedAt = r.nowUTC().Format(time.RFC3339)
 	run.DurationMs = durationMs(run.StartedAt, run.EndedAt)
-	run.Checkpoint = checkpoint("", string(state.RunStatusOK), "")
+	run.Checkpoint = checkpoint(r.nowUTC(), "", string(state.RunStatusOK), "")
 	if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 		return nil, err
 	}
@@ -273,7 +268,7 @@ func (r *WorkflowRuntime) ReplayRunFromStep(ctx context.Context, stage, runID, s
 	run.Status = state.RunStatusRunning
 	run.EndedAt = ""
 	run.DurationMs = 0
-	run.Checkpoint = checkpoint(stepID, string(state.StepStatusPending), "")
+	run.Checkpoint = checkpoint(r.nowUTC(), stepID, string(state.StepStatusPending), "")
 	if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 		return nil, err
 	}
@@ -307,7 +302,7 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 		step.DurationMs = 0
 		step.Error = ""
 		run.Status = state.RunStatusRunning
-		run.Checkpoint = checkpoint(step.StepID, string(state.StepStatusRunning), "")
+		run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusRunning), "")
 		if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 			return nil, err
 		}
@@ -335,7 +330,7 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 				step.Output = res.Output
 				step.Metadata = res.Metadata
 				run.Status = state.RunStatusPaused
-				run.Checkpoint = checkpoint(step.StepID, string(state.StepStatusPaused), res.PauseReason)
+				run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusPaused), res.PauseReason)
 				if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 					return nil, err
 				}
@@ -350,7 +345,7 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 				step.Output = nil
 				step.Metadata = nil
 			}
-			run.Checkpoint = checkpoint(step.StepID, string(state.StepStatusOK), "")
+			run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusOK), "")
 			if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 				return nil, err
 			}
@@ -370,14 +365,14 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 			step.Status = state.StepStatusFailed
 		}
 		step.Error = err.Error()
-		run.Checkpoint = checkpoint(step.StepID, string(step.Status), step.Error)
+		run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(step.Status), step.Error)
 		if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 			return nil, err
 		}
 
 		if attempt < maxAttempts {
 			step.Status = state.StepStatusPending
-			run.Checkpoint = checkpoint(step.StepID, string(state.StepStatusPending), step.Error)
+			run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusPending), step.Error)
 			if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 				return nil, err
 			}
@@ -421,7 +416,7 @@ func (r *WorkflowRuntime) markCancelled(run *state.WorkflowRun, fromIdx int) (*s
 	run.Status = state.RunStatusCancelled
 	run.EndedAt = r.nowUTC().Format(time.RFC3339)
 	run.DurationMs = durationMs(run.StartedAt, run.EndedAt)
-	run.Checkpoint = checkpoint("", string(state.RunStatusCancelled), "cancel requested")
+	run.Checkpoint = checkpoint(r.nowUTC(), "", string(state.RunStatusCancelled), "cancel requested")
 	if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 		return nil, err
 	}
@@ -453,7 +448,7 @@ func (r *WorkflowRuntime) ResolveApproval(stage, runID, stepID, decision, review
 		}
 		run.Steps[i].AttemptCount = 0
 		run.Status = state.RunStatusRunning
-		run.Checkpoint = checkpoint(stepID, string(state.StepStatusPending), "")
+		run.Checkpoint = checkpoint(r.nowUTC(), stepID, string(state.StepStatusPending), "")
 		return state.SaveWorkflowRun(r.RootDir, run)
 	}
 	return fmt.Errorf("step %q not found in run %q", stepID, runID)
@@ -466,11 +461,11 @@ func (r *WorkflowRuntime) nowUTC() time.Time {
 	return r.Now().UTC()
 }
 
-func checkpoint(stepID, status, lastErr string) *state.WorkflowCheckpoint {
+func checkpoint(now time.Time, stepID, status, lastErr string) *state.WorkflowCheckpoint {
 	return &state.WorkflowCheckpoint{
 		CurrentStepID: stepID,
 		CurrentStatus: status,
-		UpdatedAt:     time.Now().UTC().Format(time.RFC3339),
+		UpdatedAt:     now.UTC().Format(time.RFC3339),
 		LastError:     lastErr,
 	}
 }

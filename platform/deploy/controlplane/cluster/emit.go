@@ -1,4 +1,4 @@
-package controlplane
+package cluster
 
 import observability "github.com/runfabric/runfabric/platform/observability/core"
 
