@@ -84,8 +84,8 @@ func createMachine(ctx context.Context, appName, image string) (string, error) {
 		"config": map[string]any{
 			"image": image,
 			"services": []map[string]any{{
-				"ports":        []map[string]any{{"port": 443, "handlers": []string{"tls", "http"}}},
-				"protocol":     "tcp",
+				"ports":         []map[string]any{{"port": 443, "handlers": []string{"tls", "http"}}},
+				"protocol":      "tcp",
 				"internal_port": 8080,
 			}},
 		},

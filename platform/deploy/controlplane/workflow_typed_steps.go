@@ -180,5 +180,3 @@ func (h *TypedStepHandler) ExecuteStep(ctx context.Context, run *state.WorkflowR
 	}
 	return result, err
 }
-
-
