@@ -99,12 +99,20 @@ func (r Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root 
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 			return nil, fmt.Errorf("gcp functions deploy %s: %s: %s", fnName, resp.Status, string(b))
 		}
-		var fnResp struct {
+		// Cloud Functions v2 deploy returns a Long-Running Operation — poll until done.
+		var opResp struct {
+			Name          string `json:"name"`
 			ServiceConfig struct {
 				URI string `json:"uri"`
 			} `json:"serviceConfig"`
 		}
-		_ = json.Unmarshal(b, &fnResp)
+		_ = json.Unmarshal(b, &opResp)
+		if opResp.Name != "" {
+			if err := waitUntilFunctionReady(ctx, opResp.Name); err != nil {
+				return nil, fmt.Errorf("wait for function %s: %w", fnName, err)
+			}
+		}
+		fnResp := opResp
 		deployed := result.Functions[fnName]
 		deployed.ResourceName = funcName
 		deployed.ResourceIdentifier = resourceName

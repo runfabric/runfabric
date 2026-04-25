@@ -81,6 +81,12 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 		ID  string `json:"id"`
 	}
 	_ = json.Unmarshal(b, &out)
+	// Vercel deployments are async — poll until readyState == READY.
+	if out.ID != "" {
+		if err := waitUntilDeploymentReady(ctx, out.ID, teamID); err != nil {
+			return nil, fmt.Errorf("wait for deployment %s: %w", out.ID, err)
+		}
+	}
 	result := sdkprovider.BuildDeployResult("vercel", cfg, stage)
 	if out.URL != "" {
 		if !strings.HasPrefix(out.URL, "http") {

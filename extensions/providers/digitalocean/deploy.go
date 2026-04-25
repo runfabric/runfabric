@@ -85,6 +85,11 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	if err := sdkprovider.APIPost(ctx, doAPI, "DIGITALOCEAN_ACCESS_TOKEN", map[string]any{"spec": spec}, &out); err != nil {
 		return nil, fmt.Errorf("digitalocean apps: %w", err)
 	}
+	if out.App.ID != "" {
+		if err := waitUntilAppActive(ctx, out.App.ID); err != nil {
+			return nil, fmt.Errorf("wait for app %s: %w", appName, err)
+		}
+	}
 	result := sdkprovider.BuildDeployResult("digitalocean-functions", cfg, stage)
 	result.Outputs["app_id"] = out.App.ID
 	result.Outputs["url"] = out.App.LiveURL

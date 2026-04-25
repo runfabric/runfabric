@@ -67,10 +67,19 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	if err != nil {
 		return nil, err
 	}
+	asyncOpURL := resp.Header.Get("Azure-AsyncOperation")
+	if asyncOpURL == "" {
+		asyncOpURL = resp.Header.Get("Location")
+	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
 		return nil, fmt.Errorf("azure function app: %s: %s", resp.Status, string(body))
+	}
+	// ARM PUT is async — wait until the app is Running before returning.
+	siteURL := appURL
+	if err := waitUntilAppReady(ctx, asyncOpURL, siteURL); err != nil {
+		return nil, fmt.Errorf("wait for function app %s: %w", appName, err)
 	}
 	result := sdkprovider.BuildDeployResult("azure-functions", cfg, stage)
 	appResourceID := "/subscriptions/" + subID + "/resourceGroups/" + rg + "/providers/Microsoft.Web/sites/" + appName

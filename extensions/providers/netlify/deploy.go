@@ -82,6 +82,12 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 		DeployURL string `json:"deploy_ssl_url"`
 	}
 	_ = json.Unmarshal(b, &out)
+	// Netlify deploys are async — poll until state == ready.
+	if out.ID != "" {
+		if err := waitUntilDeployReady(ctx, out.ID); err != nil {
+			return nil, fmt.Errorf("wait for deploy %s: %w", out.ID, err)
+		}
+	}
 	result := sdkprovider.BuildDeployResult("netlify", cfg, stage)
 	result.Outputs["url"] = out.DeployURL
 	result.Outputs["deploy_id"] = out.ID

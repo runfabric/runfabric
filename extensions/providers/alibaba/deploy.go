@@ -78,6 +78,9 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 		if err != nil && !strings.Contains(err.Error(), "FunctionAlreadyExists") {
 			return nil, fmt.Errorf("CreateFunction %s: %w", fnName, err)
 		}
+		if err := waitUntilFunctionReady(ctx, client, serviceName, funcName); err != nil {
+			return nil, fmt.Errorf("wait for function %s: %w", fnName, err)
+		}
 		// HTTP trigger so function is invokable via URL
 		triggerName := "http"
 		_, _ = client.CreateTrigger(ctx, serviceName, funcName, triggerName, "http", map[string]any{

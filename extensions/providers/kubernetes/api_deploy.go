@@ -75,6 +75,10 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	if err != nil && !isAlreadyExists(err) {
 		return nil, fmt.Errorf("create service: %w", err)
 	}
+	// Wait for at least one pod to be available before returning.
+	if err := waitUntilDeploymentReady(ctx, clientset, namespace, appName); err != nil {
+		return nil, fmt.Errorf("wait for deployment %s: %w", appName, err)
+	}
 	result := sdkprovider.BuildDeployResult("kubernetes", cfg, stage)
 	result.Outputs["namespace"] = namespace
 	result.Outputs["context"] = restConfig.Host
