@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
-	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
+	deployapi "github.com/runfabric/runfabric/platform/deploy/api"
 	"github.com/runfabric/runfabric/platform/workflow/lifecycle"
 )
 

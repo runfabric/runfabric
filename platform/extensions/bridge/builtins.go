@@ -1,4 +1,4 @@
-package deploy
+package bridge
 
 import (
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"

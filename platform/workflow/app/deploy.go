@@ -8,7 +8,7 @@ import (
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
-	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
+	deployapi "github.com/runfabric/runfabric/platform/deploy/api"
 	"github.com/runfabric/runfabric/platform/deploy/provisioning"
 	"github.com/runfabric/runfabric/platform/workflow/lifecycle"
 	"github.com/runfabric/runfabric/platform/workflow/pipeline"

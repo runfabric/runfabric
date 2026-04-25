@@ -7,7 +7,7 @@ import (
 
 	providercodec "github.com/runfabric/runfabric/internal/provider/codec"
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
-	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
+	deployapi "github.com/runfabric/runfabric/platform/deploy/api"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 	planner "github.com/runfabric/runfabric/platform/planner/engine"
 )
