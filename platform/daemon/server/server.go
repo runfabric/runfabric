@@ -21,13 +21,13 @@ import (
 
 // Options configures the daemon server. All fields have sensible zero-value defaults.
 type Options struct {
-	Address    string
-	Port       int
-	Stage      string
-	APIKey     string
-	RateLimit  int
-	CacheURL   string
-	CacheTTL   time.Duration
+	Address   string
+	Port      int
+	Stage     string
+	APIKey    string
+	RateLimit int
+	CacheURL  string
+	CacheTTL  time.Duration
 }
 
 // Server is the runfabricd HTTP server.

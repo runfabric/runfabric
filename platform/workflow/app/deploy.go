@@ -58,7 +58,7 @@ func Deploy(configPath, stage, functionName string, rollbackOnFailure, noRollbac
 			}
 			return config.ResolveResourceBindings(cfg, provisionFn)
 		},
-		EnvVarToResourceKey:  config.EnvVarToResourceKey,
+		EnvVarToResourceKey: config.EnvVarToResourceKey,
 		ResolveAddonEnvForFn: func(cfg *config.Config, addonKeys []string) (map[string]string, error) {
 			return config.ResolveAddonBindingsForKeys(cfg, addonKeys)
 		},

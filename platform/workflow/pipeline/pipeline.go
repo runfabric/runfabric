@@ -22,9 +22,9 @@ import (
 
 // StepContext is shared across all steps in a pipeline run.
 type StepContext struct {
-	Config      *config.Config
-	Stage       string
-	RootDir     string
+	Config       *config.Config
+	Stage        string
+	RootDir      string
 	DeployResult *providers.DeployResult // populated by DeployStep; read by later steps
 }
 
