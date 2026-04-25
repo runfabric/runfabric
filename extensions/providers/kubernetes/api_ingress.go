@@ -9,32 +9,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-
-	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
-
-// readDomain reads extensions.router.hostname from config.
-// Returns empty string when not set — Ingress creation is disabled by default.
-func readDomain(cfg sdkprovider.Config) string {
-	for _, extKey := range []string{"extensions", "Extensions"} {
-		ext, _ := cfg[extKey].(map[string]any)
-		if ext == nil {
-			continue
-		}
-		for _, routerKey := range []string{"router", "Router"} {
-			router, _ := ext[routerKey].(map[string]any)
-			if router == nil {
-				continue
-			}
-			for _, k := range []string{"hostname", "Hostname"} {
-				if v, ok := router[k].(string); ok && v != "" {
-					return v
-				}
-			}
-		}
-	}
-	return ""
-}
 
 // buildIngressRules builds path-based Ingress rules for per-function deployments.
 // Routes with the same stripped path prefix map to the first function seen for that prefix.

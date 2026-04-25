@@ -4,7 +4,6 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -15,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"path/filepath"
 
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
@@ -23,10 +23,14 @@ import (
 type Runner struct{}
 
 func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root string) (*sdkprovider.DeployResult, error) {
-	service := sdkprovider.Service(cfg)
-	if service == "" {
+	kc, err := decodeKubeConfig(cfg, stage)
+	if err != nil {
+		return nil, fmt.Errorf("config: %w", err)
+	}
+	if kc.Service == "" {
 		return nil, fmt.Errorf("service is required in config")
 	}
+
 	restConfig, err := loadKubeconfig()
 	if err != nil {
 		return nil, fmt.Errorf("kubeconfig: %w", err)
@@ -35,72 +39,33 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	if err != nil {
 		return nil, fmt.Errorf("kubernetes client: %w", err)
 	}
-	namespace := fmt.Sprintf("%s-%s", service, stage)
-	for _, provKey := range []string{"Provider", "provider"} {
-		if pm, _ := cfg[provKey].(map[string]any); pm != nil {
-			for _, nsKey := range []string{"Namespace", "namespace"} {
-				if v, ok := pm[nsKey].(string); ok && v != "" {
-					namespace = v
-					break
-				}
-			}
-			break
-		}
-	}
-	appName := service
 
-	image := ""
-	for _, provKey := range []string{"Provider", "provider"} {
-		if pm, _ := cfg[provKey].(map[string]any); pm != nil {
-			for _, imgKey := range []string{"Image", "image"} {
-				if v, ok := pm[imgKey].(string); ok && v != "" {
-					image = v
-					break
-				}
-			}
-			break
-		}
-	}
-	if image == "" {
-		image = sdkprovider.Env("KUBERNETES_IMAGE")
+	namespace := fmt.Sprintf("%s-%s", kc.Service, stage)
+	if kc.Provider.Namespace != "" {
+		namespace = kc.Provider.Namespace
 	}
 
-	// If no explicit image and runtime is nodejs, build + push a project image.
-	runtime := sdkprovider.ProviderRuntime(cfg)
-	if image == "" && strings.EqualFold(runtime, "nodejs") && root != "" {
-		built, buildErr := buildAndPushImage(ctx, root, cfg, service, stage)
+	image := kc.Provider.Image
+	if image == "" && strings.EqualFold(kc.Provider.Runtime, "nodejs") && root != "" {
+		built, buildErr := buildAndPushImage(ctx, root, cfg, kc.Service, stage)
 		if buildErr != nil {
 			return nil, fmt.Errorf("build image: %w", buildErr)
 		}
 		image = built
 	}
-
 	if image == "" {
 		image = "nginx:alpine"
 	}
+
+	svcType := corev1.ServiceType(kc.Provider.ServiceType)
+	if svcType == "" {
+		svcType = corev1.ServiceTypeClusterIP
+	}
+
 	containerPort := int32(80)
+	domain := kc.Extensions.Router.Hostname
 
-	// serviceType: yaml cfg takes precedence over env var, ClusterIP is the default.
-	// After codec round-trip cfg["Provider"] holds the provider map with key "ServiceType".
-	// Check both cases to be safe (matches how sdkprovider.ProviderRuntime works).
-	svcType := corev1.ServiceTypeClusterIP
-	for _, provKey := range []string{"Provider", "provider"} {
-		if pm, _ := cfg[provKey].(map[string]any); pm != nil {
-			for _, stKey := range []string{"ServiceType", "serviceType"} {
-				if st, ok := pm[stKey].(string); ok && st != "" {
-					svcType = corev1.ServiceType(st)
-					break
-				}
-			}
-			break
-		}
-	}
-	if svcType == corev1.ServiceTypeClusterIP {
-		if st := sdkprovider.Env("KUBERNETES_SERVICE_TYPE"); st != "" {
-			svcType = corev1.ServiceType(st)
-		}
-	}
-
+	// Create namespace.
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 	_, err = clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
 	if err != nil && !isAlreadyExists(err) {
@@ -126,21 +91,6 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 			return nil, fmt.Errorf("pull secret: %w", psErr)
 		}
 	}
-	// Read deploy strategy.
-	strategy := ""
-	for _, dk := range []string{"Deploy", "deploy"} {
-		if dm, _ := cfg[dk].(map[string]any); dm != nil {
-			for _, sk := range []string{"Strategy", "strategy"} {
-				if s, ok := dm[sk].(string); ok {
-					strategy = s
-					break
-				}
-			}
-			break
-		}
-	}
-
-	domain := readDomain(cfg)
 
 	result := sdkprovider.BuildDeployResult("kubernetes", cfg, stage)
 	result.Outputs["namespace"] = namespace
@@ -148,7 +98,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	result.Metadata["namespace"] = namespace
 	result.Metadata["serviceType"] = string(svcType)
 
-	if strategy == "per-function" {
+	if kc.Deploy.Strategy == "per-function" {
 		routes, _ := extractBuildRoutes(cfg)
 		seen := map[string]bool{}
 		for _, r := range routes {
@@ -157,7 +107,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 				continue
 			}
 			seen[fnName] = true
-			depName := appName + "-" + fnName
+			depName := kc.Service + "-" + fnName
 			if err := upsertDeployment(ctx, clientset, namespace, depName, image, containerPort,
 				[]corev1.EnvVar{{Name: "RUNFABRIC_FN", Value: fnName}}); err != nil {
 				return nil, fmt.Errorf("deployment %s: %w", fnName, err)
@@ -175,8 +125,8 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 			}
 		}
 		if domain != "" {
-			ingressName := appName + "-ingress"
-			paths := buildIngressRules(appName, routes)
+			ingressName := kc.Service + "-ingress"
+			paths := buildIngressRules(kc.Service, routes)
 			if err := upsertIngress(ctx, clientset, namespace, ingressName, domain, paths); err != nil {
 				return nil, fmt.Errorf("ingress: %w", err)
 			}
@@ -186,6 +136,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 			result.Outputs["url"] = "http://" + domain
 		}
 	} else {
+		appName := kc.Service
 		if err := upsertDeployment(ctx, clientset, namespace, appName, image, containerPort, nil); err != nil {
 			return nil, fmt.Errorf("deployment: %w", err)
 		}
