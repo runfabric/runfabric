@@ -1,4 +1,4 @@
-package bridge
+package dispatch
 
 import (
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
