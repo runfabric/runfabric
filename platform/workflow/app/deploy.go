@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"io"
 	"os"
 
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
@@ -10,6 +11,7 @@ import (
 	deployapi "github.com/runfabric/runfabric/platform/deploy/core/api"
 	"github.com/runfabric/runfabric/platform/deploy/provisioning"
 	"github.com/runfabric/runfabric/platform/workflow/lifecycle"
+	"github.com/runfabric/runfabric/platform/workflow/pipeline"
 	deployusecase "github.com/runfabric/runfabric/platform/workflow/usecase/deploy"
 )
 
@@ -25,13 +27,14 @@ func Deploy(configPath, stage, functionName string, rollbackOnFailure, noRollbac
 	// Resolve rollback preference: CLI flag > runfabric.yml deploy.rollbackOnFailure > env
 	rollback := resolveRollbackOnFailure(ctx, rollbackOnFailure, noRollbackOnFailure)
 
-	result, err := deployusecase.Execute(context.Background(), deployusecase.Input{
+	deployInput := deployusecase.Input{
 		Config:   ctx.Config,
 		Registry: ctx.Registry,
 		Stage:    ctx.Stage,
 		RootDir:  ctx.RootDir,
 		ExtraEnv: extraEnv,
-	}, deployusecase.Dependencies{
+	}
+	deployDeps := deployusecase.Dependencies{
 		ResolveProvider: func(cfg *config.Config) (*deployusecase.ProviderResolution, error) {
 			resolved, err := resolveProvider(ctx)
 			if err != nil {
@@ -55,7 +58,7 @@ func Deploy(configPath, stage, functionName string, rollbackOnFailure, noRollbac
 			}
 			return config.ResolveResourceBindings(cfg, provisionFn)
 		},
-		EnvVarToResourceKey: config.EnvVarToResourceKey,
+		EnvVarToResourceKey:  config.EnvVarToResourceKey,
 		ResolveAddonEnvForFn: func(cfg *config.Config, addonKeys []string) (map[string]string, error) {
 			return config.ResolveAddonBindingsForKeys(cfg, addonKeys)
 		},
@@ -64,15 +67,46 @@ func Deploy(configPath, stage, functionName string, rollbackOnFailure, noRollbac
 			return lifecycle.Deploy(reg, cfg, stage, root)
 		},
 		MergeOrchestrations: mergeDeployOrchestrations,
-	})
-	if err != nil {
-		return nil, err
 	}
 
-	if err := runPostDeployHealthCheck(ctx.Config, result, configPath, ctx.Stage, providerOverride, rollback); err != nil {
+	routerPolicy := RouterDNSSyncPolicyForStage(ctx.Config, ctx.Stage)
+
+	sc := &pipeline.StepContext{
+		Config:  ctx.Config,
+		Stage:   ctx.Stage,
+		RootDir: ctx.RootDir,
+	}
+	p := pipeline.New(
+		pipeline.DeployStep{Input: deployInput, Dependencies: deployDeps},
+		pipeline.HealthCheckStep{
+			RollbackOnFailure: rollback,
+			OnRollback: func(rctx context.Context) error {
+				_, err := Remove(configPath, stage, providerOverride)
+				return err
+			},
+		},
+		pipeline.DNSSyncStep{
+			AutoApply: routerPolicy.AutoApply,
+			Out:       io.Discard,
+			Sync: func(sctx context.Context, hostname, serviceURL, service, stg string, out io.Writer) error {
+				routing := &RouterRoutingConfig{
+					Contract:  "runfabric.fabric.routing.v1",
+					Service:   service,
+					Stage:     stg,
+					Hostname:  hostname,
+					Strategy:  "round-robin",
+					TTL:       300,
+					Endpoints: []RouterRoutingEndpoint{{Name: service, URL: serviceURL, Weight: 1}},
+				}
+				_, err := RouterDNSSync(ctx, routing, "", "", false, out)
+				return err
+			},
+		},
+	)
+	if err := p.Run(context.Background(), sc); err != nil {
 		return nil, err
 	}
-	return result, nil
+	return sc.DeployResult, nil
 }
 
 func mapDispatchMode(mode providerDispatchMode) deployusecase.DispatchMode {
