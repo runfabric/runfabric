@@ -9,7 +9,7 @@ import (
 	providers "github.com/runfabric/runfabric/internal/provider/contracts"
 	statetypes "github.com/runfabric/runfabric/internal/state/types"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/api"
-	"github.com/runfabric/runfabric/platform/state/receiptconv"
+	"github.com/runfabric/runfabric/platform/core/state/receiptconv"
 	"github.com/runfabric/runfabric/platform/workflow/lifecycle"
 )
 
