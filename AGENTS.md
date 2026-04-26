@@ -23,19 +23,29 @@ Instructions for coding agents working in the RunFabric monorepo.
 ## Repo map
 
 - `cmd/runfabric`: CLI entrypoint
+- `cmd/runfabricd`: daemon entrypoint
+- `cmd/runfabricw`: worker entrypoint
 - `internal/cli`: CLI commands and UX (Cobra)
-- `internal/app`: deploy/remove/invoke/logs/plan routing (controlplane vs deploy/api vs lifecycle)
-- `internal/controlplane`: lock + journal orchestration (AWS deploy/remove)
-- `internal/deploy/api`: API-based deploy/remove/invoke/logs; dispatches to `providers/<name>`
-- `internal/deploy/cli`: optional CLI-based deploy (wrangler, vercel, etc.)
-- `internal/deployrunner`: runs adapter BuildPlan → Plan.Execute (used by controlplane for AWS)
-- `internal/deployexec`: phase engine (checkpoints, Phase list); used by AWS DeployPlan
-- `internal/config`, `internal/state`, `internal/planner`, `internal/providers`: shared contracts, config, portability
-- `internal/lifecycle`, `internal/backends`, `internal/transactions`: lifecycle fallback, backends, journal
-- `providers/<name>`: provider-specific adapters (deploy, remove, invoke, logs; resources/; triggers/)
-- `test/`: unit/integration tests
-- `docs/`: documentation (user and developer guides together)
+- `internal/state/types`: low-level state types shared across layers
+- `platform/core/contracts/provider/`: shared provider contracts (deploy/remove/invoke/logs, changeset, config)
+- `platform/core/contracts/provider/codec/`: config codec helpers
+- `platform/core/model/`: config, devstream, and shared domain models
+- `platform/core/state/`: receipt, transaction journal, core state types
+- `platform/deploy/api/`: API-based deploy/remove/invoke/logs dispatch
+- `platform/deploy/controlplane/`: AWS controlplane orchestration (lock, journal, cluster ops)
+- `platform/deploy/exec/`: universal deploy engine (phase/checkpoint, fault injection, journal)
+- `platform/workflow/app/`: app-layer entry points for all lifecycle operations
+- `platform/workflow/lifecycle/`: lifecycle operation implementations (deploy, remove, invoke, logs, plan)
+- `platform/workflow/runtime/`: AI/MCP workflow execution engine (LLM clients, retry, cost tracking, typed steps)
+- `platform/workflow/pipeline/`: composable deploy pipeline (deploy step, health-check, DNS sync)
+- `platform/extensions/`: extension boundary — providers, routers, loaders, dispatch, providerpolicy
+- `platform/daemon/`: runfabricd server, Unix socket, HTTP client
+- `platform/observability/`: alerts, telemetry
+- `extensions/providers/<name>/`: provider-specific adapters (built-in; each has `cmd/` for plugin binary)
+- `extensions/providers/linode/`: standalone external binary plugin (own go.mod; reference for third-party authors)
+- `extensions/routers/<name>/`: router-specific adapters
 - `packages/`: per-runtime CLI and SDK (Node cli/sdk, Python, Go, Java, .NET); see `docs/FILE_STRUCTURE.md`
+- `docs/`: documentation (user and developer guides together)
 
 ## Architecture guardrails
 
@@ -95,12 +105,12 @@ Minimum allowed lighter checks:
 
 ## Code ownership
 
-- **Core / engine:** `platform/engine/cmd`, `platform/engine/internal` (config, planner, state, deploy/api, controlplane, lifecycle) — framework maintainers.
-- **Providers:** `platform/engine/providers/<name>` — per-provider owners; keep adapter logic in providers, not in `internal/`.
+- **Core / engine:** `platform/core/`, `platform/deploy/`, `platform/workflow/` — framework maintainers.
+- **Providers:** `extensions/providers/<name>/` — per-provider owners; keep adapter logic in providers, not in `platform/`.
 - **Docs:** `docs/` — keep in sync with CLI and config; see COMMAND_REFERENCE, RUNFABRIC_YML_REFERENCE, ROADMAP.
 - **Docs (user):** `docs/*.md` — CLI usage + config + providers + troubleshooting.
 - **Docs (developer):** `docs/` — internals + extensions/registry + repo development.
-- **SDKs / packages:** `packages/node`, `packages/python`, etc. — runtime-specific owners; contract in `internal/providers` and protocol docs.
+- **SDKs / packages:** `packages/node`, `packages/python`, etc. — runtime-specific owners; contract in `platform/core/contracts/provider/` and protocol docs.
 
 ## Final output expectations
 
