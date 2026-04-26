@@ -11,6 +11,22 @@ Contract version: `v1` (Node.js module hooks). In this repo, `runfabric.yml` sup
 - **Compatibility**: Stability Rules
 - **Go vs Node CLI behavior**: Go CLI
 
+## Provider binary plugins
+
+Provider plugins are standalone Go binaries that implement the plugin-sdk provider contract. They run as child processes and communicate over stdin/stdout using the plugin protocol.
+
+### Module structure
+
+Built-in providers (aws-lambda, gcp-functions, etc.) live inside the root Go module and are compiled into the `runfabric` binary. External provider plugins have their own `go.mod` and are installed separately.
+
+**`extensions/providers/linode/`** is the reference implementation for an external binary plugin:
+- Has its own `go.mod` with a `replace` directive pointing to `../../../packages/go/plugin-sdk`
+- Imports only `github.com/runfabric/runfabric/plugin-sdk/go` — never `platform/` or `internal/`
+- Built via `make build-provider-plugins` → `bin/plugins/linode-plugin`
+- Registered via `plugin.yaml` after `make install-provider-plugins`
+
+Third-party provider authors should follow this pattern: create a standalone module, import only the plugin-sdk, implement the `provider.Plugin` interface, and distribute a `plugin.yaml` alongside the binary.
+
 ## Scope
 
 `runfabric` supports lifecycle hook modules referenced by `runfabric.yml`:

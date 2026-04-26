@@ -36,6 +36,27 @@ The following providers have API-based deploy/remove/invoke/logs (see `platform/
 - **aws-lambda:** Uses Lambda, API Gateway, SQS, S3, EventBridge as per [EXAMPLES_MATRIX.md](EXAMPLES_MATRIX.md). State backend can use S3 + DynamoDB (see [STATE_BACKENDS.md](STATE_BACKENDS.md)).
 - **gcp-functions:** Cloud Functions (Gen2) and Pub/Sub where supported.
 - **azure-functions:** Azure Functions; storage and triggers per matrix.
+- **linode:** External binary plugin — see below.
 - **Others:** See [PROVIDER_SETUP.md](PROVIDER_SETUP.md) for credentials and [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) for deploy flags.
 
-**See also:** [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md), [ARCHITECTURE.md](ARCHITECTURE.md).
+## External binary plugins
+
+Some providers ship as standalone binary plugins rather than being compiled into the `runfabric` binary. These are built against the plugin-sdk only (no platform/ imports) and are installed separately.
+
+### linode
+
+`extensions/providers/linode/` is an intentional external binary plugin. It has its own `go.mod` and is built and installed separately from the main module:
+
+```bash
+# Build all plugins (including linode) into bin/plugins/
+make build-provider-plugins
+
+# Install into ~/.runfabric/plugins/provider/linode/
+make install-provider-plugins
+```
+
+The binary is registered via `~/.runfabric/plugins/provider/linode/plugin.yaml`. It implements the full provider contract (doctor, plan, deploy, remove, invoke, logs) using only the plugin-sdk — this is the reference pattern for third-party provider authors.
+
+To use it, set `provider: linode` in `runfabric.yml` after installing.
+
+**See also:** [BUILD_AND_RELEASE.md](BUILD_AND_RELEASE.md), [ARCHITECTURE.md](ARCHITECTURE.md), [PLUGIN_API.md](PLUGIN_API.md).
