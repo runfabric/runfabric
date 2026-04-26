@@ -17,9 +17,6 @@
 - [ ] Enforce policy gates for production actions.
   - Include: environment protection rules, required approvals, blocked dangerous flags, and policy-as-code checks.
 
-- [ ] Implement secrets and key management integration.
-  - Targets: AWS Secrets Manager, GCP Secret Manager, Vault.
-  - Goal: remove static secret usage in CI and local configs for prod stages.
 
 - [ ] Add multi-tenant safety boundaries.
   - Goal: isolate state, credentials, and execution identities by org/project/environment.
