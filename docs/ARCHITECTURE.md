@@ -71,7 +71,7 @@ Core pieces:
 
 ### 4. Execution paths
 
-- **API-dispatched providers** -> `platform/deploy/core/api` (`Run`, `Remove`, `Invoke`, `Logs`).
+- **API-dispatched providers** -> `platform/deploy/api` (`Run`, `Remove`, `Invoke`, `Logs`).
 - **Internal/plugin providers** -> shared lifecycle contracts in `platform/workflow/lifecycle`.
 - **AWS controlplane path** -> `platform/deploy/controlplane` orchestrates lock/journal/recovery behavior and uses `platform/deploy/exec` as the phase engine.
 
@@ -161,7 +161,7 @@ Related built-in plugin roots:
 - `extensions/secretmanagers/`
 - `extensions/states/`
 
-API dispatch wiring remains provider-neutral in `platform/deploy/core/api/` and provider policy mapping in `platform/extensions/providerpolicy/`.
+API dispatch wiring remains provider-neutral in `platform/deploy/api/` and provider policy mapping in `platform/extensions/providerpolicy/`.
 
 ### Providers wired to deploy API
 
