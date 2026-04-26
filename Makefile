@@ -2,7 +2,7 @@ APP=runfabric
 DAEMON_APP=runfabricd
 WORKER_APP=runfabricw
 
-.PHONY: all help build build-daemon build-worker build-platform build-daemon-platform build-worker-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx build-provider-plugins install-provider-plugins test test-integration release-check check-syntax check-boundary check-architecture check-binary-surfaces release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down ghcr-login registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
+.PHONY: all help build build-daemon build-worker build-platform build-daemon-platform build-worker-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx build-provider-plugins install-provider-plugins build-secretmanager-plugins install-secretmanager-plugins test test-integration release-check check-syntax check-boundary check-architecture check-binary-surfaces release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down ghcr-login registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
 
 # UPX: compress binaries for smaller distribution. Override with e.g. make build-upx UPX="upx --best"
 # On macOS, UPX requires --force-macos; compressed binaries may need re-signing for notarization.
@@ -39,6 +39,8 @@ help:
 	@echo "  make build-all-platforms-upx  build all platforms then compress each with UPX"
 	@echo "  make build-provider-plugins  build external provider plugin binaries into bin/plugins/"
 	@echo "  make install-provider-plugins  install provider plugin binaries + plugin.yaml into ~/.runfabric/plugins/provider/<id>/"
+	@echo "  make build-secretmanager-plugins  build secret-manager plugin binaries into bin/plugins/"
+	@echo "  make install-secretmanager-plugins  install secret-manager plugin binaries + plugin.yaml into ~/.runfabric/plugins/secret-managers/<id>/<ver>/"
 	@echo "  make test         run tests"
 	@echo "  make coverage     run tests with coverage report (engine)"
 	@echo "  make coverage-gate [COVERAGE_THRESHOLD=N]  run coverage; fail if total below N%% (omit to report only)"
@@ -194,6 +196,31 @@ install-provider-plugins: build-provider-plugins
 		cp "bin/plugins/$$p-plugin" "$$dir/bin/$$p-plugin"; \
 		cp "extensions/providers/$$srcdir/plugin.yaml" "$$dir/plugin.yaml"; \
 		echo "Installed $$id -> $$dir"; \
+	done
+
+# Build secret-manager plugin binaries into bin/plugins/.
+build-secretmanager-plugins:
+	@mkdir -p bin/plugins
+	@set -e; \
+	for p in aws gcp azure vault; do \
+		echo "Building secret-manager plugin: $$p"; \
+		go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/plugins/$$p-secret-manager ./extensions/secretmanagers/$$p; \
+	done
+
+# Install secret-manager plugins into ~/.runfabric/plugins/secret-managers/<id>/<version>/.
+install-secretmanager-plugins: build-secretmanager-plugins
+	@set -e; \
+	for triple in \
+		"aws aws-secret-manager 0.1.0" \
+		"gcp gcp-secret-manager 0.1.0" \
+		"azure azure-key-vault-secret-manager 0.1.0" \
+		"vault vault-secret-manager 0.1.0"; do \
+		set -- $$triple; p=$$1; id=$$2; ver=$$3; \
+		dir="$$HOME/.runfabric/plugins/secret-managers/$$id/$$ver"; \
+		mkdir -p "$$dir"; \
+		cp "bin/plugins/$$p-secret-manager" "$$dir/$$p-secret-manager"; \
+		cp "extensions/secretmanagers/$$p/plugin.yaml" "$$dir/plugin.yaml"; \
+		echo "Installed $$id@$$ver -> $$dir"; \
 	done
 
 # Enforce extension boundary rules:
