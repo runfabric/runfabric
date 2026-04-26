@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	providercodec "github.com/runfabric/runfabric/platform/core/contracts/provider/codec"
 	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
+	providercodec "github.com/runfabric/runfabric/platform/core/contracts/provider/codec"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/api"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 	planner "github.com/runfabric/runfabric/platform/planner/engine"
