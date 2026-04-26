@@ -364,6 +364,27 @@ func TestRule4NoBannedTermsInCodeText(t *testing.T) {
 	}
 }
 
+// TestRule_ControlplaneNoWorkflowFiles asserts that platform/deploy/controlplane/
+// contains no workflow_*.go files. Workflow execution logic lives in platform/workflow/runtime/.
+func TestRule_ControlplaneNoWorkflowFiles(t *testing.T) {
+	root := repoRoot(t)
+	cpDir := filepath.Join(root, "platform", "deploy", "controlplane")
+	entries, err := os.ReadDir(cpDir)
+	if err != nil {
+		t.Fatalf("read controlplane dir: %v", err)
+	}
+	var violations []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "workflow_") && strings.HasSuffix(e.Name(), ".go") {
+			violations = append(violations, e.Name())
+		}
+	}
+	if len(violations) > 0 {
+		t.Fatalf("platform/deploy/controlplane/ must not contain workflow_*.go files (move to platform/workflow/runtime/):\n%s",
+			strings.Join(violations, "\n"))
+	}
+}
+
 func itoa(v int) string {
 	return strconv.Itoa(v)
 }
