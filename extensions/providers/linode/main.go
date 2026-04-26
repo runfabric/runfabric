@@ -724,7 +724,7 @@ func (p *plugin) resolveArtifactPath(root string, fn functionSpec) string {
 		pathJoin(root, "dist", fn.Name+".zip"),
 		pathJoin(root, "build", fn.Name+".zip"),
 	} {
-		if candidate != "" {
+		if _, err := os.Stat(candidate); err == nil {
 			return candidate
 		}
 	}

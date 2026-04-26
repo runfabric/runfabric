@@ -147,18 +147,9 @@ build-all-platforms-upx: build-all-platforms
 	@echo "Compressed all platform binaries in bin/"
 
 # Build all built-in providers as external plugin binaries.
+# Pairs: <output-name> <directory-name>
 build-provider-plugins:
 	@mkdir -p bin/plugins
-	@set -e; \
-	for p in aws gcp azure alibaba cloudflare digitalocean fly ibm kubernetes netlify vercel; do \
-		echo "Building provider plugin: $$p"; \
-		go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/plugins/$$p-plugin ./extensions/providers/$$p/cmd; \
-	done
-
-# Install provider plugins and manifests to local external plugin directory.
-# This allows switching any provider to external-only mode by editing:
-#   platform/extensions/providerpolicy/external_only.go
-install-provider-plugins: build-provider-plugins
 	@set -e; \
 	for pair in \
 		"aws aws-lambda" \
@@ -172,11 +163,36 @@ install-provider-plugins: build-provider-plugins
 		"kubernetes kubernetes" \
 		"netlify netlify" \
 		"vercel vercel"; do \
-		set -- $$pair; p=$$1; id=$$2; \
+		set -- $$pair; p=$$1; dir=$$2; \
+		echo "Building provider plugin: $$p"; \
+		go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o bin/plugins/$$p-plugin ./extensions/providers/$$dir/cmd; \
+	done
+	@echo "Building provider plugin: linode"
+	@cd extensions/providers/linode && GOWORK=off go build -trimpath -ldflags "$(PLATFORM_LDFLAGS)" -o $(CURDIR)/bin/plugins/linode-plugin .
+
+# Install provider plugins and manifests to local external plugin directory.
+# This allows switching any provider to external-only mode by editing:
+#   platform/extensions/providerpolicy/external_only.go
+install-provider-plugins: build-provider-plugins
+	@set -e; \
+	for triple in \
+		"aws aws-lambda aws-lambda" \
+		"gcp gcp-functions gcp-functions" \
+		"azure azure-functions azure-functions" \
+		"alibaba alibaba-fc alibaba-fc" \
+		"cloudflare cloudflare-workers cloudflare-workers" \
+		"digitalocean digitalocean-functions digitalocean-functions" \
+		"fly fly-machines fly-machines" \
+		"ibm ibm-openwhisk ibm-openwhisk" \
+		"kubernetes kubernetes kubernetes" \
+		"netlify netlify netlify" \
+		"vercel vercel vercel" \
+		"linode linode linode"; do \
+		set -- $$triple; p=$$1; id=$$2; srcdir=$$3; \
 		dir="$$HOME/.runfabric/plugins/provider/$$id"; \
 		mkdir -p "$$dir/bin"; \
 		cp "bin/plugins/$$p-plugin" "$$dir/bin/$$p-plugin"; \
-		cp "extensions/providers/$$p/plugin.yaml" "$$dir/plugin.yaml"; \
+		cp "extensions/providers/$$srcdir/plugin.yaml" "$$dir/plugin.yaml"; \
 		echo "Installed $$id -> $$dir"; \
 	done
 
