@@ -3,7 +3,7 @@ package inprocess
 import (
 	"context"
 
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 )
 
 // APIDispatchHooks provides optional provider-specific capabilities that are not

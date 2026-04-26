@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	deployexec "github.com/runfabric/runfabric/platform/deploy/exec"
 )

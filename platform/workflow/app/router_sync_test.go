@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	routercontracts "github.com/runfabric/runfabric/platform/core/contracts/router"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	statecore "github.com/runfabric/runfabric/platform/core/state/core"

@@ -1,7 +1,7 @@
 package resolution
 
 import (
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )

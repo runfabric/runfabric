@@ -36,7 +36,7 @@ import (
 	builtinsecretmanagers "github.com/runfabric/runfabric/extensions/secretmanagers"
 	builtinsimulators "github.com/runfabric/runfabric/extensions/simulators"
 	builtinstates "github.com/runfabric/runfabric/extensions/states"
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	routercontracts "github.com/runfabric/runfabric/platform/core/contracts/router"
 	runtimecontracts "github.com/runfabric/runfabric/platform/core/contracts/runtime"
 	simulatorcontracts "github.com/runfabric/runfabric/platform/core/contracts/simulators"

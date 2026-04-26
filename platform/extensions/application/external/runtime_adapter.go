@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	extproviders "github.com/runfabric/runfabric/internal/provider/contracts"
+	extproviders "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	runtimecontracts "github.com/runfabric/runfabric/platform/core/contracts/runtime"
 )
 

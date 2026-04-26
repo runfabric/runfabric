@@ -3,7 +3,7 @@ package pipeline
 import (
 	"context"
 
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	deployusecase "github.com/runfabric/runfabric/platform/workflow/usecase/deploy"
 )
 

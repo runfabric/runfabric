@@ -3,7 +3,7 @@ package integration
 import (
 	"testing"
 
-	provider "github.com/runfabric/runfabric/internal/provider/contracts"
+	provider "github.com/runfabric/runfabric/platform/core/contracts/provider"
 )
 
 func resolveAWSProvider(t *testing.T) provider.ProviderPlugin {

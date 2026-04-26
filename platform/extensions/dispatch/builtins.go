@@ -1,7 +1,7 @@
 package dispatch
 
 import (
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	extproviders "github.com/runfabric/runfabric/platform/extensions"
 )
 

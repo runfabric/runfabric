@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/api"

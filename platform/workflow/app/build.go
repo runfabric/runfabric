@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	"github.com/runfabric/runfabric/platform/deploy/buildcache"
 	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"

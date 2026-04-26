@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	provider "github.com/runfabric/runfabric/internal/provider/contracts"
+	provider "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
 	resolution "github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 )

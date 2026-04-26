@@ -1,7 +1,7 @@
 package extensions
 
 import (
-	extproviders "github.com/runfabric/runfabric/internal/provider/contracts"
+	extproviders "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 )
 

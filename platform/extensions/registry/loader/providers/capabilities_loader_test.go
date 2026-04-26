@@ -3,7 +3,7 @@ package providers
 import (
 	"testing"
 
-	providercontract "github.com/runfabric/runfabric/internal/provider/contracts"
+	providercontract "github.com/runfabric/runfabric/platform/core/contracts/provider"
 )
 
 func TestNewCapabilitySet_NormalizesAndDedupes(t *testing.T) {

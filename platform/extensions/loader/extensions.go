@@ -4,7 +4,7 @@
 package loader
 
 import (
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	runtimecontracts "github.com/runfabric/runfabric/platform/core/contracts/runtime"
 	simulatorcontracts "github.com/runfabric/runfabric/platform/core/contracts/simulators"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
