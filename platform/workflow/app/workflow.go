@@ -14,7 +14,7 @@ import (
 
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
-	"github.com/runfabric/runfabric/platform/deploy/controlplane"
+	workflowruntime "github.com/runfabric/runfabric/platform/workflow/runtime"
 )
 
 type WorkflowRunResult struct {
@@ -38,11 +38,11 @@ func WorkflowRun(configPath, stage, providerOverride, workflowName, runID string
 	spec.Stage = stage
 	spec.Provider = ctx.Config.Provider.Name
 
-	handler, err := controlplane.NewTypedStepHandlerFromConfig(ctx.Config, nil)
+	handler, err := workflowruntime.NewTypedStepHandlerFromConfig(ctx.Config, nil)
 	if err != nil {
 		return nil, err
 	}
-	runtime := controlplane.NewWorkflowRuntime(ctx.RootDir, handler)
+	runtime := workflowruntime.NewWorkflowRuntime(ctx.RootDir, handler)
 	run, runErr := runtime.StartRun(context.Background(), spec)
 	res := &WorkflowRunResult{
 		Workflow: spec.WorkflowName,
@@ -63,7 +63,7 @@ func WorkflowStatus(configPath, stage, runID string) (*state.WorkflowRun, error)
 
 func WorkflowCancel(configPath, stage, runID string) (*state.WorkflowRun, error) {
 	root := filepath.Dir(configPath)
-	runtime := controlplane.NewWorkflowRuntime(root, nil)
+	runtime := workflowruntime.NewWorkflowRuntime(root, nil)
 	if err := runtime.CancelRun(stage, runID); err != nil {
 		return nil, err
 	}
@@ -75,26 +75,26 @@ func WorkflowReplay(configPath, stage, providerOverride, runID, stepID string) (
 	if err != nil {
 		return nil, err
 	}
-	handler, err := controlplane.NewTypedStepHandlerFromConfig(ctx.Config, nil)
+	handler, err := workflowruntime.NewTypedStepHandlerFromConfig(ctx.Config, nil)
 	if err != nil {
 		return nil, err
 	}
-	runtime := controlplane.NewWorkflowRuntime(ctx.RootDir, handler)
+	runtime := workflowruntime.NewWorkflowRuntime(ctx.RootDir, handler)
 	return runtime.ReplayRunFromStep(context.Background(), stage, runID, stepID)
 }
 
-func buildWorkflowRunSpec(cfg *config.Config, workflowName, runID string, runInput map[string]any) (controlplane.WorkflowRunSpec, string, []string, error) {
+func buildWorkflowRunSpec(cfg *config.Config, workflowName, runID string, runInput map[string]any) (workflowruntime.WorkflowRunSpec, string, []string, error) {
 	name := strings.TrimSpace(workflowName)
 	if name == "" {
 		name = defaultWorkflowName(cfg)
 	}
 	if name == "" {
-		return controlplane.WorkflowRunSpec{}, "", nil, fmt.Errorf("workflow name is required (set --name) because multiple/no workflows are configured")
+		return workflowruntime.WorkflowRunSpec{}, "", nil, fmt.Errorf("workflow name is required (set --name) because multiple/no workflows are configured")
 	}
 
 	if len(cfg.Workflows) > 0 {
 		if steps, entrypoint, err := buildStepsFromConfiguredWorkflows(cfg.Workflows, name, runInput); err == nil {
-			return controlplane.WorkflowRunSpec{
+			return workflowruntime.WorkflowRunSpec{
 				RunID:        runID,
 				WorkflowName: name,
 				WorkflowHash: workflowHashFromSteps(name, steps),
@@ -106,9 +106,9 @@ func buildWorkflowRunSpec(cfg *config.Config, workflowName, runID string, runInp
 
 	available := availableWorkflowNames(cfg)
 	if len(available) == 0 {
-		return controlplane.WorkflowRunSpec{}, "", nil, fmt.Errorf("no workflows configured")
+		return workflowruntime.WorkflowRunSpec{}, "", nil, fmt.Errorf("no workflows configured")
 	}
-	return controlplane.WorkflowRunSpec{}, "", nil, fmt.Errorf("workflow %q not found (available: %s)", name, strings.Join(available, ", "))
+	return workflowruntime.WorkflowRunSpec{}, "", nil, fmt.Errorf("workflow %q not found (available: %s)", name, strings.Join(available, ", "))
 }
 
 func defaultWorkflowName(cfg *config.Config) string {
@@ -145,12 +145,12 @@ func availableWorkflowNames(cfg *config.Config) []string {
 	return uniq
 }
 
-func buildStepsFromConfiguredWorkflows(workflows []config.WorkflowConfig, workflowName string, runInput map[string]any) ([]controlplane.WorkflowStepSpec, string, error) {
+func buildStepsFromConfiguredWorkflows(workflows []config.WorkflowConfig, workflowName string, runInput map[string]any) ([]workflowruntime.WorkflowStepSpec, string, error) {
 	for _, wf := range workflows {
 		if strings.TrimSpace(wf.Name) != workflowName {
 			continue
 		}
-		steps := make([]controlplane.WorkflowStepSpec, 0, len(wf.Steps))
+		steps := make([]workflowruntime.WorkflowStepSpec, 0, len(wf.Steps))
 		for i, step := range wf.Steps {
 			stepID := strings.TrimSpace(step.ID)
 			if stepID == "" {
@@ -179,7 +179,7 @@ func buildStepsFromConfiguredWorkflows(workflows []config.WorkflowConfig, workfl
 			if i == 0 {
 				input = mergeRunInput(input, runInput)
 			}
-			steps = append(steps, controlplane.WorkflowStepSpec{
+			steps = append(steps, workflowruntime.WorkflowStepSpec{
 				ID:          stepID,
 				Kind:        kind,
 				Input:       input,
@@ -236,7 +236,7 @@ func asString(v any) string {
 	}
 }
 
-func workflowHashFromSteps(name string, steps []controlplane.WorkflowStepSpec) string {
+func workflowHashFromSteps(name string, steps []workflowruntime.WorkflowStepSpec) string {
 	payload := map[string]any{
 		"name":  name,
 		"steps": steps,

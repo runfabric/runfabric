@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/runfabric/runfabric/platform/core/model/config"
-	"github.com/runfabric/runfabric/platform/deploy/controlplane"
+	workflowruntime "github.com/runfabric/runfabric/platform/workflow/runtime"
 )
 
 func TestBuildStepsFromConfiguredWorkflows_MapsStepModelOverride(t *testing.T) {
@@ -14,7 +14,7 @@ func TestBuildStepsFromConfiguredWorkflows_MapsStepModelOverride(t *testing.T) {
 			Steps: []config.WorkflowStep{
 				{
 					ID:    "generate",
-					Kind:  controlplane.StepKindAIGenerate,
+					Kind:  workflowruntime.StepKindAIGenerate,
 					Model: "top-level-model",
 					Input: map[string]any{
 						"prompt": "create release notes",
@@ -22,7 +22,7 @@ func TestBuildStepsFromConfiguredWorkflows_MapsStepModelOverride(t *testing.T) {
 				},
 				{
 					ID:    "eval",
-					Kind:  controlplane.StepKindAIEval,
+					Kind:  workflowruntime.StepKindAIEval,
 					Model: "top-level-eval-model",
 					Input: map[string]any{
 						"score": 0.8,
@@ -55,7 +55,7 @@ func TestBuildStepsFromConfiguredWorkflows_UsesExplicitID(t *testing.T) {
 			Steps: []config.WorkflowStep{
 				{
 					ID:   "plan",
-					Kind: controlplane.StepKindAIGenerate,
+					Kind: workflowruntime.StepKindAIGenerate,
 					Input: map[string]any{
 						"prompt": "draft plan",
 					},

@@ -1,4 +1,4 @@
-package controlplane
+package runtime
 
 import (
 	"crypto/sha256"
