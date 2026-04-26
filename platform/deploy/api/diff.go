@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	contracts "github.com/runfabric/runfabric/internal/provider/contracts"
+	contracts "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 )

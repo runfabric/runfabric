@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	provider "github.com/runfabric/runfabric/internal/provider/contracts"
+	provider "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 )
 

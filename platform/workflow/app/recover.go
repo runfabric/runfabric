@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	appErrs "github.com/runfabric/runfabric/platform/core/model/errors"
 	"github.com/runfabric/runfabric/platform/core/state/transactions"
 	"github.com/runfabric/runfabric/platform/state/locking"

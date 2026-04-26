@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	routercontracts "github.com/runfabric/runfabric/platform/core/contracts/router"
 )
 

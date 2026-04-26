@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	routercontracts "github.com/runfabric/runfabric/platform/core/contracts/router"
 	runtimecontracts "github.com/runfabric/runfabric/platform/core/contracts/runtime"
 	simulatorcontracts "github.com/runfabric/runfabric/platform/core/contracts/simulators"

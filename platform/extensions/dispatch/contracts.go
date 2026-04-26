@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	providercodec "github.com/runfabric/runfabric/internal/provider/codec"
-	providers "github.com/runfabric/runfabric/internal/provider/contracts"
+	providercodec "github.com/runfabric/runfabric/platform/core/contracts/provider/codec"
+	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	"github.com/runfabric/runfabric/platform/extensions/inprocess"

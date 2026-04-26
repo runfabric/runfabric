@@ -69,9 +69,9 @@ func TestGoldenImportRulePatterns(t *testing.T) {
 		allowed    bool
 	}{
 		{
-			name:       "extensions cannot import internal",
+			name:       "extensions cannot import provider contracts",
 			file:       "extensions/providers/aws/example.go",
-			importPath: modulePrefix + "internal/provider/contracts",
+			importPath: modulePrefix + "platform/core/contracts/provider",
 			allowed:    false,
 		},
 		{
@@ -123,9 +123,9 @@ func TestGoldenImportRulePatterns(t *testing.T) {
 			allowed:    false,
 		},
 		{
-			name:       "plugin sdk cannot import internal",
+			name:       "plugin sdk cannot import provider contracts",
 			file:       "packages/go/plugin-sdk/router/types.go",
-			importPath: modulePrefix + "internal/provider/contracts",
+			importPath: modulePrefix + "platform/core/contracts/provider",
 			allowed:    false,
 		},
 		{

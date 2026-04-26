@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	ext "github.com/runfabric/runfabric/internal/provider/contracts"
+	ext "github.com/runfabric/runfabric/platform/core/contracts/provider"
 )
 
 // CapabilitySet provides fast, case-insensitive capability checks for provider metadata.
