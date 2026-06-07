@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/runfabric/runfabric/platform/core/model/errors"
+	statecore "github.com/runfabric/runfabric/platform/core/state/core"
 )
 
 type FileBackend struct {
@@ -37,11 +38,6 @@ func (b *FileBackend) Load(service, stage string) (*JournalFile, error) {
 }
 
 func (b *FileBackend) Save(j *JournalFile) error {
-	dir := filepath.Join(b.Root, ".runfabric", "journals")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create journal dir: %w", err)
-	}
-
 	path := b.path(j.Service, j.Stage)
 
 	if existing, err := b.Load(j.Service, j.Stage); err == nil {
@@ -64,7 +60,7 @@ func (b *FileBackend) Save(j *JournalFile) error {
 		return fmt.Errorf("marshal journal: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := statecore.WriteStateFile(path, data); err != nil {
 		return fmt.Errorf("write journal: %w", err)
 	}
 	return nil

@@ -129,22 +129,14 @@ func SaveWorkflowRun(root string, run *WorkflowRun) error {
 	if run.Stage == "" {
 		return fmt.Errorf("stage is required")
 	}
-	dir := runDir(root, run.Stage)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create runs dir: %w", err)
-	}
 	run.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	data, err := json.MarshalIndent(run, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal workflow run: %w", err)
 	}
 	path := runPath(root, run.Stage, run.RunID)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write workflow run: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("move workflow run into place: %w", err)
+	if err := WriteStateFile(path, data); err != nil {
+		return err
 	}
 	return nil
 }

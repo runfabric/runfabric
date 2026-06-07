@@ -85,17 +85,13 @@ func LoadRouterSyncHistory(root, stage string) ([]RouterSyncSnapshot, error) {
 }
 
 func SaveRouterSyncHistory(root, stage string, history []RouterSyncSnapshot) error {
-	dir := filepath.Join(root, ".runfabric")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create state dir: %w", err)
-	}
-	path := filepath.Join(dir, "router-sync-"+stage+".json")
+	path := filepath.Join(root, ".runfabric", "router-sync-"+stage+".json")
 	data, err := json.MarshalIndent(history, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal router sync history: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write router sync history: %w", err)
+	if err := WriteStateFile(path, data); err != nil {
+		return err
 	}
 	return nil
 }

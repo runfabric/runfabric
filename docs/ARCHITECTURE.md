@@ -48,6 +48,8 @@ That ADR is the source of truth for:
 
 `internal/cli/common/app_service.go` provides a small app-service interface used by CLI command handlers.
 
+> **Trust boundary:** `DeployFromSourceURL` (`--source`) fetches and deploys a remote source. Build/deploy commands declared in that source's `runfabric.yml` run locally through a shell and the artifact runs with the operator's provider credentials, so deploying a source is equivalent to executing it. Only use trusted source URLs. See the security note under `runfabric deploy --source` in [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md).
+
 ### 2. App layer: bootstrap and provider dispatch
 
 **Location:** `platform/workflow/app/`
@@ -93,8 +95,8 @@ Workflow execution currently uses a single in-process durable runtime loop (not 
 
 1. CLI command entrypoint (`runfabric workflow run|status|cancel|replay`) in `internal/cli/common/workflow.go`.
 2. App boundary forwarding in `platform/workflow/app/workflow.go`.
-3. Durable runtime loop executes in `platform/deploy/controlplane/workflow_runtime.go`.
-4. Step execution dispatch (code/ai/human-approval) is handled by `platform/deploy/controlplane/workflow_typed_steps.go`.
+3. Durable runtime loop executes in `platform/workflow/runtime/workflow_runtime.go`.
+4. Step execution dispatch (code/ai/human-approval) is handled by `platform/workflow/runtime/workflow_typed_steps.go`.
 5. Durable run/step state persists through `platform/core/state/core/runs.go` under `.runfabric/runs/<stage>/<runId>.json`.
 
 ### Scheduler vs dispatcher model (current decision)
@@ -121,7 +123,7 @@ Two distinct binding layers exist and should not be conflated:
 
 ### AI workflow execution boundary
 
-- AI step execution is centralized in `platform/deploy/controlplane/workflow_ai_runtime.go` behind `AIStepRunner`.
+- AI step execution is centralized in `platform/workflow/runtime/workflow_ai_runtime.go` behind `AIStepRunner`.
 - `TypedStepHandler` routes `ai-retrieval`, `ai-generate`, `ai-structured`, and `ai-eval` to `AIRunner`.
 - MCP tool/resource/prompt access is executed through `workflow_mcp_runtime.go` and policy-checked in core runtime.
 - Provider adapters do not execute AI steps.

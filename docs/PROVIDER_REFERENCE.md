@@ -23,7 +23,7 @@ This document is the provider capability matrix for the current RunFabric engine
 ## Important Boundary
 
 - Provider adapters own deploy/invoke/logs/plan/doctor behavior.
-- AI workflow execution (`ai-retrieval`, `ai-generate`, `ai-structured`, `ai-eval`) is executed by `platform/deploy/controlplane`.
+- AI workflow execution (`ai-retrieval`, `ai-generate`, `ai-structured`, `ai-eval`) is executed by `platform/workflow/runtime`.
 - Providers do not import or execute `workflow_ai_runtime` logic.
 
 ## References

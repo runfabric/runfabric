@@ -47,18 +47,14 @@ func LoadRunFabricState(root, stage string) (*RunFabricState, error) {
 
 // SaveRunFabricState writes state to .runfabric/runfabric-state-<stage>.json.
 func SaveRunFabricState(root string, s *RunFabricState) error {
-	dir := filepath.Join(root, ".runfabric")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create state dir: %w", err)
-	}
 	s.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	path := runFabricStatePath(root, s.Stage)
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal runfabric state: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write runfabric state: %w", err)
+	if err := WriteStateFile(path, data); err != nil {
+		return err
 	}
 	return nil
 }

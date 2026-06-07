@@ -81,6 +81,8 @@ Workflow runtime behavior notes:
 - `runfabric deploy -c <config> [--stage <name>] [--function <name>] [--out <dir>] [--preview <id>] [--source <url>] [--provider <key>] [--rollback-on-failure|--no-rollback-on-failure] [--json]` — `--preview pr-123` uses stage `pr-123` for preview environments; `--source <url>` fetches the archive and deploys from temp dir (use `-c <path>` to supply `runfabric.yml` from outside the source); `--provider <key>` selects a provider from `providerOverrides` in `runfabric.yml` (multi-cloud; e.g. `--provider aws --stage prod`).
 - `runfabric remove -c <config> [--stage <name>] [--provider <name>] [--json]`
 
+> **Security — trust boundary for `--source <url>`:** deploying a source executes it. Build/deploy commands declared in the source's `runfabric.yml` are run on your machine through a shell (`/bin/sh -lc`), and the artifact runs with your provider credentials. Only deploy `--source` URLs you trust and control; treat an untrusted source URL as you would treat running an arbitrary script. To review first, fetch and inspect the archive before deploying, or supply a vetted `runfabric.yml` from outside the source with `-c <path>`.
+
 ## Deploy history, inspection, and migration
 
 - `runfabric deploy list -c <config> [--json]` — List deployment history (stages and timestamps) from the receipt backend.

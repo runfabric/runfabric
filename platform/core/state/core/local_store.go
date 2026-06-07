@@ -52,9 +52,6 @@ func Save(root string, receipt *Receipt) error {
 		return fmt.Errorf("nil receipt")
 	}
 	dir := filepath.Join(root, ".runfabric")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create state dir: %w", err)
-	}
 
 	receipt.Version = CurrentReceiptVersion
 	receipt.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -65,8 +62,8 @@ func Save(root string, receipt *Receipt) error {
 		return fmt.Errorf("marshal receipt: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write receipt: %w", err)
+	if err := WriteStateFile(path, data); err != nil {
+		return err
 	}
 	return nil
 }

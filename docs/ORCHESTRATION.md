@@ -2,7 +2,7 @@
 
 RunFabric supports two workflow layers that must stay separate:
 
-- Local RunFabric workflow runtime: executes typed steps (including AI steps) in `platform/deploy/controlplane/workflow_runtime.go`.
+- Local RunFabric workflow runtime: executes typed steps (including AI steps) in `platform/workflow/runtime/workflow_runtime.go`.
 - Provider-native orchestration: syncs provider state machines through provider orchestration hooks.
 
 ## Control Flows

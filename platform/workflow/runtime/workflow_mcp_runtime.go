@@ -91,7 +91,9 @@ func (r *MCPRuntime) CallTool(ctx context.Context, run *state.WorkflowRun, step 
 	if err != nil {
 		return nil, err
 	}
-	appendMCPCorrelation(metadata, "tool", b.Server, b.Tool, run, step)
+	if err := appendMCPCorrelation(metadata, "tool", b.Server, b.Tool, run, step); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -103,7 +105,9 @@ func (r *MCPRuntime) ReadResource(ctx context.Context, run *state.WorkflowRun, s
 	if err != nil {
 		return nil, err
 	}
-	appendMCPCorrelation(metadata, "resource", b.Server, b.Resource, run, step)
+	if err := appendMCPCorrelation(metadata, "resource", b.Server, b.Resource, run, step); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -115,7 +119,9 @@ func (r *MCPRuntime) GetPrompt(ctx context.Context, run *state.WorkflowRun, step
 	if err != nil {
 		return nil, err
 	}
-	appendMCPCorrelation(metadata, "prompt", b.Server, b.Prompt, run, step)
+	if err := appendMCPCorrelation(metadata, "prompt", b.Server, b.Prompt, run, step); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -123,49 +129,33 @@ func (r *MCPRuntime) ensureAllowed(action, server, target string, metadata map[s
 	server = strings.TrimSpace(server)
 	target = strings.TrimSpace(target)
 	if server == "" {
-		err := &MCPPolicyError{Action: action, Server: server, Target: target, Reason: "server is required"}
-		appendMCPPolicyDecision(metadata, action, server, target, "denied", err.Reason)
-		return err
+		return r.denyDecision(metadata, action, server, target, "server is required")
 	}
 	if target == "" {
-		err := &MCPPolicyError{Action: action, Server: server, Target: target, Reason: "target is required"}
-		appendMCPPolicyDecision(metadata, action, server, target, "denied", err.Reason)
-		return err
+		return r.denyDecision(metadata, action, server, target, "target is required")
 	}
 	if _, ok := r.Integrations.Servers[server]; !ok {
-		err := &MCPPolicyError{Action: action, Server: server, Target: target, Reason: "server is not configured under integrations.mcp.servers"}
-		appendMCPPolicyDecision(metadata, action, server, target, "denied", err.Reason)
-		return err
+		return r.denyDecision(metadata, action, server, target, "server is not configured under integrations.mcp.servers")
 	}
 
 	compound := server + "." + target
 	denyPatterns := ruleSetByAction(r.Policy.Deny, action)
 	if pattern, ok := firstMatch(r.Policy.Deny.Servers, server); ok {
-		reason := fmt.Sprintf("matched policies.mcp.deny.servers (%s)", pattern)
-		appendMCPPolicyDecision(metadata, action, server, target, "denied", reason)
-		return &MCPPolicyError{Action: action, Server: server, Target: target, Reason: reason}
+		return r.denyDecision(metadata, action, server, target, fmt.Sprintf("matched policies.mcp.deny.servers (%s)", pattern))
 	}
 	if pattern, ok := firstMatch(denyPatterns, compound); ok {
-		reason := fmt.Sprintf("matched policies.mcp.deny.%ss (%s)", action, pattern)
-		appendMCPPolicyDecision(metadata, action, server, target, "denied", reason)
-		return &MCPPolicyError{Action: action, Server: server, Target: target, Reason: reason}
+		return r.denyDecision(metadata, action, server, target, fmt.Sprintf("matched policies.mcp.deny.%ss (%s)", action, pattern))
 	}
 
 	allowPatterns := ruleSetByAction(r.Policy.Allow, action)
 	if pattern, ok := firstMatch(r.Policy.Allow.Servers, server); ok {
-		reason := fmt.Sprintf("matched policies.mcp.allow.servers (%s)", pattern)
-		appendMCPPolicyDecision(metadata, action, server, target, "allowed", reason)
-		return nil
+		return appendMCPPolicyDecision(metadata, action, server, target, "allowed", fmt.Sprintf("matched policies.mcp.allow.servers (%s)", pattern))
 	}
 	if pattern, ok := firstMatch(allowPatterns, compound); ok {
-		reason := fmt.Sprintf("matched policies.mcp.allow.%ss (%s)", action, pattern)
-		appendMCPPolicyDecision(metadata, action, server, target, "allowed", reason)
-		return nil
+		return appendMCPPolicyDecision(metadata, action, server, target, "allowed", fmt.Sprintf("matched policies.mcp.allow.%ss (%s)", action, pattern))
 	}
 	if r.Policy.DefaultDeny {
-		reason := "denied by policies.mcp.defaultDeny"
-		appendMCPPolicyDecision(metadata, action, server, target, "denied", reason)
-		return &MCPPolicyError{Action: action, Server: server, Target: target, Reason: reason}
+		return r.denyDecision(metadata, action, server, target, "denied by policies.mcp.defaultDeny")
 	}
 
 	// Provider-specific policy enforcement runs before the final allowed record.
@@ -176,48 +166,61 @@ func (r *MCPRuntime) ensureAllowed(action, server, target string, metadata map[s
 			}
 		}
 	}
-	appendMCPPolicyDecision(metadata, action, server, target, "allowed", "allowed by default (defaultDeny=false)")
-	return nil
+	return appendMCPPolicyDecision(metadata, action, server, target, "allowed", "allowed by default (defaultDeny=false)")
+}
+
+// denyDecision records a denial in metadata and returns the policy error. If the
+// metadata record cannot be appended (corrupted state), that error is returned
+// instead so the failure is surfaced rather than silently dropped.
+func (r *MCPRuntime) denyDecision(metadata map[string]any, action, server, target, reason string) error {
+	if err := appendMCPPolicyDecision(metadata, action, server, target, "denied", reason); err != nil {
+		return err
+	}
+	return &MCPPolicyError{Action: action, Server: server, Target: target, Reason: reason}
 }
 
 // enforceProviderPolicy applies per-provider region and auth rules from the MCP policy config.
 func (r *MCPRuntime) enforceProviderPolicy(server, target, action string, pp config.MCPProviderPolicyRule, metadata map[string]any) error {
 	if pp.DenyCrossRegion && r.ActiveRegion != "" && pp.RequiredRegion != "" && r.ActiveRegion != pp.RequiredRegion {
-		reason := fmt.Sprintf("cross-region call denied (active:%s required:%s)", r.ActiveRegion, pp.RequiredRegion)
-		appendMCPPolicyDecision(metadata, action, server, target, "denied", reason)
-		return &MCPPolicyError{Action: action, Server: server, Target: target, Reason: reason}
+		return r.denyDecision(metadata, action, server, target, fmt.Sprintf("cross-region call denied (active:%s required:%s)", r.ActiveRegion, pp.RequiredRegion))
 	}
 	for _, dr := range pp.DenyRegions {
 		if r.ActiveRegion != "" && wildcardMatch(dr, r.ActiveRegion) {
-			reason := fmt.Sprintf("region %q is in provider deny list", r.ActiveRegion)
-			appendMCPPolicyDecision(metadata, action, server, target, "denied", reason)
-			return &MCPPolicyError{Action: action, Server: server, Target: target, Reason: reason}
+			return r.denyDecision(metadata, action, server, target, fmt.Sprintf("region %q is in provider deny list", r.ActiveRegion))
 		}
 	}
 	if pp.RequiredAuth != "" {
-		appendMCPPolicyDecision(metadata, action, server, target, "require", fmt.Sprintf("auth-required:%s", pp.RequiredAuth))
+		return appendMCPPolicyDecision(metadata, action, server, target, "require", fmt.Sprintf("auth-required:%s", pp.RequiredAuth))
 	}
 	return nil
 }
 
-func appendMCPPolicyDecision(metadata map[string]any, action, server, target, outcome, reason string) {
-	record := map[string]any{
+func appendMCPPolicyDecision(metadata map[string]any, action, server, target, outcome, reason string) error {
+	return appendMetadataRecord(metadata, "mcpPolicy", map[string]any{
 		"action":  action,
 		"server":  server,
 		"target":  target,
 		"outcome": outcome,
 		"reason":  reason,
-	}
-	raw := metadata["mcpPolicy"]
+	})
+}
+
+// appendMetadataRecord appends record to the []any stored under key in metadata,
+// creating the slice if absent. It returns an error (rather than panicking) when
+// the existing value has an unexpected type, e.g. from corrupted or stale
+// persisted run state, so a bad invariant fails the step instead of the process.
+func appendMetadataRecord(metadata map[string]any, key string, record map[string]any) error {
+	raw := metadata[key]
 	if raw == nil {
-		metadata["mcpPolicy"] = []any{record}
-		return
+		metadata[key] = []any{record}
+		return nil
 	}
 	arr, ok := raw.([]any)
 	if !ok {
-		panic(fmt.Sprintf("metadata[mcpPolicy] has unexpected type %T", raw))
+		return fmt.Errorf("metadata[%s] has unexpected type %T", key, raw)
 	}
-	metadata["mcpPolicy"] = append(arr, record)
+	metadata[key] = append(arr, record)
+	return nil
 }
 
 func firstMatch(patterns []string, value string) (string, bool) {
@@ -229,25 +232,15 @@ func firstMatch(patterns []string, value string) (string, bool) {
 	return "", false
 }
 
-func appendMCPCorrelation(metadata map[string]any, typ, server, target string, run *state.WorkflowRun, step state.WorkflowStepRun) {
-	record := map[string]any{
+func appendMCPCorrelation(metadata map[string]any, typ, server, target string, run *state.WorkflowRun, step state.WorkflowStepRun) error {
+	return appendMetadataRecord(metadata, "mcpCalls", map[string]any{
 		"type":         typ,
 		"server":       server,
 		"target":       target,
 		"runId":        run.RunID,
 		"stepId":       step.StepID,
 		"workflowHash": run.WorkflowHash,
-	}
-	raw := metadata["mcpCalls"]
-	if raw == nil {
-		metadata["mcpCalls"] = []any{record}
-		return
-	}
-	arr, ok := raw.([]any)
-	if !ok {
-		panic(fmt.Sprintf("metadata[mcpCalls] has unexpected type %T", raw))
-	}
-	metadata["mcpCalls"] = append(arr, record)
+	})
 }
 
 func ruleSetByAction(set config.MCPPolicyRuleSet, action string) []string {

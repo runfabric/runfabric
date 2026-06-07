@@ -1,6 +1,6 @@
 # Provider Optimizations for AI Workflow Runtime
 
-This guide describes provider-specific optimization extension points in `platform/deploy/controlplane`.
+This guide describes provider-specific optimization extension points in `platform/workflow/runtime`.
 
 ## Principle
 
