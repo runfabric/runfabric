@@ -30,8 +30,11 @@ func TestReceiptMigration_Version1(t *testing.T) {
 		Stage:   "dev",
 	}
 
-	_, err := state.MigrateReceipt(r)
-	if err == nil {
-		t.Fatal("expected legacy receipt version 1 to be rejected")
+	out, err := state.MigrateReceipt(r)
+	if err != nil {
+		t.Fatalf("legacy receipt version 1 should migrate, got %v", err)
+	}
+	if out.Version != state.CurrentReceiptVersion {
+		t.Fatalf("expected migrated version %d, got %d", state.CurrentReceiptVersion, out.Version)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -127,6 +128,9 @@ func Resolve(opts ResolveOptions) (*ResolveResponse, error) {
 		} else {
 			reg = defaultRegistryURL
 		}
+	}
+	if err := validateSecureURL(reg); err != nil {
+		return nil, fmt.Errorf("resolve: registry %w", err)
 	}
 	if strings.TrimSpace(opts.ID) == "" {
 		return nil, fmt.Errorf("resolve: id required")
@@ -466,7 +470,41 @@ func saveInstallReceipt(home string, receipt *registryInstallReceipt) error {
 	return os.WriteFile(path, b, 0o644)
 }
 
+// maxArtifactBytes caps a downloaded plugin artifact to guard against resource
+// exhaustion from a hostile or compromised registry.
+const maxArtifactBytes = 512 << 20 // 512 MiB
+
+// validateSecureURL requires https for registry and artifact URLs, allowing
+// plaintext http only for loopback hosts (local dev/testing). This prevents
+// MITM substitution of plugin metadata/binaries over plaintext and constrains
+// server-side fetches to explicit, non-internal hosts.
+func validateSecureURL(raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("invalid URL %q: %w", raw, err)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("URL %q has no host", raw)
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if host := u.Hostname(); host == "localhost" {
+			return nil
+		} else if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return nil
+		}
+		return fmt.Errorf("refusing plaintext http for non-loopback host in %q; use https", raw)
+	default:
+		return fmt.Errorf("unsupported URL scheme %q (want https)", u.Scheme)
+	}
+}
+
 func downloadToFile(dir, srcURL, filename string, timeout time.Duration) (string, error) {
+	if err := validateSecureURL(srcURL); err != nil {
+		return "", fmt.Errorf("download: %w", err)
+	}
 	if strings.TrimSpace(filename) == "" {
 		filename = "download"
 	}
@@ -488,8 +526,12 @@ func downloadToFile(dir, srcURL, filename string, timeout time.Duration) (string
 		return "", err
 	}
 	defer f.Close()
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	n, err := io.Copy(f, io.LimitReader(resp.Body, maxArtifactBytes+1))
+	if err != nil {
 		return "", err
+	}
+	if n > maxArtifactBytes {
+		return "", fmt.Errorf("download: artifact exceeds %d bytes", maxArtifactBytes)
 	}
 	return dest, nil
 }

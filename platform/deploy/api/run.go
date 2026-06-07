@@ -28,6 +28,9 @@ func Run(ctx context.Context, provider string, cfg *config.Config, stage, root s
 	if err != nil {
 		return nil, err
 	}
+	if result == nil {
+		return nil, fmt.Errorf("deploy of %q returned no result", provider)
+	}
 	artifacts := make([]ReceiptArtifact, 0, len(result.Artifacts))
 	for _, a := range result.Artifacts {
 		artifacts = append(artifacts, ReceiptArtifact{
@@ -51,11 +54,19 @@ func Run(ctx context.Context, provider string, cfg *config.Config, stage, root s
 		Functions:    make([]ReceiptFunctionDeployment, 0, len(result.Artifacts)),
 	}
 	for _, a := range result.Artifacts {
-		fn := ReceiptFunctionDeployment{Function: a.Function}
+		fn := ReceiptFunctionDeployment{Function: a.Function, ArtifactSHA256: a.SHA256}
 		if deployed, ok := result.Functions[a.Function]; ok {
 			fn.ResourceName = deployed.ResourceName
 			fn.ResourceIdentifier = deployed.ResourceIdentifier
 			fn.Metadata = deployed.Metadata
+		}
+		// Record the config signature so the next deploy's changeset can detect
+		// unchanged functions. Computed from cfg with the same helper the diff
+		// uses, so the two sides are directly comparable.
+		if cf, ok := cfg.Functions[a.Function]; ok {
+			if sig, err := config.FunctionConfigSignature(cf); err == nil {
+				fn.ConfigSignature = sig
+			}
 		}
 		receipt.Functions = append(receipt.Functions, fn)
 	}

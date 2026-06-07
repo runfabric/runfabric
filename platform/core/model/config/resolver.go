@@ -559,7 +559,13 @@ func applyStageOverride(out *Config, stageCfg StageConfig, resolveValue func(str
 	}
 
 	for fnName, fnOverride := range stageCfg.Functions {
-		base := out.Functions[fnName]
+		base, ok := out.Functions[fnName]
+		if !ok {
+			// A stage override for a function not defined under functions is a
+			// config mistake (typically a typo). Reject it rather than materialize
+			// a phantom zero-value function that would then be deployed.
+			return fmt.Errorf("stage override references unknown function %q (not defined under functions)", fnName)
+		}
 		if fnOverride.Handler != "" {
 			if base.Handler, err = resolveValue(fnOverride.Handler); err != nil {
 				return err

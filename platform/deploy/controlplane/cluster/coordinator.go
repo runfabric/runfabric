@@ -117,8 +117,8 @@ func (c *Coordinator) AcquireRunContext(
 		return nil, err
 	}
 
-	journal := transactions.NewJournal(service, stage, operation, journalBackendAdapter{backend: c.Journals})
-	if err := journal.Save(); err != nil {
+	journal, err := resumeOrNewJournal(journalBackendAdapter{backend: c.Journals}, service, stage, operation)
+	if err != nil {
 		_ = lock.Release()
 		return nil, err
 	}
@@ -127,6 +127,34 @@ func (c *Coordinator) AcquireRunContext(
 		Lock:    lock,
 		Journal: journal,
 	}, nil
+}
+
+// resumeOrNewJournal loads an existing in-progress journal for service/stage so
+// prior checkpoints/operations survive a crash, and only creates (and persists)
+// a fresh journal when none is resumable. Unconditionally creating a new journal
+// here would overwrite an active journal and destroy its recovery state.
+func resumeOrNewJournal(backend transactions.Backend, service, stage, operation string) (*transactions.Journal, error) {
+	existing, _ := backend.Load(service, stage)
+	if existing != nil && journalResumable(existing.Status) {
+		return transactions.NewJournalFromFile(existing, backend), nil
+	}
+	journal := transactions.NewJournal(service, stage, operation, backend)
+	if existing != nil {
+		// A terminal journal from a prior run still lingers on disk; start this
+		// fresh run above its version so the backend's optimistic-concurrency
+		// check (a write must exceed the on-disk version) accepts the first save.
+		journal.File().Version = existing.Version
+	}
+	if err := journal.Save(); err != nil {
+		return nil, err
+	}
+	return journal, nil
+}
+
+// journalResumable reports whether a journal in this status represents an
+// interrupted run whose state should be resumed rather than overwritten.
+func journalResumable(s transactions.Status) bool {
+	return s == transactions.StatusActive || s == transactions.StatusRollingBack
 }
 
 func (c *Coordinator) Close(run *RunContext) error {

@@ -73,6 +73,9 @@ type chatCompletionResponse struct {
 }
 
 func (c *HTTPLLMClient) doCompletion(ctx context.Context, req chatCompletionRequest) (string, error) {
+	if err := requireSecureEndpoint(c.BaseURL); err != nil {
+		return "", fmt.Errorf("llm endpoint: %w", err)
+	}
 	body, err := json.Marshal(req)
 	if err != nil {
 		return "", fmt.Errorf("marshal llm request: %w", err)
@@ -90,7 +93,7 @@ func (c *HTTPLLMClient) doCompletion(ctx context.Context, req chatCompletionRequ
 		return "", fmt.Errorf("llm request: %w", err)
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxHTTPResponseBytes))
 	if err != nil {
 		return "", fmt.Errorf("read llm response body: %w", err)
 	}

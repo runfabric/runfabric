@@ -7,7 +7,7 @@
 *.runfabric*
 # Test binaries
 *.test
-
+.claude/
 # Output of go build / go install
 *.out
 .venv/

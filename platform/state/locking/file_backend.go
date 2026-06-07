@@ -24,7 +24,9 @@ func (b *FileBackend) lockPath(service, stage string) string {
 
 func (b *FileBackend) Acquire(service, stage, operation string, staleAfter time.Duration) (*Handle, error) {
 	lockDir := filepath.Join(b.Root, ".runfabric", "locks")
-	if err := os.MkdirAll(lockDir, 0o755); err != nil {
+	// Owner-only: the lock file embeds OwnerToken, the secret that authorizes
+	// release/renew, so it must not be world-readable.
+	if err := os.MkdirAll(lockDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create lock dir: %w", err)
 	}
 
@@ -59,7 +61,7 @@ func (b *FileBackend) Acquire(service, stage, operation string, staleAfter time.
 		LastHeartbeatAt: now.Format(time.RFC3339),
 	}
 
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		if os.IsExist(err) {
 			return nil, fmt.Errorf("lock already exists for service=%s stage=%s", service, stage)
@@ -118,7 +120,7 @@ func (b *FileBackend) Renew(service, stage, ownerToken string, leaseFor time.Dur
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 func randomToken() (string, error) {

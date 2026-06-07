@@ -35,12 +35,12 @@ func NewJournal(service, stage, operation string, backend Backend) *Journal {
 }
 
 func (j *Journal) Save() error {
-	return j.persist()
+	return j.commit()
 }
 
 func (j *Journal) Record(op Operation) error {
 	j.file.Operations = append(j.file.Operations, op)
-	return j.persist()
+	return j.commit()
 }
 
 func (j *Journal) Checkpoint(name, status string) error {
@@ -58,33 +58,33 @@ func (j *Journal) Checkpoint(name, status string) error {
 			Status: status,
 		})
 	}
-	return j.backend.Save(j.file)
+	return j.commit()
 }
 
 func (j *Journal) IncrementAttempt() error {
 	j.file.AttemptCount++
 	j.file.LastAttemptAt = time.Now().UTC().Format(time.RFC3339)
-	return j.backend.Save(j.file)
+	return j.commit()
 }
 
 func (j *Journal) MarkRollingBack() error {
 	j.file.Status = StatusRollingBack
-	return j.backend.Save(j.file)
+	return j.commit()
 }
 
 func (j *Journal) MarkRolledBack() error {
 	j.file.Status = StatusRolledBack
-	return j.backend.Save(j.file)
+	return j.commit()
 }
 
 func (j *Journal) MarkCompleted() error {
 	j.file.Status = StatusCompleted
-	return j.backend.Save(j.file)
+	return j.commit()
 }
 
 func (j *Journal) MarkArchived() error {
 	j.file.Status = StatusArchived
-	return j.backend.Save(j.file)
+	return j.commit()
 }
 
 func (j *Journal) Delete() error {
@@ -103,8 +103,15 @@ func (j *Journal) File() *JournalFile {
 	return j.file
 }
 
-func (j *Journal) persist() error {
+// commit bumps the version, stamps UpdatedAt, and recomputes the integrity
+// checksum over the current file contents, then hands the file to the backend to
+// write. Every mutator goes through here so (a) the persisted checksum always
+// matches the bytes on disk — the backend must not mutate the file afterward —
+// and (b) every write advances the version, which lets the backend reject a
+// concurrent write that did not observe this revision (lost-update detection).
+func (j *Journal) commit() error {
 	j.file.Version++
+	j.file.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	checksum, err := ComputeChecksum(j.file)
 	if err != nil {
 		return err

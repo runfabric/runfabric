@@ -2,10 +2,17 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/runfabric/runfabric/platform/core/policy/secrets"
 )
+
+// functionNamePattern restricts function names to a safe identifier charset.
+// Function names are interpolated into filesystem paths (build artifacts) and
+// build/Dockerfile commands, so they must not contain path separators, "..",
+// whitespace, or shell metacharacters that would enable traversal or injection.
+var functionNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 func Validate(cfg *Config) error {
 	if strings.TrimSpace(cfg.Service) == "" {
@@ -70,6 +77,9 @@ func Validate(cfg *Config) error {
 	}
 
 	for name, fn := range cfg.Functions {
+		if !functionNamePattern.MatchString(name) {
+			return fmt.Errorf("functions: invalid function name %q (allowed: letters, digits, '.', '-', '_'; must start alphanumeric)", name)
+		}
 		if fn.Architecture != "" {
 			switch fn.Architecture {
 			case "x86_64", "arm64":

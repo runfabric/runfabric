@@ -25,7 +25,9 @@ func (s DefaultRetryStrategy) ShouldRetry(attempt int, err error) bool {
 	if max <= 0 {
 		max = 3
 	}
-	return err != nil && attempt <= max
+	// attempt is 1-based and already executed; retry only while another attempt
+	// remains within MaxAttempts (total executions == MaxAttempts).
+	return err != nil && attempt < max
 }
 
 func (s DefaultRetryStrategy) Backoff(attempt int) time.Duration {
@@ -47,7 +49,9 @@ func (s AWSRetryStrategy) ShouldRetry(attempt int, err error) bool {
 	if max <= 0 {
 		max = 5
 	}
-	if attempt > max || err == nil {
+	// attempt is 1-based and already executed; stop once MaxAttempts executions
+	// have occurred (no extra attempt beyond the configured maximum).
+	if attempt >= max || err == nil {
 		return false
 	}
 	msg := err.Error()
@@ -77,7 +81,9 @@ func (s GCPRetryStrategy) ShouldRetry(attempt int, err error) bool {
 	if max <= 0 {
 		max = 4
 	}
-	if attempt > max || err == nil {
+	// attempt is 1-based and already executed; stop once MaxAttempts executions
+	// have occurred (no extra attempt beyond the configured maximum).
+	if attempt >= max || err == nil {
 		return false
 	}
 	msg := err.Error()
@@ -107,7 +113,9 @@ func (s AzureRetryStrategy) ShouldRetry(attempt int, err error) bool {
 	if max <= 0 {
 		max = 4
 	}
-	if attempt > max || err == nil {
+	// attempt is 1-based and already executed; stop once MaxAttempts executions
+	// have occurred (no extra attempt beyond the configured maximum).
+	if attempt >= max || err == nil {
 		return false
 	}
 	msg := err.Error()

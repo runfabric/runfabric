@@ -6,6 +6,7 @@ import (
 
 	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/runfabric/runfabric/platform/daemon/configapi"
+	daemonserver "github.com/runfabric/runfabric/platform/daemon/server"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +21,9 @@ func newConfigAPICmd(opts *common.GlobalOptions) *cobra.Command {
 		Short: "Run the YAML Configuration API server",
 		Long:  "Serves POST /validate, POST /resolve, POST /plan, POST /deploy, POST /remove, POST /releases. Optional auth (--api-key) and rate limit (--rate-limit). Default: 0.0.0.0:8765.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := daemonserver.RequireAuthForBind(address, apiKey); err != nil {
+				return err
+			}
 			addr := fmt.Sprintf("%s:%d", address, port)
 			srv := configapi.NewServer(opts.Stage)
 			srv.APIKey = apiKey
@@ -40,7 +44,7 @@ func newConfigAPICmd(opts *common.GlobalOptions) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&address, "address", "0.0.0.0", "Listen address")
+	cmd.Flags().StringVar(&address, "address", "127.0.0.1", "Listen address (default loopback; binding a non-loopback address requires --api-key)")
 	cmd.Flags().IntVar(&port, "port", 8765, "Listen port")
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "Optional: require X-API-Key header (empty = no auth)")
 	cmd.Flags().IntVar(&rateLimit, "rate-limit", 0, "Optional: max requests per minute per client (0 = disabled)")

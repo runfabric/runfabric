@@ -117,16 +117,29 @@ func functionFingerprint(name string, fn config.FunctionConfig, cfg *config.Conf
 	if fn.Timeout > 0 {
 		fp["timeout"] = fmt.Sprintf("%d", fn.Timeout)
 	}
+	// configSignature is the field both the desired fingerprint and the receipt
+	// populate, so it is the one used for change detection (changeReason). The
+	// other entries are descriptive context for display only.
+	if sig, err := config.FunctionConfigSignature(fn); err == nil {
+		fp["configSignature"] = sig
+	}
 	return fp
 }
 
-// changeReason returns a human-readable reason if before and after differ,
-// or empty string if they are equivalent.
+// changeReason returns a human-readable reason if the desired function differs
+// from the deployed one, or empty string if they are equivalent. It compares the
+// config signature — the field present and populated on both the desired
+// fingerprint and the receipt-derived state — rather than the descriptive keys,
+// which do not overlap between the two maps.
 func changeReason(before, after map[string]string) string {
-	for k, av := range after {
-		if bv, ok := before[k]; !ok || bv != av {
-			return fmt.Sprintf("%s changed", k)
-		}
+	desired := after["configSignature"]
+	if desired == "" {
+		// Without a config signature we cannot prove the function is unchanged,
+		// so report a change rather than risk a false no-op.
+		return "config signature unavailable"
+	}
+	if before["configSignature"] != desired {
+		return "config changed"
 	}
 	return ""
 }

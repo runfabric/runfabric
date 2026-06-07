@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -35,12 +37,19 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /deploy", s.handleDeploy)
 	mux.HandleFunc("POST /remove", s.handleRemove)
 	mux.HandleFunc("POST /releases", s.handleReleases)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return s.Authorize(mux.ServeHTTP)
+}
+
+// Authorize wraps h with the same API-key and rate-limit checks the config API
+// applies, so additional routes (e.g. daemon dashboard actions) registered
+// outside Handler cannot bypass authentication.
+func (s *Server) Authorize(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if err := s.authorizeAndLimit(w, r); err != nil {
 			return
 		}
-		mux.ServeHTTP(w, r)
-	})
+		h(w, r)
+	}
 }
 
 func (s *Server) authorizeAndLimit(w http.ResponseWriter, r *http.Request) error {
@@ -78,16 +87,32 @@ func (s *Server) stage(r *http.Request) string {
 	return s.Stage
 }
 
-func configPath(r *http.Request) string {
-	if p := r.URL.Query().Get("config"); p != "" {
-		return p
+// configPath resolves the requested config path, confining it to the workspace.
+// An absolute path or a "../" escape is rejected so a caller cannot make the
+// daemon read (and, via /resolve, return resolved secrets from) arbitrary files
+// outside the workspace it serves.
+func configPath(r *http.Request) (string, error) {
+	p := r.URL.Query().Get("config")
+	if p == "" {
+		return "runfabric.yml", nil
 	}
-	return "runfabric.yml"
+	if filepath.IsAbs(p) {
+		return "", fmt.Errorf("config path must be relative to the workspace")
+	}
+	clean := filepath.Clean(p)
+	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("config path escapes the workspace")
+	}
+	return clean, nil
 }
 
 func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
-	err := s.core.Validate(configPath(r), s.stage(r))
+	cfgPath, err := configPath(r)
 	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.core.Validate(cfgPath, s.stage(r)); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
@@ -95,7 +120,12 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request) {
-	cfg, err := s.core.Resolve(configPath(r), s.stage(r))
+	cfgPath, err := configPath(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	cfg, err := s.core.Resolve(cfgPath, s.stage(r))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -104,7 +134,12 @@ func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
-	res, err := s.core.Plan(configPath(r), s.stage(r))
+	cfgPath, err := configPath(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	res, err := s.core.Plan(cfgPath, s.stage(r))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -113,7 +148,12 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
-	res, err := s.core.Deploy(configPath(r), s.stage(r))
+	cfgPath, err := configPath(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	res, err := s.core.Deploy(cfgPath, s.stage(r))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -122,7 +162,12 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRemove(w http.ResponseWriter, r *http.Request) {
-	res, err := s.core.Remove(configPath(r), s.stage(r))
+	cfgPath, err := configPath(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	res, err := s.core.Remove(cfgPath, s.stage(r))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -131,7 +176,12 @@ func (s *Server) handleRemove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
-	res, err := s.core.Releases(configPath(r))
+	cfgPath, err := configPath(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	res, err := s.core.Releases(cfgPath)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return

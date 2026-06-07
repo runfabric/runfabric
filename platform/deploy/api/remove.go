@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 
 	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
 	"github.com/runfabric/runfabric/platform/core/model/config"
@@ -16,7 +18,14 @@ func Remove(ctx context.Context, provider string, cfg *config.Config, stage, roo
 	}
 	receipt, err := coreState.LoadReceipt(root, stage)
 	if err != nil {
-		return &providers.RemoveResult{Provider: provider, Removed: true}, nil
+		if errors.Is(err, fs.ErrNotExist) {
+			// No receipt means nothing was deployed for this stage — already removed.
+			return &providers.RemoveResult{Provider: provider, Removed: true}, nil
+		}
+		// A receipt exists but could not be read (corrupt, permission, I/O). Do
+		// not claim success — the cloud resources may still be live; surface the
+		// error so the caller can investigate rather than orphan them.
+		return nil, fmt.Errorf("load receipt for stage %q: %w", stage, err)
 	}
 	if receipt.Provider != provider {
 		return nil, fmt.Errorf("receipt provider %q does not match config provider %q", receipt.Provider, provider)

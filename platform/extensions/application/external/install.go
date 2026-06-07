@@ -94,20 +94,20 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 		return nil, fmt.Errorf("install: plugin version mismatch: got %q want %q", m.Version, opts.Version)
 	}
 
-	execPath := m.Executable
-	if strings.TrimSpace(execPath) == "" {
-		return nil, fmt.Errorf("install: plugin.yaml missing executable")
-	}
-	if !filepath.IsAbs(execPath) {
-		execPath = filepath.Join(pluginDir, execPath)
+	execPath, err := resolvePluginExecutable(pluginDir, m.Executable)
+	if err != nil {
+		return nil, err
 	}
 	if _, err := os.Stat(execPath); err != nil {
 		return nil, fmt.Errorf("install: executable not found: %s", execPath)
 	}
 
-	// Optional checksum verification: checksums.txt with lines "sha256  <filename>"
-	// Only verifies files listed; missing checksums.txt is ok.
-	_ = verifyChecksumsIfPresent(pluginDir)
+	// Checksum verification: checksums.txt with lines "sha256  <filename>".
+	// A missing checksums.txt is allowed, but a present one MUST verify — a
+	// mismatch means the archive was tampered with and the install is aborted.
+	if err := verifyChecksumsIfPresent(pluginDir); err != nil {
+		return nil, fmt.Errorf("install: %w", err)
+	}
 
 	dest := pluginInstallDir(home, opts.Kind, opts.ID, m.Version)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
@@ -118,11 +118,9 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 		return nil, err
 	}
 
-	// Re-resolve executable path in dest for manifest.
-	destExec := m.Executable
-	if !filepath.IsAbs(destExec) {
-		destExec = filepath.Join(dest, destExec)
-	}
+	// Re-resolve executable path in dest for manifest. m.Executable was already
+	// validated as a relative path confined to the plugin dir above.
+	destExec := filepath.Join(dest, filepath.Clean(m.Executable))
 
 	pm := &manifests.PluginManifest{
 		ID:          m.ID,
@@ -376,6 +374,26 @@ func locateAndParsePluginYAML(root string) (pluginDir string, m *pluginYAML, err
 		return dir, &pm, nil
 	}
 	return "", nil, fmt.Errorf("install: plugin.yaml not found in archive root")
+}
+
+// resolvePluginExecutable validates the manifest's executable field and resolves
+// it inside pluginDir. The executable must be a relative path that stays within
+// the plugin directory: an absolute path (e.g. /bin/sh) or a "../" escape would
+// let a hostile manifest make the framework spawn an arbitrary binary.
+func resolvePluginExecutable(pluginDir, executable string) (string, error) {
+	executable = strings.TrimSpace(executable)
+	if executable == "" {
+		return "", fmt.Errorf("install: plugin.yaml missing executable")
+	}
+	if filepath.IsAbs(executable) {
+		return "", fmt.Errorf("install: plugin.yaml executable must be a relative path within the plugin, got absolute %q", executable)
+	}
+	resolved := filepath.Join(pluginDir, filepath.Clean(executable))
+	rel, err := filepath.Rel(pluginDir, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("install: plugin.yaml executable %q escapes the plugin directory", executable)
+	}
+	return resolved, nil
 }
 
 func verifyChecksumsIfPresent(dir string) error {

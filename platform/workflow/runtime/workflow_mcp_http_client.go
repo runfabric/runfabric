@@ -6,13 +6,47 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/runfabric/runfabric/platform/core/model/config"
 )
+
+// maxHTTPResponseBytes caps MCP/LLM HTTP response bodies to guard against memory
+// exhaustion from a hostile or misconfigured endpoint.
+const maxHTTPResponseBytes = 32 << 20 // 32 MiB
+
+// requireSecureEndpoint validates a config-supplied MCP/LLM endpoint URL: https
+// is required, with plaintext http allowed only for loopback (local dev). This
+// prevents leaking the bearer credential over plaintext and blocks server-side
+// fetches to http-only internal metadata endpoints (e.g. 169.254.169.254).
+// Internal services reachable over https remain allowed.
+func requireSecureEndpoint(raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("invalid endpoint URL %q: %w", raw, err)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("endpoint URL %q has no host", raw)
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if host := u.Hostname(); host == "localhost" {
+			return nil
+		} else if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return nil
+		}
+		return fmt.Errorf("refusing plaintext http for non-loopback endpoint %q; use https", raw)
+	default:
+		return fmt.Errorf("unsupported endpoint scheme %q (want https)", u.Scheme)
+	}
+}
 
 // HTTPMCPClient calls MCP servers over JSON-RPC 2.0 HTTP transport.
 type HTTPMCPClient struct {
@@ -53,6 +87,9 @@ func (c *HTTPMCPClient) call(ctx context.Context, server, method string, params 
 	if !ok {
 		return nil, fmt.Errorf("mcp server %q not configured", server)
 	}
+	if err := requireSecureEndpoint(url); err != nil {
+		return nil, fmt.Errorf("mcp server %q: %w", server, err)
+	}
 	reqBody, err := json.Marshal(jsonRPCRequest{
 		JSONRPC: "2.0",
 		ID:      c.nextID.Add(1),
@@ -72,7 +109,7 @@ func (c *HTTPMCPClient) call(ctx context.Context, server, method string, params 
 		return nil, fmt.Errorf("mcp %s: %w", method, err)
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxHTTPResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read mcp response body: %w", err)
 	}

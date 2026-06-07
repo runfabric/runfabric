@@ -103,11 +103,14 @@ func TestMigrateReceipt_Nil(t *testing.T) {
 	}
 }
 
-func TestMigrateReceipt_RejectsLegacyVersion0(t *testing.T) {
+func TestMigrateReceipt_MigratesLegacyVersion0(t *testing.T) {
 	r := &state.Receipt{Version: 0, Service: "s", Stage: "dev"}
-	_, err := state.MigrateReceipt(r)
-	if err == nil {
-		t.Fatal("expected error for legacy receipt version 0")
+	out, err := state.MigrateReceipt(r)
+	if err != nil {
+		t.Fatalf("legacy receipt version 0 should migrate, got %v", err)
+	}
+	if out.Version != state.CurrentReceiptVersion {
+		t.Fatalf("expected migrated version %d, got %d", state.CurrentReceiptVersion, out.Version)
 	}
 }
 

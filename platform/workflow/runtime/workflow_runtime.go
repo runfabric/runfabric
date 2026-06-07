@@ -217,6 +217,29 @@ func (r *WorkflowRuntime) ResumeRun(ctx context.Context, stage, runID string) (*
 		}
 	}
 
+	// Before declaring success, ensure every step actually succeeded. On a replay
+	// from a later step, earlier steps are skipped without re-execution; if one of
+	// them is in a non-OK state the run did not succeed and must not be marked OK.
+	if failed := firstUnsuccessfulStep(run); failed != nil {
+		run.ReplayFromStep = ""
+		if failed.Status == state.StepStatusTimedOut {
+			run.Status = state.RunStatusTimedOut
+		} else {
+			run.Status = state.RunStatusFailed
+		}
+		run.EndedAt = r.nowUTC().Format(time.RFC3339)
+		run.DurationMs = durationMs(run.StartedAt, run.EndedAt)
+		reason := failed.Error
+		if reason == "" {
+			reason = fmt.Sprintf("step %s did not complete (status %s)", failed.StepID, failed.Status)
+		}
+		run.Checkpoint = checkpoint(r.nowUTC(), failed.StepID, string(failed.Status), reason)
+		if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+			return nil, err
+		}
+		return run, fmt.Errorf("workflow step %s did not succeed (status %s)", failed.StepID, failed.Status)
+	}
+
 	run.ReplayFromStep = ""
 	run.Status = state.RunStatusOK
 	run.EndedAt = r.nowUTC().Format(time.RFC3339)
@@ -226,6 +249,17 @@ func (r *WorkflowRuntime) ResumeRun(ctx context.Context, stage, runID string) (*
 		return nil, err
 	}
 	return run, nil
+}
+
+// firstUnsuccessfulStep returns a pointer to the first step that is not OK, or
+// nil when every step succeeded.
+func firstUnsuccessfulStep(run *state.WorkflowRun) *state.WorkflowStepRun {
+	for i := range run.Steps {
+		if run.Steps[i].Status != state.StepStatusOK {
+			return &run.Steps[i]
+		}
+	}
+	return nil
 }
 
 // CancelRun marks a run as cancel-requested. The request is honored on the next transition boundary.
@@ -394,6 +428,27 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 			return nil, err
 		}
 		return run, fmt.Errorf("workflow step %s failed: %w", step.StepID, err)
+	}
+
+	// The retry loop did not execute because this step's attempts were already
+	// exhausted before resume (firstAttempt > maxAttempts). If the persisted step
+	// is in a terminal failure state, the run failed at this step — a crash can
+	// persist the final step failure before the run status is finalized.
+	// Reconcile the run status instead of falsely reporting success.
+	final := &run.Steps[idx]
+	if final.Status == state.StepStatusFailed || final.Status == state.StepStatusTimedOut {
+		if final.Status == state.StepStatusTimedOut {
+			run.Status = state.RunStatusTimedOut
+		} else {
+			run.Status = state.RunStatusFailed
+		}
+		run.EndedAt = r.nowUTC().Format(time.RFC3339)
+		run.DurationMs = durationMs(run.StartedAt, run.EndedAt)
+		run.Checkpoint = checkpoint(r.nowUTC(), final.StepID, string(final.Status), final.Error)
+		if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+			return nil, err
+		}
+		return run, fmt.Errorf("workflow step %s failed: %s", final.StepID, final.Error)
 	}
 	return run, nil
 }

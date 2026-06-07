@@ -323,10 +323,15 @@ func discoverKindDir(kindRoot string, kind manifests.PluginKind, opts DiscoverOp
 
 		execPath := ""
 		if strings.TrimSpace(m.Executable) != "" {
-			execPath = m.Executable
-			if !filepath.IsAbs(execPath) {
-				execPath = filepath.Join(bestPath, execPath)
+			resolved, err := resolvePluginExecutable(bestPath, m.Executable)
+			if err != nil {
+				// Absolute or escaping executable path — refuse to spawn it.
+				if opts.IncludeInvalid {
+					invalid = append(invalid, InvalidPlugin{Kind: kind, ID: id, Version: bestVer, Path: bestPath, Reason: "invalid executable path"})
+				}
+				continue
 			}
+			execPath = resolved
 			if _, err := os.Stat(execPath); err != nil {
 				// executable missing; skip for now (best-effort)
 				if opts.IncludeInvalid {

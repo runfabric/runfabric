@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
@@ -83,11 +84,16 @@ func ParseMCPBinding(input map[string]any) (MCPBinding, bool) {
 	return b, true
 }
 
-func (r *MCPRuntime) CallTool(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any) (map[string]any, error) {
+// CallTool enforces policy, performs the MCP tool call (retrying the client call
+// per retry; nil means no retry), and records the policy decision and call
+// correlation exactly once — retries do not duplicate the audit metadata.
+func (r *MCPRuntime) CallTool(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any, retry RetryStrategy) (map[string]any, error) {
 	if err := r.ensureAllowed("tool", b.Server, b.Tool, metadata); err != nil {
 		return nil, err
 	}
-	result, err := r.Client.CallTool(ctx, b.Server, b.Tool, b.ToolArgs)
+	result, err := callWithRetry(retry, func() (map[string]any, error) {
+		return r.Client.CallTool(ctx, b.Server, b.Tool, b.ToolArgs)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -97,11 +103,15 @@ func (r *MCPRuntime) CallTool(ctx context.Context, run *state.WorkflowRun, step 
 	return result, nil
 }
 
-func (r *MCPRuntime) ReadResource(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any) (map[string]any, error) {
+// ReadResource enforces policy and reads the MCP resource; see CallTool for
+// retry and audit semantics.
+func (r *MCPRuntime) ReadResource(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any, retry RetryStrategy) (map[string]any, error) {
 	if err := r.ensureAllowed("resource", b.Server, b.Resource, metadata); err != nil {
 		return nil, err
 	}
-	result, err := r.Client.ReadResource(ctx, b.Server, b.Resource)
+	result, err := callWithRetry(retry, func() (map[string]any, error) {
+		return r.Client.ReadResource(ctx, b.Server, b.Resource)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -111,11 +121,15 @@ func (r *MCPRuntime) ReadResource(ctx context.Context, run *state.WorkflowRun, s
 	return result, nil
 }
 
-func (r *MCPRuntime) GetPrompt(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any) (map[string]any, error) {
+// GetPrompt enforces policy and fetches the MCP prompt; see CallTool for retry
+// and audit semantics.
+func (r *MCPRuntime) GetPrompt(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any, retry RetryStrategy) (map[string]any, error) {
 	if err := r.ensureAllowed("prompt", b.Server, b.Prompt, metadata); err != nil {
 		return nil, err
 	}
-	result, err := r.Client.GetPrompt(ctx, b.Server, b.Prompt, b.PromptArgs)
+	result, err := callWithRetry(retry, func() (map[string]any, error) {
+		return r.Client.GetPrompt(ctx, b.Server, b.Prompt, b.PromptArgs)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +137,20 @@ func (r *MCPRuntime) GetPrompt(ctx context.Context, run *state.WorkflowRun, step
 		return nil, err
 	}
 	return result, nil
+}
+
+// callWithRetry runs fn, retrying per the strategy until it succeeds or the
+// strategy declines. A nil strategy means a single attempt. The caller records
+// policy/correlation once, outside this loop, so a retried call yields a single
+// audit entry.
+func callWithRetry(retry RetryStrategy, fn func() (map[string]any, error)) (map[string]any, error) {
+	for attempt := 1; ; attempt++ {
+		result, err := fn()
+		if err == nil || retry == nil || !retry.ShouldRetry(attempt, err) {
+			return result, err
+		}
+		time.Sleep(retry.Backoff(attempt))
+	}
 }
 
 func (r *MCPRuntime) ensureAllowed(action, server, target string, metadata map[string]any) error {
@@ -147,6 +175,17 @@ func (r *MCPRuntime) ensureAllowed(action, server, target string, metadata map[s
 		return r.denyDecision(metadata, action, server, target, fmt.Sprintf("matched policies.mcp.deny.%ss (%s)", action, pattern))
 	}
 
+	// Provider-specific region/auth constraints are deny rules and must be
+	// enforced before any allow grant — an explicit allow rule (or default-allow)
+	// must not override a provider region restriction.
+	if r.Provider != "" && len(r.Policy.Providers) > 0 {
+		if pp, ok := r.Policy.Providers[r.Provider]; ok {
+			if err := r.enforceProviderPolicy(server, target, action, pp, metadata); err != nil {
+				return err
+			}
+		}
+	}
+
 	allowPatterns := ruleSetByAction(r.Policy.Allow, action)
 	if pattern, ok := firstMatch(r.Policy.Allow.Servers, server); ok {
 		return appendMCPPolicyDecision(metadata, action, server, target, "allowed", fmt.Sprintf("matched policies.mcp.allow.servers (%s)", pattern))
@@ -158,14 +197,6 @@ func (r *MCPRuntime) ensureAllowed(action, server, target string, metadata map[s
 		return r.denyDecision(metadata, action, server, target, "denied by policies.mcp.defaultDeny")
 	}
 
-	// Provider-specific policy enforcement runs before the final allowed record.
-	if r.Provider != "" && len(r.Policy.Providers) > 0 {
-		if pp, ok := r.Policy.Providers[r.Provider]; ok {
-			if err := r.enforceProviderPolicy(server, target, action, pp, metadata); err != nil {
-				return err
-			}
-		}
-	}
 	return appendMCPPolicyDecision(metadata, action, server, target, "allowed", "allowed by default (defaultDeny=false)")
 }
 
@@ -256,18 +287,44 @@ func ruleSetByAction(set config.MCPPolicyRuleSet, action string) []string {
 	}
 }
 
+// wildcardMatch reports whether value matches pattern, where '*' matches any
+// (possibly empty) run of characters anywhere in the pattern. The match is
+// anchored at both ends, so a deny pattern like "*-admin" or "db.*.delete"
+// matches as intended rather than silently matching nothing (which would let a
+// deny rule fail open).
 func wildcardMatch(pattern, value string) bool {
 	p := strings.TrimSpace(pattern)
 	v := strings.TrimSpace(value)
 	if p == "" {
 		return false
 	}
-	if p == "*" || p == v {
-		return true
+	return globMatch(p, v)
+}
+
+// globMatch performs anchored wildcard matching with '*' as the only
+// metacharacter, using the classic two-pointer algorithm with backtracking.
+func globMatch(pattern, s string) bool {
+	var sIdx, pIdx int
+	starIdx, sTmp := -1, -1
+	for sIdx < len(s) {
+		switch {
+		case pIdx < len(pattern) && pattern[pIdx] == s[sIdx]:
+			sIdx++
+			pIdx++
+		case pIdx < len(pattern) && pattern[pIdx] == '*':
+			starIdx = pIdx
+			sTmp = sIdx
+			pIdx++
+		case starIdx != -1:
+			pIdx = starIdx + 1
+			sTmp++
+			sIdx = sTmp
+		default:
+			return false
+		}
 	}
-	if strings.HasSuffix(p, "*") {
-		prefix := strings.TrimSuffix(p, "*")
-		return strings.HasPrefix(v, prefix)
+	for pIdx < len(pattern) && pattern[pIdx] == '*' {
+		pIdx++
 	}
-	return false
+	return pIdx == len(pattern)
 }

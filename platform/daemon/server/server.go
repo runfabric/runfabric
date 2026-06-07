@@ -6,6 +6,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -39,7 +40,10 @@ type Server struct {
 // New creates a Server with resolved defaults.
 func New(opts Options) *Server {
 	if opts.Address == "" {
-		opts.Address = "0.0.0.0"
+		// Default to loopback: the daemon exposes an unauthenticated-by-default
+		// deploy API, so it must not bind all interfaces unless the operator opts
+		// in (and supplies an API key — enforced by RequireAuthForBind).
+		opts.Address = "127.0.0.1"
 	}
 	if opts.Port == 0 {
 		opts.Port = 8766
@@ -80,8 +84,11 @@ func (s *Server) InvalidateStage(stage string) {
 }
 
 // Handler builds the HTTP handler. extraRoutes is called with the mux after the
-// standard routes are registered; pass nil when no extra routes are needed.
-func (s *Server) Handler(extraRoutes func(*http.ServeMux)) http.Handler {
+// standard routes are registered, along with an authorize middleware that
+// applies the same API-key/rate-limit checks as the config API; mutating extra
+// routes must be wrapped with it so they cannot bypass auth. Pass nil when no
+// extra routes are needed.
+func (s *Server) Handler(extraRoutes func(mux *http.ServeMux, authorize func(http.HandlerFunc) http.HandlerFunc)) http.Handler {
 	configSrv := configapi.NewServer(s.opts.Stage)
 	configSrv.APIKey = s.opts.APIKey
 	configSrv.RateLimitN = s.opts.RateLimit
@@ -113,10 +120,34 @@ func (s *Server) Handler(extraRoutes func(*http.ServeMux)) http.Handler {
 	mux.HandleFunc("POST /releases", apiHandler.ServeHTTP)
 
 	if extraRoutes != nil {
-		extraRoutes(mux)
+		extraRoutes(mux, configSrv.Authorize)
 	}
 
 	return otelMiddleware(telemetry.Tracer("runfabric/daemon"), mux)
+}
+
+// RequireAuthForBind returns an error when binding the given address would expose
+// the unauthenticated daemon API beyond loopback. A non-loopback bind without an
+// API key is refused so the deploy API is never reachable from the network
+// without authentication.
+func RequireAuthForBind(address, apiKey string) error {
+	if apiKey != "" || IsLoopbackHost(address) {
+		return nil
+	}
+	return fmt.Errorf("refusing to bind %q without --api-key: a non-loopback address exposes the deploy API unauthenticated; set --api-key or bind a loopback address (127.0.0.1)", address)
+}
+
+// IsLoopbackHost reports whether host (an address without port) is loopback.
+func IsLoopbackHost(host string) bool {
+	host = strings.TrimSpace(host)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if host == "" || host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // otelMiddleware creates a span per request when OpenTelemetry is configured.

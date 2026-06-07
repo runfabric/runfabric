@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/runfabric/runfabric/platform/core/model/errors"
 	statecore "github.com/runfabric/runfabric/platform/core/state/core"
@@ -41,7 +40,11 @@ func (b *FileBackend) Save(j *JournalFile) error {
 	path := b.path(j.Service, j.Stage)
 
 	if existing, err := b.Load(j.Service, j.Stage); err == nil {
-		if j.Version < existing.Version {
+		// Every Journal write advances the version, so a write must be strictly
+		// greater than what is on disk. An equal (or lower) incoming version means
+		// a concurrent writer already persisted this revision — reject it instead
+		// of silently overwriting their changes (lost update).
+		if j.Version <= existing.Version {
 			return &errors.ConflictError{
 				Backend:         "file",
 				Service:         j.Service,
@@ -54,7 +57,9 @@ func (b *FileBackend) Save(j *JournalFile) error {
 		}
 	}
 
-	j.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	// UpdatedAt and Checksum are stamped by the Journal layer before Save so the
+	// persisted checksum matches the bytes written. The backend must not mutate
+	// the file here, or the on-disk checksum would never verify.
 	data, err := json.MarshalIndent(j, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal journal: %w", err)

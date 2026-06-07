@@ -246,3 +246,48 @@ func TestResolve_SecretManagerReference(t *testing.T) {
 		t.Fatalf("DB_PASSWORD=%q", got)
 	}
 }
+
+func TestResolve_StageOverrideUnknownFunctionErrors(t *testing.T) {
+	cfg := &Config{
+		Service:  "svc",
+		Provider: ProviderConfig{Name: "aws-lambda", Runtime: "nodejs"},
+		Functions: map[string]FunctionConfig{
+			"api": {Handler: "src/handler"},
+		},
+		Stages: map[string]StageConfig{
+			"prod": {Functions: map[string]FunctionConfig{
+				// Typo: no "apiTypo" function is defined under functions.
+				"apiTypo": {Runtime: "python3.12"},
+			}},
+		},
+	}
+	out, err := Resolve(cfg, "prod")
+	if err == nil {
+		t.Fatalf("expected error for stage override of unknown function, got out=%+v", out)
+	}
+}
+
+func TestResolve_StageOverrideKnownFunctionApplies(t *testing.T) {
+	cfg := &Config{
+		Service:  "svc",
+		Provider: ProviderConfig{Name: "aws-lambda", Runtime: "nodejs"},
+		Functions: map[string]FunctionConfig{
+			"api": {Handler: "src/handler", Runtime: "nodejs"},
+		},
+		Stages: map[string]StageConfig{
+			"prod": {Functions: map[string]FunctionConfig{
+				"api": {Runtime: "python3.12"},
+			}},
+		},
+	}
+	out, err := Resolve(cfg, "prod")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := out.Functions["api"].Runtime; got != "python3.12" {
+		t.Errorf("override not applied: runtime = %q, want python3.12", got)
+	}
+	if len(out.Functions) != 1 {
+		t.Errorf("unexpected function count %d, want 1", len(out.Functions))
+	}
+}

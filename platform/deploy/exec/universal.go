@@ -51,6 +51,20 @@ func RunDeploy(
 		return nil, err
 	}
 
+	// On a journal resume the deploy phase may already be checkpointed "done"
+	// and thus skipped by the engine, leaving execCtx.Result nil — the
+	// DeployResult is not persisted in the journal. The provider deploy is the
+	// same idempotent call a normal `runfabric deploy` re-run makes, so re-run it
+	// here to obtain the result needed to write the receipt, rather than
+	// returning a nil result the caller would dereference.
+	if execCtx.Result == nil {
+		result, err := deployFn(ctx)
+		if err != nil {
+			return nil, err
+		}
+		execCtx.Result = result
+	}
+
 	if journal != nil {
 		_ = journal.MarkCompleted()
 	}
@@ -65,8 +79,17 @@ func OpenDeployJournal(service, stage, root string) *transactions.Journal {
 		return nil
 	}
 	backend := transactions.NewFileBackend(root)
-	if file, err := backend.Load(service, stage); err == nil && file != nil && file.Status == transactions.StatusActive {
+	file, err := backend.Load(service, stage)
+	if err != nil || file == nil {
+		return transactions.NewJournal(service, stage, "deploy", backend)
+	}
+	if file.Status == transactions.StatusActive {
 		return transactions.NewJournalFromFile(file, backend)
 	}
-	return transactions.NewJournal(service, stage, "deploy", backend)
+	// A terminal journal from a prior deploy lingers on disk (the deploy path
+	// does not delete it). Start a fresh run above its version so the backend's
+	// optimistic-concurrency check accepts this run's first write.
+	journal := transactions.NewJournal(service, stage, "deploy", backend)
+	journal.File().Version = file.Version
+	return journal
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 )
@@ -286,32 +285,16 @@ func (r *DefaultAIStepRunner) executeAIEval(ctx context.Context, step state.Work
 	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
 }
 
-func (r *DefaultAIStepRunner) withMCPRetry(fn func() (map[string]any, error)) (map[string]any, error) {
-	for attempt := 1; ; attempt++ {
-		result, err := fn()
-		if err == nil || r.RetryStrategy == nil || !r.RetryStrategy.ShouldRetry(attempt, err) {
-			return result, err
-		}
-		time.Sleep(r.RetryStrategy.Backoff(attempt))
-	}
-}
-
 func (r *DefaultAIStepRunner) callToolWithRetry(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any) (map[string]any, error) {
-	return r.withMCPRetry(func() (map[string]any, error) {
-		return r.MCPRuntime.CallTool(ctx, run, step, b, metadata)
-	})
+	return r.MCPRuntime.CallTool(ctx, run, step, b, metadata, r.RetryStrategy)
 }
 
 func (r *DefaultAIStepRunner) readResourceWithRetry(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any) (map[string]any, error) {
-	return r.withMCPRetry(func() (map[string]any, error) {
-		return r.MCPRuntime.ReadResource(ctx, run, step, b, metadata)
-	})
+	return r.MCPRuntime.ReadResource(ctx, run, step, b, metadata, r.RetryStrategy)
 }
 
 func (r *DefaultAIStepRunner) getPromptWithRetry(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, b MCPBinding, metadata map[string]any) (map[string]any, error) {
-	return r.withMCPRetry(func() (map[string]any, error) {
-		return r.MCPRuntime.GetPrompt(ctx, run, step, b, metadata)
-	})
+	return r.MCPRuntime.GetPrompt(ctx, run, step, b, metadata, r.RetryStrategy)
 }
 
 func withSelectedModel(rawOut, metadata map[string]any) map[string]any {

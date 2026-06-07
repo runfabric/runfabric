@@ -69,17 +69,19 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 				CacheTTL:  cacheTTL,
 			})
 
-			handler := srv.Handler(func(mux *http.ServeMux) {
+			handler := srv.Handler(func(mux *http.ServeMux, authorize func(http.HandlerFunc) http.HandlerFunc) {
 				if withDashboard {
-					mux.HandleFunc("POST /action/plan", func(w http.ResponseWriter, r *http.Request) {
+					// Mutating action routes must go through the same auth as the
+					// config API; without authorize() they would bypass --api-key.
+					mux.HandleFunc("POST /action/plan", authorize(func(w http.ResponseWriter, r *http.Request) {
 						st := r.URL.Query().Get("stage")
 						if st == "" {
 							st = "dev"
 						}
 						result, err := service.Plan(configPath, st, "")
 						writeDaemonActionJSON(w, result, err)
-					})
-					mux.HandleFunc("POST /action/deploy", func(w http.ResponseWriter, r *http.Request) {
+					}))
+					mux.HandleFunc("POST /action/deploy", authorize(func(w http.ResponseWriter, r *http.Request) {
 						st := r.URL.Query().Get("stage")
 						if st == "" {
 							st = "dev"
@@ -89,8 +91,8 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 							srv.InvalidateStage(st)
 						}
 						writeDaemonActionJSON(w, result, err)
-					})
-					mux.HandleFunc("POST /action/remove", func(w http.ResponseWriter, r *http.Request) {
+					}))
+					mux.HandleFunc("POST /action/remove", authorize(func(w http.ResponseWriter, r *http.Request) {
 						st := r.URL.Query().Get("stage")
 						if st == "" {
 							st = "dev"
@@ -100,7 +102,7 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 							srv.InvalidateStage(st)
 						}
 						writeDaemonActionJSON(w, result, err)
-					})
+					}))
 					mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 						if r.URL.Path != "/" {
 							http.NotFound(w, r)
@@ -175,6 +177,10 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 				}
 			})
 
+			if err := daemonserver.RequireAuthForBind(address, apiKey); err != nil {
+				return err
+			}
+
 			addr := srv.Addr()
 			if sockPath := daemonserver.ListenOnSocket(handler); sockPath != "" {
 				fmt.Fprintf(c.OutOrStdout(), "  Unix socket: %s\n", sockPath)
@@ -199,7 +205,7 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&address, "address", "0.0.0.0", "Listen address")
+	cmd.Flags().StringVar(&address, "address", "127.0.0.1", "Listen address (default loopback; binding a non-loopback address requires --api-key)")
 	cmd.Flags().IntVarP(&port, "port", "p", 8766, "Listen port (default 8766 to avoid conflict with config-api)")
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "Optional: require X-API-Key header")
 	cmd.Flags().IntVar(&rateLimit, "rate-limit", 0, "Optional: max requests per minute per client (0 = disabled)")
@@ -308,7 +314,7 @@ func runDaemonStart(c *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create .runfabric: %w", err)
 	}
 	logPath := filepath.Join(dir, "daemon.log")
@@ -329,7 +335,7 @@ func runDaemonStart(c *cobra.Command, _ []string) error {
 
 	cmd := exec.Command(execPath, newArgs...)
 	cmd.Stdin = nil
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return fmt.Errorf("open log file: %w", err)
 	}
@@ -342,7 +348,7 @@ func runDaemonStart(c *cobra.Command, _ []string) error {
 		return fmt.Errorf("start daemon: %w", err)
 	}
 	pid := cmd.Process.Pid
-	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(pid)), 0644); err != nil {
+	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(pid)), 0o600); err != nil {
 		_ = cmd.Process.Kill()
 		return fmt.Errorf("write pid file: %w", err)
 	}

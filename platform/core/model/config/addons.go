@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -99,7 +100,16 @@ func ResolveAddonBindingsForKeys(cfg *Config, addonKeys []string) (map[string]st
 		allowed[k] = struct{}{}
 	}
 	out := make(map[string]string)
-	for key, addon := range cfg.Addons {
+	boundBy := make(map[string]string) // envVar -> addon that bound it
+	// Iterate addons in a deterministic order so the result does not depend on
+	// Go's randomized map iteration when env vars overlap.
+	names := make([]string, 0, len(cfg.Addons))
+	for key := range cfg.Addons {
+		names = append(names, key)
+	}
+	sort.Strings(names)
+	for _, key := range names {
+		addon := cfg.Addons[key]
 		if len(addonKeys) > 0 {
 			if _, ok := allowed[key]; !ok {
 				continue
@@ -118,7 +128,13 @@ func ResolveAddonBindingsForKeys(cfg *Config, addonKeys []string) (map[string]st
 			if err != nil {
 				return nil, fmt.Errorf("addons.%s.secrets.%s: %w", key, envVar, err)
 			}
+			// Two addons binding the same env var to different values is ambiguous;
+			// surface it instead of letting iteration order pick a silent winner.
+			if prev, ok := out[envVar]; ok && prev != value {
+				return nil, fmt.Errorf("addon env var %q is bound by both %q and %q to different values", envVar, boundBy[envVar], key)
+			}
 			out[envVar] = value
+			boundBy[envVar] = key
 		}
 	}
 	return out, nil
