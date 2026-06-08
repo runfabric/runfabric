@@ -99,10 +99,27 @@ func (s *Server) Handler(extraRoutes func(mux *http.ServeMux, authorize func(htt
 	}
 
 	mux := http.NewServeMux()
+	// Liveness: the process is up. Must not depend on external systems.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
+	})
+	// Readiness: dependencies are reachable. When a Redis cache is configured,
+	// ping it so a broken cache takes the instance out of the load-balancer
+	// rotation instead of serving errors.
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		if s.cache != nil {
+			if err := s.cache.ping(r.Context()); err != nil {
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte("cache unavailable: " + err.Error()))
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ready"))
 	})
 	mux.HandleFunc("GET /version", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -123,7 +140,34 @@ func (s *Server) Handler(extraRoutes func(mux *http.ServeMux, authorize func(htt
 		extraRoutes(mux, configSrv.Authorize)
 	}
 
-	return otelMiddleware(telemetry.Tracer("runfabric/daemon"), mux)
+	return otelMiddleware(telemetry.Tracer("runfabric/daemon"), maxBodyMiddleware(maxRequestBody, mux))
+}
+
+// maxRequestBody caps any single request body the daemon will read into memory.
+const maxRequestBody = 8 << 20 // 8 MiB
+
+// maxBodyMiddleware bounds request bodies so a large or slow upload cannot
+// exhaust memory. Handlers that read the body see io.EOF past the limit.
+func maxBodyMiddleware(limit int64, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// NewHTTPServer builds an *http.Server with hardened timeouts for the given
+// handler. Callers own Start/Shutdown so they can drain in-flight requests.
+func (s *Server) NewHTTPServer(handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              s.Addr(),
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 }
 
 // RequireAuthForBind returns an error when binding the given address would expose

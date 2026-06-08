@@ -30,6 +30,11 @@ EXPOSE 8766
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=2 \
     CMD wget -q -O- http://127.0.0.1:8766/healthz || exit 1
 
-# Default: daemon API only. Override to add --dashboard, --config, --cache-url, etc.
+# Default: daemon API only, bound to all interfaces inside the container.
+#
+# Binding 0.0.0.0 exposes the deploy API, so the daemon refuses to start without
+# an API key. Provide one via env (keeps the secret out of argv):
+#   docker run -e RUNFABRIC_API_KEY=... -p 8766:8766 runfabric-daemon
+# Override the entrypoint to add --dashboard, --config, --cache-url, etc.
 ENTRYPOINT ["/usr/local/bin/runfabricd", "--address", "0.0.0.0", "--port", "8766"]
 CMD []

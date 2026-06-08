@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const socketName = "daemon.sock"
@@ -43,7 +44,13 @@ func ListenOnSocketAt(dir string, handler http.Handler) string {
 		return ""
 	}
 	go func() {
-		srv := &http.Server{Handler: handler}
+		srv := &http.Server{
+			Handler:           handler,
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      120 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		}
 		_ = srv.Serve(l)
 		_ = os.Remove(sockPath)
 	}()

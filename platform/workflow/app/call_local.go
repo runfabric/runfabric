@@ -46,7 +46,7 @@ func CallLocal(configPath, stage, host, port string, serve bool) (any, error) {
 	}
 
 	fmt.Printf("→ Dev server listening on http://%s (stage=%q)\n", addr, stage)
-	server := &http.Server{Addr: addr, Handler: mux}
+	server := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	_ = server.ListenAndServe() // blocks until server stops
 	return map[string]string{"addr": addr, "stage": stage}, nil
 }
@@ -80,7 +80,7 @@ func CallLocalServe(configPath, stage, host, port string) (shutdownChan <-chan s
 		mux.HandleFunc("/"+name, newLocalInvokeHandler(ctx, simID, fnName))
 	}
 
-	server := &http.Server{Addr: addr, Handler: mux}
+	server := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	done := make(chan struct{})
 	restart = func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

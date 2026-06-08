@@ -14,13 +14,14 @@ type FileLock struct {
 
 func Acquire(root, service, stage string) (*FileLock, error) {
 	lockDir := filepath.Join(root, ".runfabric", "locks")
-	if err := os.MkdirAll(lockDir, 0o755); err != nil {
+	// Owner-only: lock files live alongside other sensitive .runfabric state.
+	if err := os.MkdirAll(lockDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create lock dir: %w", err)
 	}
 
 	path := filepath.Join(lockDir, fmt.Sprintf("%s-%s.lock", service, stage))
 
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		if os.IsExist(err) {
 			return nil, fmt.Errorf("lock already held for service=%s stage=%s", service, stage)

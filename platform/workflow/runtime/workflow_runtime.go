@@ -6,10 +6,30 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 )
+
+// runLocks serializes execution of a single run within this process. The
+// runtime drives each run as a load-mutate-save loop with no atomic
+// compare-and-swap, so two concurrent ResumeRun/Replay calls for the same run
+// would interleave and clobber each other's status (steps run twice, attempt
+// counters corrupt). This guards against that in-process.
+//
+// NOTE: this does NOT coordinate across processes/instances. Running the same
+// run from multiple instances still requires a shared state+lock backend
+// (DynamoDB conditional writes / distributed lock). The local filesystem
+// backend is single-instance only.
+var runLocks sync.Map // key "stage/runID" -> *sync.Mutex
+
+func lockRun(stage, runID string) func() {
+	m, _ := runLocks.LoadOrStore(stage+"/"+runID, &sync.Mutex{})
+	mu := m.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
 
 // WorkflowStepHandler executes one workflow step.
 type WorkflowStepHandler interface {
@@ -135,6 +155,12 @@ func (r *WorkflowRuntime) StartRun(ctx context.Context, spec WorkflowRunSpec) (*
 
 // ResumeRun resumes a persisted run from its checkpoint and durable step statuses.
 func (r *WorkflowRuntime) ResumeRun(ctx context.Context, stage, runID string) (*state.WorkflowRun, error) {
+	unlock := lockRun(stage, runID)
+	defer unlock()
+	return r.resumeRunLocked(ctx, stage, runID)
+}
+
+func (r *WorkflowRuntime) resumeRunLocked(ctx context.Context, stage, runID string) (*state.WorkflowRun, error) {
 	if r == nil {
 		return nil, fmt.Errorf("workflow runtime is nil")
 	}
@@ -262,7 +288,10 @@ func firstUnsuccessfulStep(run *state.WorkflowRun) *state.WorkflowStepRun {
 	return nil
 }
 
-// CancelRun marks a run as cancel-requested. The request is honored on the next transition boundary.
+// CancelRun marks a run as cancel-requested. The request is honored on the next
+// transition boundary. It deliberately does NOT take the per-run lock: a cancel
+// must be writable while ResumeRun holds the lock for the whole execution, and
+// executeStep reloads the run each attempt to observe the flag.
 func (r *WorkflowRuntime) CancelRun(stage, runID string) error {
 	return state.MarkWorkflowRunCancelRequested(r.RootDir, stage, runID)
 }
@@ -272,6 +301,8 @@ func (r *WorkflowRuntime) ReplayRunFromStep(ctx context.Context, stage, runID, s
 	if stepID == "" {
 		return nil, fmt.Errorf("step id is required")
 	}
+	unlock := lockRun(stage, runID)
+	defer unlock()
 	run, err := state.LoadWorkflowRun(r.RootDir, stage, runID)
 	if err != nil {
 		return nil, err
@@ -306,7 +337,8 @@ func (r *WorkflowRuntime) ReplayRunFromStep(ctx context.Context, stage, runID, s
 	if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
 		return nil, err
 	}
-	return r.ResumeRun(ctx, stage, runID)
+	// Already holding the run lock; call the locked variant to avoid re-locking.
+	return r.resumeRunLocked(ctx, stage, runID)
 }
 
 func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRun, idx int) (*state.WorkflowRun, error) {
@@ -414,6 +446,25 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 			if backoff > 0 {
 				r.Sleep(backoff)
 			}
+			// Stop retrying if the run context was cancelled or timed out during
+			// the attempt/backoff instead of pressing on with a doomed retry.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				if errors.Is(ctxErr, context.DeadlineExceeded) {
+					step.Status = state.StepStatusTimedOut
+					run.Status = state.RunStatusTimedOut
+				} else {
+					step.Status = state.StepStatusCancelled
+					run.Status = state.RunStatusCancelled
+				}
+				step.Error = ctxErr.Error()
+				run.EndedAt = r.nowUTC().Format(time.RFC3339)
+				run.DurationMs = durationMs(run.StartedAt, run.EndedAt)
+				run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(step.Status), ctxErr.Error())
+				if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+					return nil, err
+				}
+				return run, fmt.Errorf("workflow step %s aborted: %w", step.StepID, ctxErr)
+			}
 			continue
 		}
 
@@ -480,6 +531,8 @@ func (r *WorkflowRuntime) markCancelled(run *state.WorkflowRun, fromIdx int) (*s
 
 // ResolveApproval stores a human approval decision and unpauses the selected step.
 func (r *WorkflowRuntime) ResolveApproval(stage, runID, stepID, decision, reviewer string) error {
+	unlock := lockRun(stage, runID)
+	defer unlock()
 	run, err := state.LoadWorkflowRun(r.RootDir, stage, runID)
 	if err != nil {
 		return err

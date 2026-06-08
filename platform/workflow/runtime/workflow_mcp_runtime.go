@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -91,7 +92,7 @@ func (r *MCPRuntime) CallTool(ctx context.Context, run *state.WorkflowRun, step 
 	if err := r.ensureAllowed("tool", b.Server, b.Tool, metadata); err != nil {
 		return nil, err
 	}
-	result, err := callWithRetry(retry, func() (map[string]any, error) {
+	result, err := callWithRetry(ctx, retry, func() (map[string]any, error) {
 		return r.Client.CallTool(ctx, b.Server, b.Tool, b.ToolArgs)
 	})
 	if err != nil {
@@ -109,7 +110,7 @@ func (r *MCPRuntime) ReadResource(ctx context.Context, run *state.WorkflowRun, s
 	if err := r.ensureAllowed("resource", b.Server, b.Resource, metadata); err != nil {
 		return nil, err
 	}
-	result, err := callWithRetry(retry, func() (map[string]any, error) {
+	result, err := callWithRetry(ctx, retry, func() (map[string]any, error) {
 		return r.Client.ReadResource(ctx, b.Server, b.Resource)
 	})
 	if err != nil {
@@ -127,7 +128,7 @@ func (r *MCPRuntime) GetPrompt(ctx context.Context, run *state.WorkflowRun, step
 	if err := r.ensureAllowed("prompt", b.Server, b.Prompt, metadata); err != nil {
 		return nil, err
 	}
-	result, err := callWithRetry(retry, func() (map[string]any, error) {
+	result, err := callWithRetry(ctx, retry, func() (map[string]any, error) {
 		return r.Client.GetPrompt(ctx, b.Server, b.Prompt, b.PromptArgs)
 	})
 	if err != nil {
@@ -139,18 +140,50 @@ func (r *MCPRuntime) GetPrompt(ctx context.Context, run *state.WorkflowRun, step
 	return result, nil
 }
 
+// maxRetryAttempts is an absolute ceiling independent of the RetryStrategy, so a
+// misbehaving strategy (ShouldRetry always true) cannot loop forever.
+const maxRetryAttempts = 50
+
 // callWithRetry runs fn, retrying per the strategy until it succeeds or the
 // strategy declines. A nil strategy means a single attempt. The caller records
 // policy/correlation once, outside this loop, so a retried call yields a single
-// audit entry.
-func callWithRetry(retry RetryStrategy, fn func() (map[string]any, error)) (map[string]any, error) {
+// audit entry. The context is honored during backoff so a cancelled or
+// timed-out run stops retrying promptly instead of sleeping through it.
+func callWithRetry(ctx context.Context, retry RetryStrategy, fn func() (map[string]any, error)) (map[string]any, error) {
 	for attempt := 1; ; attempt++ {
 		result, err := fn()
-		if err == nil || retry == nil || !retry.ShouldRetry(attempt, err) {
+		if err == nil || retry == nil || !retry.ShouldRetry(attempt, err) || attempt >= maxRetryAttempts {
 			return result, err
 		}
-		time.Sleep(retry.Backoff(attempt))
+		if ctxErr := sleepCtx(ctx, withJitter(retry.Backoff(attempt))); ctxErr != nil {
+			return nil, ctxErr
+		}
 	}
+}
+
+// sleepCtx waits for d or until ctx is done, returning ctx.Err() if cancelled.
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+// withJitter applies full jitter (random in [d/2, d]) to spread retries and
+// avoid synchronized thundering-herd retries across many concurrent runs.
+func withJitter(d time.Duration) time.Duration {
+	if d <= 0 {
+		return d
+	}
+	half := d / 2
+	return half + time.Duration(rand.Int63n(int64(half)+1))
 }
 
 func (r *MCPRuntime) ensureAllowed(action, server, target string, metadata map[string]any) error {

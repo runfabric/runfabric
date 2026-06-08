@@ -290,10 +290,20 @@ func newDashboardCmd(opts *common.GlobalOptions) *cobra.Command {
 					dlog.appendRequest(r.Method, r.URL.Path)
 				}
 			})
-			addr := ":" + strconv.Itoa(port)
-			url := "http://localhost" + addr
+			// Bind loopback only: the dashboard is an unauthenticated local tool
+			// that exposes deployment data and must not be reachable off-host.
+			addr := "127.0.0.1:" + strconv.Itoa(port)
+			url := "http://" + addr
 			fmt.Fprintf(out, "\n  Dashboard: %s\n\n  Press Ctrl+C to stop the server.\n\n", url)
-			return http.ListenAndServe(addr, recoverHandler(loggingHandler, out))
+			server := &http.Server{
+				Addr:              addr,
+				Handler:           recoverHandler(loggingHandler, out),
+				ReadHeaderTimeout: 10 * time.Second,
+				ReadTimeout:       30 * time.Second,
+				WriteTimeout:      60 * time.Second,
+				IdleTimeout:       120 * time.Second,
+			}
+			return server.ListenAndServe()
 		},
 	}
 	cmd.Flags().IntVarP(&port, "port", "p", 3000, "Port for the dashboard server")

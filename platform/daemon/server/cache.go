@@ -67,6 +67,16 @@ func (c *apiCache) stageSetKey(stage string) string {
 	return c.stagePrefix + stage
 }
 
+// ping verifies the Redis connection for readiness checks.
+func (c *apiCache) ping(ctx context.Context) error {
+	if c == nil || c.client == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return c.client.Ping(ctx).Err()
+}
+
 func (c *apiCache) get(endpoint, bodyHash, stage string) (status int, body []byte, ok bool) {
 	if c == nil || c.client == nil {
 		return 0, nil, false
@@ -121,7 +131,11 @@ func (c *apiCache) invalidateStage(stage string) {
 	_ = c.client.Del(ctx, setKey).Err()
 }
 
-// apiCacheTTL returns TTL per endpoint (validate/resolve/plan/releases).
+// maxCacheableBody caps the request body the cache middleware will buffer to hash.
+// Without this, io.ReadAll on the body is an unbounded-memory DoS vector.
+const maxCacheableBody = 4 << 20 // 4 MiB
+
+// apiCacheTTL returns TTL per endpoint (validate/plan/releases).
 func apiCacheTTL(endpoint string) time.Duration {
 	switch endpoint {
 	case "validate":
@@ -129,13 +143,16 @@ func apiCacheTTL(endpoint string) time.Duration {
 	case "releases":
 		return 1 * time.Minute
 	default:
-		return 5 * time.Minute // resolve, plan
+		return 5 * time.Minute // plan
 	}
 }
 
-// apiCacheMiddleware wraps the Config API handler with Redis caching for validate, resolve, plan, releases. On deploy/remove success, invalidates cache for that stage.
+// apiCacheMiddleware wraps the Config API handler with Redis caching for validate, plan, releases. On deploy/remove success, invalidates cache for that stage.
+//
+// /resolve is deliberately NOT cached: its response contains resolved secret
+// values, which must never be persisted at rest in a shared cache.
 func apiCacheMiddleware(cache *apiCache, defaultStage string, next http.Handler) http.Handler {
-	cacheable := map[string]bool{"validate": true, "resolve": true, "plan": true, "releases": true}
+	cacheable := map[string]bool{"validate": true, "plan": true, "releases": true}
 	mutating := map[string]bool{"deploy": true, "remove": true}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -148,10 +165,14 @@ func apiCacheMiddleware(cache *apiCache, defaultStage string, next http.Handler)
 			stage = defaultStage
 		}
 
-		body, err := io.ReadAll(r.Body)
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxCacheableBody+1))
 		_ = r.Body.Close()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(body) > maxCacheableBody {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))

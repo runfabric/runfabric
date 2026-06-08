@@ -1,8 +1,13 @@
 package configuration
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/runfabric/runfabric/platform/daemon/configapi"
@@ -29,8 +34,12 @@ func newConfigAPICmd(opts *common.GlobalOptions) *cobra.Command {
 			srv.APIKey = apiKey
 			srv.RateLimitN = rateLimit
 			server := &http.Server{
-				Addr:    addr,
-				Handler: srv.Handler(),
+				Addr:              addr,
+				Handler:           srv.Handler(),
+				ReadHeaderTimeout: 10 * time.Second,
+				ReadTimeout:       30 * time.Second,
+				WriteTimeout:      120 * time.Second,
+				IdleTimeout:       120 * time.Second,
 			}
 			fmt.Printf("Config API listening on http://%s\n", addr)
 			fmt.Println("  POST /validate, /resolve, /plan, /deploy, /remove, /releases — body: YAML, query: stage=dev")
@@ -40,7 +49,25 @@ func newConfigAPICmd(opts *common.GlobalOptions) *cobra.Command {
 			if rateLimit > 0 {
 				fmt.Printf("  Rate limit: %d requests/min per client\n", rateLimit)
 			}
-			return server.ListenAndServe()
+
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+			serveErr := make(chan error, 1)
+			go func() {
+				err := server.ListenAndServe()
+				if err == http.ErrServerClosed {
+					err = nil
+				}
+				serveErr <- err
+			}()
+			select {
+			case err := <-serveErr:
+				return err
+			case <-sigCh:
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+				defer cancel()
+				return server.Shutdown(shutdownCtx)
+			}
 		},
 	}
 

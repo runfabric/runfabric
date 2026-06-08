@@ -1,6 +1,7 @@
 package daemoncmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -46,6 +48,12 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 			stage := opts.Stage
 			if stage == "" {
 				stage = "dev"
+			}
+			// Allow the API key to be supplied via env so the daemon can bind a
+			// non-loopback address (e.g. inside a container) without putting the
+			// secret in the process arguments.
+			if apiKey == "" {
+				apiKey = strings.TrimSpace(os.Getenv("RUNFABRIC_API_KEY"))
 			}
 			service := opts.AppService
 			if service == nil {
@@ -130,15 +138,18 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 						}
 						deployBlock := "<p class=\"none\">No deployment for this stage yet.</p>"
 						if d.HasDeployment && d.Receipt != nil {
+							// Escape all receipt-derived values: deployment IDs and
+							// outputs may carry provider-controlled content and would
+							// otherwise allow stored XSS in the dashboard.
 							deployBlock = fmt.Sprintf(
 								"<p class=\"meta\">Deployment: <code>%s</code> · Updated: %s</p>",
-								d.Receipt.DeploymentID,
-								d.Receipt.UpdatedAt,
+								html.EscapeString(d.Receipt.DeploymentID),
+								html.EscapeString(d.Receipt.UpdatedAt),
 							)
 							if len(d.Receipt.Outputs) > 0 {
 								deployBlock += "<dl class=\"outputs\">"
 								for k, v := range d.Receipt.Outputs {
-									deployBlock += fmt.Sprintf("<dt>%s</dt><dd>%s</dd>", k, v)
+									deployBlock += fmt.Sprintf("<dt>%s</dt><dd>%s</dd>", html.EscapeString(k), html.EscapeString(v))
 								}
 								deployBlock += "</dl>"
 							}
@@ -193,15 +204,43 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 				fmt.Fprintf(c.OutOrStdout(), "  API cache: distributed (Redis), validate/resolve/plan/releases\n")
 			}
 			fmt.Fprintf(c.OutOrStdout(), "  API: POST /validate, /resolve, /plan, /deploy, /remove, /releases\n")
-			fmt.Fprintf(c.OutOrStdout(), "  Health: GET /healthz  Version: GET /version\n")
-			if err := http.ListenAndServe(addr, handler); err != nil {
-				if strings.Contains(err.Error(), "address already in use") {
-					fmt.Fprintf(os.Stderr, "Error: %v - try: runfabricd stop (or use --port to pick another port)\n", err)
-					os.Exit(1)
+			fmt.Fprintf(c.OutOrStdout(), "  Health: GET /healthz (liveness)  Ready: GET /readyz  Version: GET /version\n")
+
+			httpSrv := srv.NewHTTPServer(handler)
+			// Graceful shutdown: drain in-flight requests on SIGTERM/SIGINT so a
+			// rolling restart (e.g. Kubernetes) never severs an in-progress
+			// deploy/remove mid-write.
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+			serveErr := make(chan error, 1)
+			go func() {
+				err := httpSrv.ListenAndServe()
+				if err != nil && err != http.ErrServerClosed {
+					serveErr <- err
+					return
 				}
-				return err
+				serveErr <- nil
+			}()
+
+			select {
+			case err := <-serveErr:
+				if err != nil {
+					if strings.Contains(err.Error(), "address already in use") {
+						fmt.Fprintf(os.Stderr, "Error: %v - try: runfabricd stop (or use --port to pick another port)\n", err)
+						os.Exit(1)
+					}
+					return err
+				}
+				return nil
+			case <-sigCh:
+				fmt.Fprintln(c.OutOrStdout(), "Shutting down (draining in-flight requests)...")
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+				defer cancel()
+				if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+					return fmt.Errorf("graceful shutdown: %w", err)
+				}
+				return nil
 			}
-			return nil
 		},
 	}
 

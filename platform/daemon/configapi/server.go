@@ -2,14 +2,19 @@ package configapi
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 )
+
+// rateWindow is the sliding window over which RateLimitN requests are allowed.
+const rateWindow = time.Minute
 
 // Server provides a lightweight config API surface used by CLI daemon commands.
 type Server struct {
@@ -18,8 +23,9 @@ type Server struct {
 	RateLimitN int
 	core       CoreWorkflowConnector
 
-	mu       sync.Mutex
-	requests map[string][]time.Time
+	mu          sync.Mutex
+	requests    map[string][]time.Time
+	lastSweepAt time.Time
 }
 
 func NewServer(stage string) *Server {
@@ -53,18 +59,27 @@ func (s *Server) Authorize(h http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) authorizeAndLimit(w http.ResponseWriter, r *http.Request) error {
-	if s.APIKey != "" && r.Header.Get("X-API-Key") != s.APIKey {
-		writeErr(w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
-		return fmt.Errorf("unauthorized")
+	// Constant-time comparison so the API key cannot be recovered via a timing
+	// side-channel on the byte-by-byte short-circuit of ==/!=.
+	if s.APIKey != "" {
+		got := r.Header.Get("X-API-Key")
+		if subtle.ConstantTimeCompare([]byte(got), []byte(s.APIKey)) != 1 {
+			writeErr(w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
+			return fmt.Errorf("unauthorized")
+		}
 	}
 	if s.RateLimitN <= 0 {
 		return nil
 	}
-	ip := r.RemoteAddr
+	// Key by client IP (not host:port): the ephemeral source port differs per
+	// TCP connection, so keying on RemoteAddr would give each connection its own
+	// bucket and let a caller bypass the limit by opening new connections.
+	ip := clientIP(r)
 	now := time.Now()
-	cutoff := now.Add(-1 * time.Minute)
+	cutoff := now.Add(-rateWindow)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.sweepLocked(cutoff)
 	hits := s.requests[ip]
 	kept := hits[:0]
 	for _, t := range hits {
@@ -73,11 +88,42 @@ func (s *Server) authorizeAndLimit(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 	if len(kept) >= s.RateLimitN {
+		s.requests[ip] = kept
 		writeErr(w, http.StatusTooManyRequests, fmt.Errorf("rate limit exceeded"))
 		return fmt.Errorf("rate limit exceeded")
 	}
 	s.requests[ip] = append(kept, now)
 	return nil
+}
+
+// clientIP extracts the client IP from RemoteAddr, dropping the ephemeral port.
+func clientIP(r *http.Request) string {
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
+
+// sweepLocked evicts IP buckets whose newest request is older than cutoff so the
+// requests map cannot grow without bound (a slow memory-exhaustion DoS). Runs at
+// most once per window. Caller must hold s.mu.
+func (s *Server) sweepLocked(cutoff time.Time) {
+	now := time.Now()
+	if now.Sub(s.lastSweepAt) < rateWindow {
+		return
+	}
+	s.lastSweepAt = now
+	for ip, hits := range s.requests {
+		newest := time.Time{}
+		for _, t := range hits {
+			if t.After(newest) {
+				newest = t
+			}
+		}
+		if newest.Before(cutoff) || newest.IsZero() {
+			delete(s.requests, ip)
+		}
+	}
 }
 
 func (s *Server) stage(r *http.Request) string {

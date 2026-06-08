@@ -1,6 +1,7 @@
 package external
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
@@ -160,10 +161,7 @@ func Resolve(opts ResolveOptions) (*ResolveResponse, error) {
 	}
 	u.RawQuery = q.Encode()
 
-	client := &http.Client{Timeout: opts.Timeout}
-	if client.Timeout == 0 {
-		client.Timeout = 30 * time.Second
-	}
+	client := secureHTTPClient(opts.Timeout, isLoopbackURL(reg), 30*time.Second)
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, err
@@ -476,8 +474,10 @@ const maxArtifactBytes = 512 << 20 // 512 MiB
 
 // validateSecureURL requires https for registry and artifact URLs, allowing
 // plaintext http only for loopback hosts (local dev/testing). This prevents
-// MITM substitution of plugin metadata/binaries over plaintext and constrains
-// server-side fetches to explicit, non-internal hosts.
+// MITM substitution of plugin metadata/binaries over plaintext. Host/network
+// trust (SSRF) is enforced separately at dial time by secureTransport, which
+// blocks connections to private/link-local/metadata addresses even when the
+// host name resolves to one (defeating DNS rebinding).
 func validateSecureURL(raw string) error {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
@@ -501,6 +501,71 @@ func validateSecureURL(raw string) error {
 	}
 }
 
+// secureTransport returns an http.Transport whose dialer refuses to connect to
+// non-public addresses (private, loopback, link-local, multicast, unspecified,
+// including cloud metadata 169.254.169.254). Enforcing this at connect time —
+// after DNS resolution, on the actual IP being dialed — closes the SSRF vector
+// for hostile registry responses and is not bypassable via DNS rebinding.
+// allowLoopback permits loopback for explicit local-dev registries.
+func secureTransport(allowLoopback bool) *http.Transport {
+	d := &net.Dialer{Timeout: 30 * time.Second}
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, _, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			ip := net.ParseIP(host)
+			if ip == nil {
+				// addr should already be an IP:port at dial time; reject otherwise.
+				return nil, fmt.Errorf("refusing to dial non-IP address %q", addr)
+			}
+			if !isPublicIP(ip, allowLoopback) {
+				return nil, fmt.Errorf("refusing to connect to non-public address %s (SSRF guard)", ip)
+			}
+			return d.DialContext(ctx, network, addr)
+		},
+	}
+}
+
+func isPublicIP(ip net.IP, allowLoopback bool) bool {
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() {
+		return allowLoopback
+	}
+	if ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() || ip.IsUnspecified() {
+		return false
+	}
+	return true
+}
+
+// secureHTTPClient builds an http.Client with the SSRF-guarding transport and a
+// timeout (defaulting when timeout <= 0). allowLoopback permits local-dev hosts.
+func secureHTTPClient(timeout time.Duration, allowLoopback bool, defaultTimeout time.Duration) *http.Client {
+	if timeout <= 0 {
+		timeout = defaultTimeout
+	}
+	return &http.Client{Timeout: timeout, Transport: secureTransport(allowLoopback)}
+}
+
+// isLoopbackURL reports whether raw targets an explicit loopback host.
+func isLoopbackURL(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func downloadToFile(dir, srcURL, filename string, timeout time.Duration) (string, error) {
 	if err := validateSecureURL(srcURL); err != nil {
 		return "", fmt.Errorf("download: %w", err)
@@ -509,10 +574,7 @@ func downloadToFile(dir, srcURL, filename string, timeout time.Duration) (string
 		filename = "download"
 	}
 	dest := filepath.Join(dir, filename)
-	client := &http.Client{Timeout: timeout}
-	if client.Timeout == 0 {
-		client.Timeout = 60 * time.Second
-	}
+	client := secureHTTPClient(timeout, isLoopbackURL(srcURL), 60*time.Second)
 	resp, err := client.Get(srcURL) //nolint:gosec
 	if err != nil {
 		return "", err

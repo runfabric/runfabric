@@ -40,16 +40,22 @@ func Init(ctx context.Context) error {
 		otel.SetTracerProvider(tp)
 		return nil
 	}
-	// OTLP HTTP exporter expects host:port (no scheme)
+	// OTLP HTTP exporter expects host:port (no scheme). Preserve the scheme to
+	// decide transport security: only an explicit http:// (or no scheme) endpoint
+	// uses an insecure connection; https:// keeps TLS so spans are not exported in
+	// plaintext.
+	insecure := true
 	if strings.HasPrefix(endpoint, "https://") {
 		endpoint = strings.TrimPrefix(endpoint, "https://")
+		insecure = false
 	} else if strings.HasPrefix(endpoint, "http://") {
 		endpoint = strings.TrimPrefix(endpoint, "http://")
 	}
-	exporter, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpoint(endpoint),
-		otlptracehttp.WithInsecure(),
-	)
+	exporterOpts := []otlptracehttp.Option{otlptracehttp.WithEndpoint(endpoint)}
+	if insecure {
+		exporterOpts = append(exporterOpts, otlptracehttp.WithInsecure())
+	}
+	exporter, err := otlptracehttp.New(ctx, exporterOpts...)
 	if err != nil {
 		return err
 	}
