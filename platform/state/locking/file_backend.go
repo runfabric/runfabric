@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
 )
 
 type FileBackend struct {
@@ -18,11 +20,13 @@ func NewFileBackend(root string) *FileBackend {
 	return &FileBackend{Root: root}
 }
 
+func (b *FileBackend) Kind() string { return "local" }
+
 func (b *FileBackend) lockPath(service, stage string) string {
 	return filepath.Join(b.Root, ".runfabric", "locks", service+"-"+stage+".lock.json")
 }
 
-func (b *FileBackend) Acquire(service, stage, operation string, staleAfter time.Duration) (*Handle, error) {
+func (b *FileBackend) Acquire(service, stage, operation string, staleAfter time.Duration) (*statetypes.Handle, error) {
 	lockDir := filepath.Join(b.Root, ".runfabric", "locks")
 	// Owner-only: the lock file embeds OwnerToken, the secret that authorizes
 	// release/renew, so it must not be world-readable.
@@ -50,7 +54,7 @@ func (b *FileBackend) Acquire(service, stage, operation string, staleAfter time.
 	}
 
 	now := time.Now().UTC()
-	record := LockRecord{
+	record := statetypes.LockRecord{
 		Service:         service,
 		Stage:           stage,
 		Operation:       operation,
@@ -76,10 +80,10 @@ func (b *FileBackend) Acquire(service, stage, operation string, staleAfter time.
 		return nil, fmt.Errorf("write lock file: %w", err)
 	}
 
-	return NewHandle(service, stage, token, b, b, nil), nil
+	return statetypes.NewHandle(service, stage, token, b, b, nil), nil
 }
 
-func (b *FileBackend) Read(service, stage string) (*LockRecord, error) {
+func (b *FileBackend) Read(service, stage string) (*statetypes.LockRecord, error) {
 	path := b.lockPath(service, stage)
 
 	data, err := os.ReadFile(path)
@@ -87,7 +91,7 @@ func (b *FileBackend) Read(service, stage string) (*LockRecord, error) {
 		return nil, err
 	}
 
-	var record LockRecord
+	var record statetypes.LockRecord
 	if err := json.Unmarshal(data, &record); err != nil {
 		return nil, fmt.Errorf("parse lock file: %w", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/runfabric/runfabric/internal/lease"
 	statetypes "github.com/runfabric/runfabric/internal/state/types"
 	"github.com/runfabric/runfabric/platform/state/backends"
 )
@@ -15,10 +16,11 @@ type LockManager struct {
 	Heartbeat time.Duration
 }
 
+// ManagedLock is a held deploy-state lock whose lease is kept alive by the
+// shared lease primitive (internal/lease).
 type ManagedLock struct {
 	Handle *statetypes.Handle
-	cancel context.CancelFunc
-	errCh  <-chan error
+	lease  *lease.Managed
 }
 
 func (m *LockManager) Acquire(ctx context.Context, service, stage, operation string) (*ManagedLock, error) {
@@ -27,13 +29,9 @@ func (m *LockManager) Acquire(ctx context.Context, service, stage, operation str
 		return nil, fmt.Errorf("acquire lock: %w", err)
 	}
 
-	hbCtx, cancel := context.WithCancel(ctx)
-	errCh := StartHeartbeat(hbCtx, handle, m.LeaseFor, m.Heartbeat)
-
 	return &ManagedLock{
 		Handle: handle,
-		cancel: cancel,
-		errCh:  errCh,
+		lease:  lease.Manage(ctx, handle.Renew, m.LeaseFor, m.Heartbeat, handle.Release),
 	}, nil
 }
 
@@ -41,18 +39,12 @@ func (m *ManagedLock) Release() error {
 	if m == nil {
 		return nil
 	}
-	if m.cancel != nil {
-		m.cancel()
-	}
-	if m.Handle != nil {
-		return m.Handle.Release()
-	}
-	return nil
+	return m.lease.Release()
 }
 
 func (m *ManagedLock) HeartbeatErr() <-chan error {
 	if m == nil {
 		return nil
 	}
-	return m.errCh
+	return m.lease.HeartbeatErr()
 }

@@ -10,13 +10,13 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	dynamodbv2 "github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
+	"github.com/runfabric/runfabric/internal/lease"
 	core "github.com/runfabric/runfabric/platform/core/state/core"
 )
 
@@ -72,18 +72,16 @@ var (
 )
 
 const (
-	defaultLockTTL     = 30 * time.Second
-	defaultLockPoll    = 500 * time.Millisecond
-	listPageCap        = 1000 // safety bound on items scanned per List
-	heartbeatsPerTTL   = 3    // renew the lease this many times per ttl
-	minHeartbeatPeriod = time.Second
-	attrPK             = "pk"
-	attrSK             = "sk"
-	attrVersion        = "version"
-	attrData           = "data"
-	attrStartedAt      = "startedAt"
-	attrOwner          = "owner"
-	attrExpiresAt      = "expiresAt"
+	defaultLockTTL  = 30 * time.Second
+	defaultLockPoll = 500 * time.Millisecond
+	listPageCap     = 1000 // safety bound on items scanned per List
+	attrPK          = "pk"
+	attrSK          = "sk"
+	attrVersion     = "version"
+	attrData        = "data"
+	attrStartedAt   = "startedAt"
+	attrOwner       = "owner"
+	attrExpiresAt   = "expiresAt"
 )
 
 func newDynamoDBRunStore(cfg Config) (RunStore, error) {
@@ -315,24 +313,12 @@ func (d *dynamoDBRunStore) Lock(ctx context.Context, stage, runID string, ttl ti
 		}
 	}
 
-	hbCtx, stopHeartbeat := context.WithCancel(context.Background())
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		d.heartbeat(hbCtx, stage, runID, owner, ttl)
-	}()
-
-	released := false
-	return func() error {
-		if released {
-			return nil
-		}
-		released = true
-		stopHeartbeat()
-		wg.Wait()
+	// The lease outlives the acquiring ctx on purpose: it is held until
+	// release, not until the caller's deadline.
+	managed := lease.Manage(context.Background(), d.renewFunc(stage, runID, owner), ttl, lease.DefaultInterval(ttl), func() error {
 		return d.releaseLock(stage, runID, owner)
-	}, nil
+	})
+	return managed.Release, nil
 }
 
 // tryAcquire attempts one conditional write of the lock item. It returns false
@@ -361,42 +347,32 @@ func (d *dynamoDBRunStore) tryAcquire(ctx context.Context, stage, runID, owner s
 	return true, nil
 }
 
-// heartbeat periodically extends the lease while the holder is alive. It stops
-// on context cancellation or when the lease can no longer be renewed (stolen
-// after an expiry — the conditional update fails and there is nothing to keep
-// alive).
-func (d *dynamoDBRunStore) heartbeat(ctx context.Context, stage, runID, owner string, ttl time.Duration) {
-	period := ttl / heartbeatsPerTTL
-	if period < minHeartbeatPeriod {
-		period = minHeartbeatPeriod
-	}
-	ticker := time.NewTicker(period)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			// "owner" is a DynamoDB reserved keyword; expressions must refer to
-			// it through an ExpressionAttributeNames placeholder.
-			update := "SET " + attrExpiresAt + " = :exp"
-			cond := "#o = :owner"
-			exp := strconv.FormatInt(d.now().UnixMilli()+ttl.Milliseconds(), 10)
-			_, err := d.client.UpdateItem(ctx, &dynamodbv2.UpdateItemInput{
-				TableName:                &d.lockTable,
-				Key:                      lockKey(stage, runID),
-				UpdateExpression:         &update,
-				ConditionExpression:      &cond,
-				ExpressionAttributeNames: map[string]string{"#o": attrOwner},
-				ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
-					":exp":   &ddbtypes.AttributeValueMemberN{Value: exp},
-					":owner": &ddbtypes.AttributeValueMemberS{Value: owner},
-				},
-			})
-			if isConditionalCheckFailed(err) {
-				return // lease stolen after expiry; nothing left to renew
-			}
+// renewFunc returns the lease renewal callback: it extends expiresAt while we
+// still own the lock item. A conditional-check failure means the lease was
+// stolen after an expiry — terminal, so the heartbeat stops; any other error
+// is transient and worth retrying on the next tick.
+func (d *dynamoDBRunStore) renewFunc(stage, runID, owner string) lease.RenewFunc {
+	return func(ttl time.Duration) error {
+		// "owner" is a DynamoDB reserved keyword; expressions must refer to
+		// it through an ExpressionAttributeNames placeholder.
+		update := "SET " + attrExpiresAt + " = :exp"
+		cond := "#o = :owner"
+		exp := strconv.FormatInt(d.now().UnixMilli()+ttl.Milliseconds(), 10)
+		_, err := d.client.UpdateItem(context.Background(), &dynamodbv2.UpdateItemInput{
+			TableName:                &d.lockTable,
+			Key:                      lockKey(stage, runID),
+			UpdateExpression:         &update,
+			ConditionExpression:      &cond,
+			ExpressionAttributeNames: map[string]string{"#o": attrOwner},
+			ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+				":exp":   &ddbtypes.AttributeValueMemberN{Value: exp},
+				":owner": &ddbtypes.AttributeValueMemberS{Value: owner},
+			},
+		})
+		if isConditionalCheckFailed(err) {
+			return fmt.Errorf("runstore: lease for %s/%s lost to another owner: %w", stage, runID, err)
 		}
+		return nil
 	}
 }
 

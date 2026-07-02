@@ -3,11 +3,11 @@ package unit
 import (
 	"testing"
 
-	"github.com/runfabric/runfabric/platform/state/locking"
+	statetypes "github.com/runfabric/runfabric/internal/state/types"
 )
 
 func TestLockRecordExtendedFields(t *testing.T) {
-	rec := locking.LockRecord{
+	rec := statetypes.LockRecord{
 		Service:         "svc",
 		Stage:           "dev",
 		Operation:       "deploy",
