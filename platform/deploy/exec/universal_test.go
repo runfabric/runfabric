@@ -67,6 +67,30 @@ func TestRunDeploy_ResumeWithCompletedPhaseStillReturnsResult(t *testing.T) {
 	}
 }
 
+func TestRunDeploy_PersistsCompletedJournal(t *testing.T) {
+	root := t.TempDir()
+	cfg := &config.Config{Service: "svc"}
+	backend := transactions.NewFileBackend(root)
+
+	journal := OpenDeployJournal("svc", "dev", root)
+	if _, err := RunDeploy(context.Background(), cfg, "dev", root, FaultConfig{}, journal, func(context.Context) (*providers.DeployResult, error) {
+		return &providers.DeployResult{Provider: "test"}, nil
+	}); err != nil {
+		t.Fatalf("RunDeploy: %v", err)
+	}
+
+	file, err := backend.Load("svc", "dev")
+	if err != nil {
+		t.Fatalf("load journal: %v", err)
+	}
+	if file == nil {
+		t.Fatal("expected a persisted journal after deploy")
+	}
+	if file.Status != transactions.StatusCompleted {
+		t.Errorf("journal status = %q, want %q", file.Status, transactions.StatusCompleted)
+	}
+}
+
 // TestRunDeploy_SecondDeployDoesNotConflictWithCompletedJournal guards against a
 // regression where, because the deploy path leaves a completed journal on disk
 // at a higher version, a subsequent deploy's fresh journal would be rejected by

@@ -9,6 +9,7 @@ import (
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
 	deployapi "github.com/runfabric/runfabric/platform/deploy/api"
+	deployexec "github.com/runfabric/runfabric/platform/deploy/exec"
 	"github.com/runfabric/runfabric/platform/deploy/provisioning"
 	"github.com/runfabric/runfabric/platform/workflow/lifecycle"
 	"github.com/runfabric/runfabric/platform/workflow/pipeline"
@@ -64,7 +65,11 @@ func Deploy(configPath, stage, functionName string, rollbackOnFailure, noRollbac
 		},
 		DeployAPI: deployapi.Run,
 		DeployLifecycle: func(reg *providers.Registry, cfg *config.Config, stage, root string) (*providers.DeployResult, error) {
-			return lifecycle.Deploy(reg, cfg, stage, root)
+			journal := deployexec.OpenDeployJournal(cfg.Service, stage, root)
+			return deployexec.RunDeploy(context.Background(), cfg, stage, root, deployexec.FaultConfig{}, journal,
+				func(ctx context.Context) (*providers.DeployResult, error) {
+					return lifecycle.Deploy(reg, cfg, stage, root)
+				})
 		},
 		MergeOrchestrations: mergeDeployOrchestrations,
 	}
