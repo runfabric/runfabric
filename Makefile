@@ -2,7 +2,7 @@ APP=runfabric
 DAEMON_APP=runfabricd
 WORKER_APP=runfabricw
 
-.PHONY: all help build build-daemon build-worker build-platform build-daemon-platform build-worker-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx build-provider-plugins install-provider-plugins build-secretmanager-plugins install-secretmanager-plugins test test-integration release-check check-syntax check-boundary check-architecture check-binary-surfaces release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down ghcr-login registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
+.PHONY: all help build build-daemon build-worker build-platform build-daemon-platform build-worker-platform build-all-platforms build-upx build-platform-upx build-all-platforms-upx build-provider-plugins install-provider-plugins build-secretmanager-plugins install-secretmanager-plugins test test-integration conformance release-check check-syntax check-boundary check-architecture check-binary-surfaces release-tag version clean lint bin-clear-quarantine check-docs-sync pre-push doctor plan deploy remove invoke logs inspect recover unlock inspect-remote lock-steal backend-migrate init mcp-install mcp-build mcp daemon-background daemon-stop docker-daemon-build docker-daemon-tag docker-daemon-push docker-daemon-run docker-daemon-up docker-daemon-down ghcr-login registry-api docker-registry-build docker-registry-run docker-registry-stop docker-registry-up docker-registry-down audit-gaps audit-unused audit
 
 # UPX: compress binaries for smaller distribution. Override with e.g. make build-upx UPX="upx --best"
 # On macOS, UPX requires --force-macos; compressed binaries may need re-signing for notarization.
@@ -470,6 +470,13 @@ coverage-gate:
 
 test-integration:
 	RUNFABRIC_AWS_INTEGRATION=1 go test ./platform/test/integration -v
+
+# Provider conformance suite (validate -> plan -> deploy -> invoke -> logs ->
+# remove). Passing it is the entry bar for a support tier; see
+# docs/PROVIDER_TIERS.md. Runs offline against the reference provider; provider
+# packages plug their own implementation in via conformance.RunProviderConformance.
+conformance:
+	go test ./platform/test/conformance/... -v
 
 # CLI command shortcuts (root layout).
 # Override with: make <target> EXAMPLE_CONFIG=path/to/runfabric.yml EXAMPLE_STAGE=dev

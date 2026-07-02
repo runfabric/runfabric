@@ -35,7 +35,7 @@ func Metrics(configPath, stage, providerOverride string, all bool, service strin
 	if receipt != nil {
 		out["deploymentId"] = receipt.DeploymentID
 		out["functionCount"] = len(receipt.Functions)
-		runs, _ := state.ListWorkflowRuns(ctx.RootDir, ctx.Stage, 50)
+		runs := listRunsVia(ctx.Config, ctx.RootDir, ctx.Stage, 50)
 		if len(runs) > 0 {
 			out["workflowRuns"] = runs
 			out["workflowCost"] = state.WorkflowCostFromRuns(runs)

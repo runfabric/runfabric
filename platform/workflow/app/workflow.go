@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -81,17 +80,29 @@ func WorkflowRun(configPath, stage, providerOverride, workflowName, runID string
 }
 
 func WorkflowStatus(configPath, stage, runID string) (*state.WorkflowRun, error) {
-	root := filepath.Dir(configPath)
-	return state.LoadWorkflowRun(root, stage, runID)
+	// Bootstrap so the configured run store (extensions.runStore / env) is used;
+	// a dynamodb:// deployment must read status from the same backend the runtime
+	// wrote to, not from empty local files.
+	ctx, err := Bootstrap(configPath, stage, "")
+	if err != nil {
+		return nil, err
+	}
+	return loadRunVia(ctx.Config, ctx.RootDir, stage, runID)
 }
 
 func WorkflowCancel(configPath, stage, runID string) (*state.WorkflowRun, error) {
-	root := filepath.Dir(configPath)
-	runtime := workflowruntime.NewWorkflowRuntime(root, nil)
-	if err := runtime.CancelRun(stage, runID); err != nil {
+	ctx, err := Bootstrap(configPath, stage, "")
+	if err != nil {
 		return nil, err
 	}
-	return state.LoadWorkflowRun(root, stage, runID)
+	rt, err := newConfiguredRuntime(ctx.Config, ctx.RootDir, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := rt.CancelRun(stage, runID); err != nil {
+		return nil, err
+	}
+	return loadRunVia(ctx.Config, ctx.RootDir, stage, runID)
 }
 
 func WorkflowReplay(configPath, stage, providerOverride, runID, stepID string) (*state.WorkflowRun, error) {

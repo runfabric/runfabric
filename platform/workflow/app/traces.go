@@ -4,7 +4,6 @@ import (
 	"context"
 
 	providers "github.com/runfabric/runfabric/platform/core/contracts/provider"
-	state "github.com/runfabric/runfabric/platform/core/state/core"
 )
 
 // Traces returns trace data for the deployed service (from receipt/metadata or provider).
@@ -35,7 +34,7 @@ func Traces(configPath, stage, providerOverride string, all bool, service string
 	if receipt != nil {
 		out["deploymentId"] = receipt.DeploymentID
 		out["updatedAt"] = receipt.UpdatedAt
-		if runs, _ := state.ListWorkflowRuns(ctx.RootDir, ctx.Stage, 10); len(runs) > 0 {
+		if runs := listRunsVia(ctx.Config, ctx.RootDir, ctx.Stage, 10); len(runs) > 0 {
 			out["workflowRuns"] = runs
 		}
 	}

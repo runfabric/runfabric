@@ -39,7 +39,7 @@ func Inspect(configPath, stage string) (any, error) {
 	var workflowData any
 	if receipt, err := ctx.Backends.Receipts.Load(ctx.Stage); err == nil {
 		receiptData = receipt
-		if runs, _ := state.ListWorkflowRuns(ctx.RootDir, ctx.Stage, 50); len(runs) > 0 {
+		if runs := listRunsVia(ctx.Config, ctx.RootDir, ctx.Stage, 50); len(runs) > 0 {
 			workflowData = map[string]any{
 				"runs":        runs,
 				"costSummary": state.WorkflowCostFromRuns(runs),

@@ -38,7 +38,7 @@ func Dashboard(configPath, stage string) (*DashboardData, error) {
 		data.Receipt = receipt
 		data.HasDeployment = true
 	}
-	runs, _ := state.ListWorkflowRuns(ctx.RootDir, ctx.Stage, 20)
+	runs := listRunsVia(ctx.Config, ctx.RootDir, ctx.Stage, 20)
 	data.WorkflowRunCount = len(runs)
 	if len(runs) > 0 {
 		s := state.WorkflowCostFromRuns(runs)
