@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -17,24 +18,24 @@ import (
 // Steps without input.function keep the previous echo behavior via
 // DefaultCodeStepRunner, so existing workflows are unaffected.
 type invokeCodeStepRunner struct {
-	invoke func(function string, payload []byte) (any, error)
+	invoke func(ctx context.Context, function string, payload []byte) (any, error)
 }
 
 var _ workflowruntime.CodeStepRunner = (*invokeCodeStepRunner)(nil)
 
-func newInvokeCodeStepRunner(ctx *AppContext) *invokeCodeStepRunner {
+func newInvokeCodeStepRunner(appCtx *AppContext) *invokeCodeStepRunner {
 	return &invokeCodeStepRunner{
-		invoke: func(function string, payload []byte) (any, error) {
-			return invokeWithContext(ctx, function, payload)
+		invoke: func(ctx context.Context, function string, payload []byte) (any, error) {
+			return invokeWithContext(ctx, appCtx, function, payload)
 		},
 	}
 }
 
-func (r *invokeCodeStepRunner) ExecuteStep(run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*workflowruntime.StepExecutionResult, error) {
+func (r *invokeCodeStepRunner) ExecuteStep(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*workflowruntime.StepExecutionResult, error) {
 	function, _ := step.Input["function"].(string)
 	function = strings.TrimSpace(function)
 	if function == "" {
-		return workflowruntime.DefaultCodeStepRunner{}.ExecuteStep(run, step, output, metadata)
+		return workflowruntime.DefaultCodeStepRunner{}.ExecuteStep(ctx, run, step, output, metadata)
 	}
 
 	payload := []byte("{}")
@@ -46,7 +47,7 @@ func (r *invokeCodeStepRunner) ExecuteStep(run *state.WorkflowRun, step state.Wo
 		payload = data
 	}
 
-	res, err := r.invoke(function, payload)
+	res, err := r.invoke(ctx, function, payload)
 	if err != nil {
 		return nil, fmt.Errorf("step %s: invoke function %q: %w", step.StepID, function, err)
 	}

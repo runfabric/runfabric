@@ -33,6 +33,7 @@ func newConfiguredRuntime(cfg *config.Config, root string, handler workflowrunti
 	}
 	rt := workflowruntime.NewWorkflowRuntime(root, handler)
 	rt.Locker = runstore.LockerFor(store)
+	rt.Store = store
 	return rt, nil
 }
 

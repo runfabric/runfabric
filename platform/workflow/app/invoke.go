@@ -14,12 +14,15 @@ func Invoke(configPath, stage, function, providerOverride string, payload []byte
 	if err != nil {
 		return nil, err
 	}
-	return invokeWithContext(ctx, function, payload)
+	// CLI entry point: no ambient cancellation source, so use a background ctx.
+	return invokeWithContext(context.Background(), ctx, function, payload)
 }
 
 // invokeWithContext dispatches an invocation on an already-bootstrapped app
-// context. It is shared by Invoke and the workflow code-step runner.
-func invokeWithContext(ctx *AppContext, function string, payload []byte) (any, error) {
+// context. goCtx carries cancellation/deadline (e.g. a workflow step's
+// per-step timeout) through to the real provider invoke. It is shared by Invoke
+// and the workflow code-step runner.
+func invokeWithContext(goCtx context.Context, ctx *AppContext, function string, payload []byte) (any, error) {
 	provider, err := resolveProvider(ctx)
 	if err != nil {
 		return nil, err
@@ -27,7 +30,7 @@ func invokeWithContext(ctx *AppContext, function string, payload []byte) (any, e
 
 	if orchestration, ok := provider.provider.(providers.OrchestrationCapable); ok {
 		if workflowName, ok := parseOrchestrationTarget(function); ok {
-			return orchestration.InvokeOrchestration(context.Background(), providers.OrchestrationInvokeRequest{
+			return orchestration.InvokeOrchestration(goCtx, providers.OrchestrationInvokeRequest{
 				Config:  ctx.Config,
 				Stage:   ctx.Stage,
 				Root:    ctx.RootDir,
@@ -38,7 +41,7 @@ func invokeWithContext(ctx *AppContext, function string, payload []byte) (any, e
 	}
 
 	if provider.mode == dispatchAPI {
-		res, err := deployapi.Invoke(context.Background(), provider.name, ctx.Config, ctx.Stage, function, payload, ctx.RootDir)
+		res, err := deployapi.Invoke(goCtx, provider.name, ctx.Config, ctx.Stage, function, payload, ctx.RootDir)
 		if err != nil {
 			return nil, err
 		}

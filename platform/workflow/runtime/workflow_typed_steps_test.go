@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
@@ -248,11 +249,44 @@ func TestTypedStepHandler_CodeStep_InjectableRunner(t *testing.T) {
 	}
 }
 
+// ctxCapturingCodeRunner records whether the ctx it received carries a deadline.
+type ctxCapturingCodeRunner struct{ hadDeadline *bool }
+
+func (r ctxCapturingCodeRunner) ExecuteStep(ctx context.Context, _ *state.WorkflowRun, _ state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
+	_, ok := ctx.Deadline()
+	*r.hadDeadline = ok
+	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
+}
+
+// TestCodeStepReceivesPerStepDeadline verifies the W3 context-plumbing change:
+// a step's TimeoutMs is turned into a per-step context by the runtime and
+// propagated all the way into the code runner (and thence to the real provider
+// invoke), so a `kind: code` step can actually time out / be cancelled.
+func TestCodeStepReceivesPerStepDeadline(t *testing.T) {
+	root := t.TempDir()
+	handler := NewTypedStepHandler(config.MCPIntegrationsConfig{}, config.MCPPolicyConfig{}, nil)
+	hadDeadline := false
+	handler.CodeRunner = ctxCapturingCodeRunner{hadDeadline: &hadDeadline}
+
+	rt := NewWorkflowRuntime(root, handler)
+	if _, err := rt.StartRun(context.Background(), WorkflowRunSpec{
+		Service:      "svc",
+		Stage:        "dev",
+		WorkflowHash: "wf",
+		Steps:        []WorkflowStepSpec{{ID: "c1", Kind: StepKindCode, Timeout: 5 * time.Second}},
+	}); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	if !hadDeadline {
+		t.Fatal("code step ctx should carry the per-step deadline derived from TimeoutMs")
+	}
+}
+
 type customCodeRunner struct {
 	captureInput *map[string]any
 }
 
-func (r *customCodeRunner) ExecuteStep(_ *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
+func (r *customCodeRunner) ExecuteStep(_ context.Context, _ *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
 	*r.captureInput = step.Input
 	output["result"] = "custom_executed"
 	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
@@ -341,7 +375,7 @@ type customApprovalRunner struct {
 	called *bool
 }
 
-func (r *customApprovalRunner) ExecuteStep(_ *state.WorkflowRun, _ state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
+func (r *customApprovalRunner) ExecuteStep(_ context.Context, _ *state.WorkflowRun, _ state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
 	*r.called = true
 	output["status"] = "approved"
 	return &StepExecutionResult{Output: output, Metadata: metadata}, nil

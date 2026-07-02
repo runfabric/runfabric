@@ -19,9 +19,11 @@ const (
 	StepKindHumanApproval = "human-approval"
 )
 
-// CodeStepRunner executes code step kinds.
+// CodeStepRunner executes code step kinds. ctx carries the step's
+// timeout/cancellation (derived from step.TimeoutMs) down to real provider
+// invocations performed by `kind: code` steps.
 type CodeStepRunner interface {
-	ExecuteStep(run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error)
+	ExecuteStep(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error)
 }
 
 // DefaultCodeStepRunner is the fallback code step executor: it echoes the step
@@ -30,22 +32,24 @@ type CodeStepRunner interface {
 // fallback covers code steps with no function binding and unwired handlers.
 type DefaultCodeStepRunner struct{}
 
-func (DefaultCodeStepRunner) ExecuteStep(_ *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
+func (DefaultCodeStepRunner) ExecuteStep(_ context.Context, _ *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
 	output["result"] = "code_executed"
 	output["input"] = step.Input
 	_ = metadata
 	return &StepExecutionResult{Output: output, Metadata: metadata}, nil
 }
 
-// ApprovalStepRunner executes human-approval step kinds.
+// ApprovalStepRunner executes human-approval step kinds. ctx is accepted for
+// signature parity with the other runners; human approval performs no
+// cancellable I/O of its own.
 type ApprovalStepRunner interface {
-	ExecuteStep(run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error)
+	ExecuteStep(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error)
 }
 
 // DefaultApprovalStepRunner implements pause-on-first-call / decision-on-resume human approval.
 type DefaultApprovalStepRunner struct{}
 
-func (DefaultApprovalStepRunner) ExecuteStep(run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
+func (DefaultApprovalStepRunner) ExecuteStep(_ context.Context, run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
 	decision := strings.ToLower(strings.TrimSpace(asInputString(step.Input, "approvalDecision")))
 	if decision == "" {
 		output["status"] = "awaiting_approval"
@@ -163,7 +167,7 @@ func (h *TypedStepHandler) ExecuteStep(ctx context.Context, run *state.WorkflowR
 		if h.CodeRunner == nil {
 			return nil, fmt.Errorf("code step runner is not configured")
 		}
-		result, err = h.CodeRunner.ExecuteStep(run, step, output, metadata)
+		result, err = h.CodeRunner.ExecuteStep(ctx, run, step, output, metadata)
 	case StepKindAIRetrieval, StepKindAIGenerate, StepKindAIStructured, StepKindAIEval:
 		if h.AIRunner == nil {
 			return nil, fmt.Errorf("ai step runner is not configured")
@@ -173,7 +177,7 @@ func (h *TypedStepHandler) ExecuteStep(ctx context.Context, run *state.WorkflowR
 		if h.ApprovalRunner == nil {
 			return nil, fmt.Errorf("approval step runner is not configured")
 		}
-		result, err = h.ApprovalRunner.ExecuteStep(run, step, output, metadata)
+		result, err = h.ApprovalRunner.ExecuteStep(ctx, run, step, output, metadata)
 	default:
 		return nil, fmt.Errorf("unsupported workflow step kind %q (allowed: code, ai-retrieval, ai-generate, ai-structured, ai-eval, human-approval)", step.Kind)
 	}

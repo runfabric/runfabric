@@ -223,81 +223,30 @@ install-secretmanager-plugins: build-secretmanager-plugins
 		echo "Installed $$id@$$ver -> $$dir"; \
 	done
 
-# Enforce extension boundary rules:
-#   Rule 1: extensions/ must not import github.com/runfabric/runfabric/internal/ or /platform/
-#   Rule 2: Shared types must be canonically in internal/<domain> (not duplicated/aliased)
-#   Rule 3: No bridge, alias, or re-export file anywhere (all-alias type blocks)
-#   Rule 4: At most one file in platform/extensions/ may import root extensions/
-#   Legacy: packages/ and platform/extension/external/testdata/ must not import platform/
+# Enforce extension/architecture boundary rules. Formerly a stack of grep
+# heuristics; the same rules — and more — are now enforced by typed Go policy
+# tests in platform/core/policy/architecture (importAllowed + the Rule4/alias
+# assertions), which give real, line-level error messages and are unit-testable.
+# This target runs them and prints the full output on failure so a violation is
+# diagnosable from CI logs (previously the output was sent to /dev/null).
+#
+# Rules enforced there:
+#   Rule 1: extensions/ must not import internal/ or platform/
+#   Rule 2: packages/, plugin-sdk, platform layering (no cross-boundary imports)
+#   Rule 3: no alias-only re-export / bridge files or type aliases repo-wide
+#   Rule 4: only platform/extensions/providerpolicy may import root extensions/
+#   Flow:   internal/ must not import root extensions/ (incl. builtins loader,
+#           bridge packages)
 check-boundary:
-	@echo "Checking extension boundary rules..."
-	@FAILED=0; \
-	\
-	echo "  [Rule 1] extensions/ must not import internal/ or platform/..."; \
-	if grep -rn '"github.com/runfabric/runfabric/internal/' extensions/ --include='*.go' 2>/dev/null | grep -v '_test.go'; then \
-		echo "  ERROR [Rule 1]: extensions/ imports internal/ (see above)"; FAILED=1; \
-	fi; \
-	if grep -rn '"github.com/runfabric/runfabric/platform/' extensions/ --include='*.go' 2>/dev/null | grep -v '_test.go'; then \
-		echo "  ERROR [Rule 1]: extensions/ imports platform/ (see above)"; FAILED=1; \
-	fi; \
-	\
-	echo "  [Rule 3] No alias-only re-export files in extensions/..."; \
-	for f in $$(find extensions/ -name '*.go' ! -name '*_test.go' 2>/dev/null); do \
-		if [ -f "$$f" ] && grep -q '^\s*[A-Za-z].*=.*\.' "$$f" && ! grep -qE '^\s*(func|type [A-Za-z]+\s+(struct|interface)|var|const)\b' "$$f"; then \
-			echo "  ERROR [Rule 3]: $$f appears to be an alias-only re-export file"; FAILED=1; \
-		fi; \
-	done; \
-	\
-	echo "  [Rule 4] At most one platform/extensions file may import root extensions/..."; \
-	COUNT=$$(grep -rln '"github.com/runfabric/runfabric/extensions"' platform/extensions/ --include='*.go' 2>/dev/null | grep -v '_test.go' | wc -l | tr -d ' '); \
-	if [ "$$COUNT" -gt "1" ]; then \
-		echo "  ERROR [Rule 4]: $${COUNT} files in platform/extensions/ import root extensions/ (max 1):"; \
-		grep -rln '"github.com/runfabric/runfabric/extensions"' platform/extensions/ --include='*.go' | grep -v '_test.go'; \
-		FAILED=1; \
-	fi; \
-	\
-	echo "  [Legacy] packages/ and testdata stubs must not import platform/..."; \
-	if grep -rn '"github.com/runfabric/runfabric/platform/' packages/ platform/extensions/external/testdata/ 2>/dev/null | grep -v '_test.go'; then \
-		echo "  ERROR [Legacy]: platform/ import found in packages/ or testdata (see above)"; FAILED=1; \
-	fi; \
-	\
-	if [ "$$FAILED" -ne "0" ]; then exit 1; fi; \
-	echo "check-boundary OK"
+	@echo "Checking architecture + boundary policy (platform/core/policy/architecture)..."
+	@go test -count=1 ./platform/core/policy/architecture
+	@echo "check-boundary OK"
 
-# Enforce normalized architecture rules beyond import boundary checks:
-#   - internal/ must not import root extensions/
-#   - internal/extensions/contracts must not be alias-only re-export layers
-#   - internal/extensions/{routers,runtimes,simulators} must not bridge to root extensions/
-#   - internal/extensions/builtins loader must not wire root extensions directly
+# Architecture rules are enforced by the same Go policy test check-boundary runs
+# (import direction, anti-alias/bridge, controlplane layout). Kept as a distinct
+# target for the release-check / check-syntax dependency chain and help output.
 check-architecture: check-boundary
-	@echo "Checking normalized architecture rules..."
-	@FAILED=0; \
-	\
-	echo "  [Flow] internal/ must not import root extensions/..."; \
-	if grep -rn '"github.com/runfabric/runfabric/extensions/' internal/ --include='*.go' 2>/dev/null | grep -v '_test.go'; then \
-		echo "  ERROR [Flow]: internal/ imports root extensions/ (see above)"; FAILED=1; \
-	fi; \
-	\
-	echo "  [Rule 3] internal/extensions/contracts must not be alias-only re-export"; \
-	if [ -f internal/extensions/contracts/types.go ] && grep -Eq '^\s*(type\s+[A-Za-z0-9_]+\s*=|[A-Za-z0-9_]+\s*=)' internal/extensions/contracts/types.go; then \
-		echo "  ERROR [Rule 3]: internal/extensions/contracts/types.go contains alias/re-export type definitions"; FAILED=1; \
-	fi; \
-	\
-	echo "  [Rule 3] internal bridge packages must not delegate to root extensions/..."; \
-	if grep -rn '"github.com/runfabric/runfabric/extensions/' internal/extensions/routers/ internal/extensions/runtimes/ internal/extensions/simulators/ --include='*.go' 2>/dev/null | grep -v '_test.go'; then \
-		echo "  ERROR [Rule 3]: bridge/delegator imports found in internal/extensions/{routers,runtimes,simulators}"; FAILED=1; \
-	fi; \
-	\
-	echo "  [Flow] internal/extensions/builtins must not wire root extensions directly"; \
-	if [ -f internal/extensions/builtins/loaders.go ] && grep -Eq '"github.com/runfabric/runfabric/extensions/' internal/extensions/builtins/loaders.go; then \
-		echo "  ERROR [Flow]: internal/extensions/builtins/loaders.go imports root extensions/*"; FAILED=1; \
-	fi; \
-	\
-	echo "  [Rule 4] go-level architecture policy tests"; \
-	go test -count=1 ./platform/core/policy/architecture >/dev/null || FAILED=1; \
-	\
-	if [ "$$FAILED" -ne "0" ]; then exit 1; fi; \
-	echo "check-architecture OK"
+	@echo "check-architecture OK (enforced by platform/core/policy/architecture)"
 
 # Smoke-check binary command ownership surfaces to prevent drift:
 #   - runfabric: control-plane commands, no daemon command

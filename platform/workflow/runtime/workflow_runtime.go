@@ -10,6 +10,7 @@ import (
 	"time"
 
 	state "github.com/runfabric/runfabric/platform/core/state/core"
+	"github.com/runfabric/runfabric/platform/core/state/runstore"
 )
 
 // runLocks serializes execution of a single run within this process. The
@@ -44,6 +45,40 @@ func (r *WorkflowRuntime) acquireRunLock(ctx context.Context, stage, runID strin
 	}
 	unlock := lockRun(stage, runID)
 	return func() error { unlock(); return nil }, nil
+}
+
+// saveRun persists a run through the configured Store, or the local state files
+// when no Store is set. The caller holds the run lock, so the write is
+// unconditional (expected version "").
+func (r *WorkflowRuntime) saveRun(run *state.WorkflowRun) error {
+	if r.Store != nil {
+		_, err := r.Store.Save(context.Background(), run, "")
+		return err
+	}
+	return state.SaveWorkflowRun(r.RootDir, run)
+}
+
+// loadRun loads a run through the configured Store, or the local state files.
+func (r *WorkflowRuntime) loadRun(stage, runID string) (*state.WorkflowRun, error) {
+	if r.Store != nil {
+		run, _, err := r.Store.Load(context.Background(), stage, runID)
+		return run, err
+	}
+	return state.LoadWorkflowRun(r.RootDir, stage, runID)
+}
+
+// markCancelRequested sets the cancel flag through the Store or the local files.
+func (r *WorkflowRuntime) markCancelRequested(stage, runID string) error {
+	if r.Store != nil {
+		run, _, err := r.Store.Load(context.Background(), stage, runID)
+		if err != nil {
+			return err
+		}
+		run.CancelRequested = true
+		_, err = r.Store.Save(context.Background(), run, "")
+		return err
+	}
+	return state.MarkWorkflowRunCancelRequested(r.RootDir, stage, runID)
 }
 
 // WorkflowStepHandler executes one workflow step.
@@ -96,6 +131,13 @@ type WorkflowRuntime struct {
 	// LockTTL bounds how long a crashed holder can wedge a distributed lock
 	// before it is treated as stale. Ignored by the in-process fallback.
 	LockTTL time.Duration
+	// Store, when set, is the run-state persistence backend. When nil, runs
+	// persist via the local state files (byte-identical to LocalRunStore). All
+	// run reads/writes below go through r.loadRun/r.saveRun so the backend is
+	// swappable. The whole-run lock (Locker / in-process) is the concurrency
+	// control, so saves are unconditional here; optimistic CAS on the Version
+	// token is the next hardening for writers that bypass the lock.
+	Store runstore.RunStore
 }
 
 // RunLocker is the subset of runstore.RunLocker the runtime needs. It is
@@ -169,7 +211,7 @@ func (r *WorkflowRuntime) CreateRun(spec WorkflowRunSpec) (*state.WorkflowRun, e
 		run.EndedAt = now.Format(time.RFC3339)
 		run.DurationMs = durationMs(run.StartedAt, run.EndedAt)
 	}
-	if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+	if err := r.saveRun(run); err != nil {
 		return nil, err
 	}
 	return run, nil
@@ -201,7 +243,7 @@ func (r *WorkflowRuntime) resumeRunLocked(ctx context.Context, stage, runID stri
 	if r.Handler == nil {
 		return nil, fmt.Errorf("workflow step handler is required")
 	}
-	run, err := state.LoadWorkflowRun(r.RootDir, stage, runID)
+	run, err := r.loadRun(stage, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +255,7 @@ func (r *WorkflowRuntime) resumeRunLocked(ctx context.Context, stage, runID stri
 		if run.StartedAt == "" {
 			run.StartedAt = r.nowUTC().Format(time.RFC3339)
 		}
-		if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+		if err := r.saveRun(run); err != nil {
 			return nil, err
 		}
 	}
@@ -241,14 +283,14 @@ func (r *WorkflowRuntime) resumeRunLocked(ctx context.Context, stage, runID stri
 			if decision == "" {
 				run.Status = state.RunStatusPaused
 				run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusPaused), "awaiting human approval")
-				if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+				if err := r.saveRun(run); err != nil {
 					return nil, err
 				}
 				return run, nil
 			}
 			run.Steps[idx].Status = state.StepStatusPending
 			run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusPending), "approval decision received")
-			if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+			if err := r.saveRun(run); err != nil {
 				return nil, err
 			}
 		}
@@ -260,7 +302,7 @@ func (r *WorkflowRuntime) resumeRunLocked(ctx context.Context, stage, runID stri
 				run.Steps[idx].AttemptCount--
 			}
 			run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusPending), "resumed after restart")
-			if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+			if err := r.saveRun(run); err != nil {
 				return nil, err
 			}
 		}
@@ -294,7 +336,7 @@ func (r *WorkflowRuntime) resumeRunLocked(ctx context.Context, stage, runID stri
 			reason = fmt.Sprintf("step %s did not complete (status %s)", failed.StepID, failed.Status)
 		}
 		run.Checkpoint = checkpoint(r.nowUTC(), failed.StepID, string(failed.Status), reason)
-		if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+		if err := r.saveRun(run); err != nil {
 			return nil, err
 		}
 		return run, fmt.Errorf("workflow step %s did not succeed (status %s)", failed.StepID, failed.Status)
@@ -305,7 +347,7 @@ func (r *WorkflowRuntime) resumeRunLocked(ctx context.Context, stage, runID stri
 	run.EndedAt = r.nowUTC().Format(time.RFC3339)
 	run.DurationMs = durationMs(run.StartedAt, run.EndedAt)
 	run.Checkpoint = checkpoint(r.nowUTC(), "", string(state.RunStatusOK), "")
-	if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+	if err := r.saveRun(run); err != nil {
 		return nil, err
 	}
 	return run, nil
@@ -327,7 +369,7 @@ func firstUnsuccessfulStep(run *state.WorkflowRun) *state.WorkflowStepRun {
 // must be writable while ResumeRun holds the lock for the whole execution, and
 // executeStep reloads the run each attempt to observe the flag.
 func (r *WorkflowRuntime) CancelRun(stage, runID string) error {
-	return state.MarkWorkflowRunCancelRequested(r.RootDir, stage, runID)
+	return r.markCancelRequested(stage, runID)
 }
 
 // ReplayRunFromStep resets durable step state from stepID onward, then re-executes from that step.
@@ -340,7 +382,7 @@ func (r *WorkflowRuntime) ReplayRunFromStep(ctx context.Context, stage, runID, s
 		return nil, fmt.Errorf("acquire run lock: %w", err)
 	}
 	defer func() { _ = release() }()
-	run, err := state.LoadWorkflowRun(r.RootDir, stage, runID)
+	run, err := r.loadRun(stage, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +413,7 @@ func (r *WorkflowRuntime) ReplayRunFromStep(ctx context.Context, stage, runID, s
 	run.EndedAt = ""
 	run.DurationMs = 0
 	run.Checkpoint = checkpoint(r.nowUTC(), stepID, string(state.StepStatusPending), "")
-	if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+	if err := r.saveRun(run); err != nil {
 		return nil, err
 	}
 	// Already holding the run lock; call the locked variant to avoid re-locking.
@@ -386,7 +428,7 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 	}
 	firstAttempt := step.AttemptCount + 1
 	for attempt := firstAttempt; attempt <= maxAttempts; attempt++ {
-		latest, err := state.LoadWorkflowRun(r.RootDir, run.Stage, run.RunID)
+		latest, err := r.loadRun(run.Stage, run.RunID)
 		if err != nil {
 			return nil, err
 		}
@@ -406,7 +448,7 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 		step.Error = ""
 		run.Status = state.RunStatusRunning
 		run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusRunning), "")
-		if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+		if err := r.saveRun(run); err != nil {
 			return nil, err
 		}
 
@@ -416,9 +458,14 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 			execCtx, cancel = context.WithTimeout(ctx, time.Duration(step.TimeoutMs)*time.Millisecond)
 		}
 		res, execErr := r.Handler.ExecuteStep(execCtx, run, *step)
+		// Capture the execution context's error BEFORE cancel(): cancel() sets
+		// execCtx.Err() to context.Canceled, so reading it afterwards would make
+		// every step with a positive TimeoutMs look failed even when it succeeded.
+		// We only care whether the step itself hit the deadline/cancellation.
+		execCtxErr := execCtx.Err()
 		cancel()
 
-		run, err = state.LoadWorkflowRun(r.RootDir, run.Stage, run.RunID)
+		run, err = r.loadRun(run.Stage, run.RunID)
 		if err != nil {
 			return nil, err
 		}
@@ -426,7 +473,7 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 		step.EndedAt = r.nowUTC().Format(time.RFC3339)
 		step.DurationMs = durationMs(step.StartedAt, step.EndedAt)
 
-		if execErr == nil && execCtx.Err() == nil {
+		if execErr == nil && execCtxErr == nil {
 			if res != nil && res.Pause {
 				step.Status = state.StepStatusPaused
 				step.Error = res.PauseReason
@@ -434,7 +481,7 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 				step.Metadata = res.Metadata
 				run.Status = state.RunStatusPaused
 				run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusPaused), res.PauseReason)
-				if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+				if err := r.saveRun(run); err != nil {
 					return nil, err
 				}
 				return run, nil
@@ -449,7 +496,7 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 				step.Metadata = nil
 			}
 			run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusOK), "")
-			if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+			if err := r.saveRun(run); err != nil {
 				return nil, err
 			}
 			return run, nil
@@ -457,26 +504,26 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 
 		err = execErr
 		if err == nil {
-			err = execCtx.Err()
+			err = execCtxErr
 		}
 		if err == nil {
 			err = fmt.Errorf("step execution failed")
 		}
-		if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
+		if errors.Is(execCtxErr, context.DeadlineExceeded) {
 			step.Status = state.StepStatusTimedOut
 		} else {
 			step.Status = state.StepStatusFailed
 		}
 		step.Error = err.Error()
 		run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(step.Status), step.Error)
-		if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+		if err := r.saveRun(run); err != nil {
 			return nil, err
 		}
 
 		if attempt < maxAttempts {
 			step.Status = state.StepStatusPending
 			run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(state.StepStatusPending), step.Error)
-			if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+			if err := r.saveRun(run); err != nil {
 				return nil, err
 			}
 			backoff := time.Duration(step.BackoffMs) * time.Millisecond
@@ -497,7 +544,7 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 				run.EndedAt = r.nowUTC().Format(time.RFC3339)
 				run.DurationMs = durationMs(run.StartedAt, run.EndedAt)
 				run.Checkpoint = checkpoint(r.nowUTC(), step.StepID, string(step.Status), ctxErr.Error())
-				if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+				if err := r.saveRun(run); err != nil {
 					return nil, err
 				}
 				return run, fmt.Errorf("workflow step %s aborted: %w", step.StepID, ctxErr)
@@ -512,7 +559,7 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 		}
 		run.EndedAt = r.nowUTC().Format(time.RFC3339)
 		run.DurationMs = durationMs(run.StartedAt, run.EndedAt)
-		if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+		if err := r.saveRun(run); err != nil {
 			return nil, err
 		}
 		return run, fmt.Errorf("workflow step %s failed: %w", step.StepID, err)
@@ -533,7 +580,7 @@ func (r *WorkflowRuntime) executeStep(ctx context.Context, run *state.WorkflowRu
 		run.EndedAt = r.nowUTC().Format(time.RFC3339)
 		run.DurationMs = durationMs(run.StartedAt, run.EndedAt)
 		run.Checkpoint = checkpoint(r.nowUTC(), final.StepID, string(final.Status), final.Error)
-		if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+		if err := r.saveRun(run); err != nil {
 			return nil, err
 		}
 		return run, fmt.Errorf("workflow step %s failed: %s", final.StepID, final.Error)
@@ -560,7 +607,7 @@ func (r *WorkflowRuntime) markCancelled(run *state.WorkflowRun, fromIdx int) (*s
 	run.EndedAt = r.nowUTC().Format(time.RFC3339)
 	run.DurationMs = durationMs(run.StartedAt, run.EndedAt)
 	run.Checkpoint = checkpoint(r.nowUTC(), "", string(state.RunStatusCancelled), "cancel requested")
-	if err := state.SaveWorkflowRun(r.RootDir, run); err != nil {
+	if err := r.saveRun(run); err != nil {
 		return nil, err
 	}
 	return run, nil
@@ -573,7 +620,7 @@ func (r *WorkflowRuntime) ResolveApproval(stage, runID, stepID, decision, review
 		return fmt.Errorf("acquire run lock: %w", err)
 	}
 	defer func() { _ = release() }()
-	run, err := state.LoadWorkflowRun(r.RootDir, stage, runID)
+	run, err := r.loadRun(stage, runID)
 	if err != nil {
 		return err
 	}
@@ -597,7 +644,7 @@ func (r *WorkflowRuntime) ResolveApproval(stage, runID, stepID, decision, review
 		run.Steps[i].AttemptCount = 0
 		run.Status = state.RunStatusRunning
 		run.Checkpoint = checkpoint(r.nowUTC(), stepID, string(state.StepStatusPending), "")
-		return state.SaveWorkflowRun(r.RootDir, run)
+		return r.saveRun(run)
 	}
 	return fmt.Errorf("step %q not found in run %q", stepID, runID)
 }
