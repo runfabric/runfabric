@@ -149,7 +149,10 @@ func (c *HTTPMCPClient) GetPrompt(ctx context.Context, server, ref string, args 
 	})
 }
 
-// NoopMCPClient is a deterministic MCP client stub for local runtime/testing.
+// NoopMCPClient is the deliberate fallback MCP client used when no MCP servers
+// are configured (see NewMCPRuntime): it echoes each call back as a
+// deterministic payload instead of dispatching, so local runs and tests behave
+// predictably. Configured integrations use HTTPMCPClient.
 type NoopMCPClient struct{}
 
 func (NoopMCPClient) CallTool(_ context.Context, server, name string, args map[string]any) (map[string]any, error) {

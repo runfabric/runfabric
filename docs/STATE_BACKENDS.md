@@ -10,6 +10,7 @@ Quick credentials matrix (providers + state backends): [CREDENTIALS.md](CREDENTI
 - **How to configure**: Schema + Credential Wiring
 - **Minimum IAM/permissions**: Minimum Permissions
 - **Operational commands**: Operational Commands
+- **Workflow run coordination**: Workflow Run Store (multi-instance runs)
 - **Recovery runbook**: Recovering from partial deploys and journal conflicts
 
 ## Supported Backends
@@ -150,6 +151,42 @@ runfabric state restore -c runfabric.yml --file ./.runfabric/backup/state.json -
 runfabric state reconcile -c runfabric.yml --json
 runfabric state force-unlock -c runfabric.yml --service my-svc --stage dev --provider aws-lambda --json
 runfabric state migrate -c runfabric.yml --from local --to postgres --json
+```
+
+## Workflow Run Store (multi-instance runs)
+
+Separate from the `backend` block (deploy receipts), workflow run coordination uses a **run store** selected with precedence:
+
+1. `RUNFABRIC_RUN_STORE` env var (operator override)
+2. `extensions.runStore` in `runfabric.yml`
+3. local filesystem (default): run JSON under `.runfabric/runs/<stage>/<runId>.json` with an in-process lock — **single instance only**
+
+Selecting the store also selects how runs are locked: each backend supplies its own run locker.
+
+```yaml
+extensions:
+  runStore: dynamodb://my-runs-table/runs?region=us-east-1&lockTable=my-locks
+```
+
+```bash
+# Operator override, no config edit:
+export RUNFABRIC_RUN_STORE="dynamodb://my-runs-table/runs?region=us-east-1"
+```
+
+### dynamodb run store
+
+- **URI**: `dynamodb://<table>/runs?region=<region>&lockTable=<table>&endpoint=<url>`. `region` falls back to the SDK default chain (`AWS_REGION`); `lockTable` defaults to the runs table; `endpoint` targets DynamoDB Local for testing.
+- **Table schema** (create before use, for both runs and lock tables): partition key `pk` (S) + sort key `sk` (S).
+- **Concurrency**: saves are compare-and-swap (conditional writes on a version token → version-conflict errors instead of silent clobbering); the run lock is a conditional-write lease with heartbeat renewal, so a crashed holder's lease expires after its TTL and another instance can take over.
+- **Minimum IAM**: `dynamodb:GetItem`, `PutItem`, `Query`, `UpdateItem`, `DeleteItem` on the runs and lock tables.
+
+> **Current behavior:** a remote run store currently provides the **distributed run lock**; run-state persistence still writes the local files above. Migrating run persistence onto the store (with CAS) is the remaining step for full multi-instance runs.
+
+Integration test against DynamoDB Local:
+
+```bash
+docker run -p 8000:8000 amazon/dynamodb-local
+RUNFABRIC_TEST_DYNAMODB_ENDPOINT=http://localhost:8000 go test ./platform/core/state/runstore/ -run Integration -v
 ```
 
 ## Notes On Current Runtime Behavior

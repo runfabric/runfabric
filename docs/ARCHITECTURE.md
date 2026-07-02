@@ -98,6 +98,7 @@ Workflow execution currently uses a single in-process durable runtime loop (not 
 3. Durable runtime loop executes in `platform/workflow/runtime/workflow_runtime.go`.
 4. Step execution dispatch (code/ai/human-approval) is handled by `platform/workflow/runtime/workflow_typed_steps.go`.
 5. Durable run/step state persists through `platform/core/state/core/runs.go` under `.runfabric/runs/<stage>/<runId>.json`.
+6. Run locking comes from the pluggable run store (`platform/core/state/runstore`): local in-process by default, or a distributed DynamoDB lease via `extensions.runStore` / `RUNFABRIC_RUN_STORE` (see `docs/STATE_BACKENDS.md`, "Workflow Run Store").
 
 ### Scheduler vs dispatcher model (current decision)
 

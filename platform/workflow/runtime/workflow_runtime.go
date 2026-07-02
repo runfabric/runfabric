@@ -31,6 +31,21 @@ func lockRun(stage, runID string) func() {
 	return mu.Unlock
 }
 
+// acquireRunLock takes the run lock, preferring the configured distributed
+// Locker (cross-instance) and falling back to the in-process lock. The returned
+// release function must always be called.
+func (r *WorkflowRuntime) acquireRunLock(ctx context.Context, stage, runID string) (func() error, error) {
+	if r.Locker != nil {
+		ttl := r.LockTTL
+		if ttl <= 0 {
+			ttl = 5 * time.Minute
+		}
+		return r.Locker.Lock(ctx, stage, runID, ttl)
+	}
+	unlock := lockRun(stage, runID)
+	return func() error { unlock(); return nil }, nil
+}
+
 // WorkflowStepHandler executes one workflow step.
 type WorkflowStepHandler interface {
 	ExecuteStep(ctx context.Context, run *state.WorkflowRun, step state.WorkflowStepRun) (*StepExecutionResult, error)
@@ -72,6 +87,22 @@ type WorkflowRuntime struct {
 	Handler WorkflowStepHandler
 	Now     func() time.Time
 	Sleep   func(time.Duration)
+
+	// Locker, when set, provides cross-instance mutual exclusion for a run
+	// (e.g. a runstore.RunLocker backed by DynamoDB/Redis). When nil, the
+	// runtime falls back to an in-process lock, which is correct only for a
+	// single instance. See platform/core/state/runstore.
+	Locker RunLocker
+	// LockTTL bounds how long a crashed holder can wedge a distributed lock
+	// before it is treated as stale. Ignored by the in-process fallback.
+	LockTTL time.Duration
+}
+
+// RunLocker is the subset of runstore.RunLocker the runtime needs. It is
+// declared here (rather than imported) so the runtime does not depend on the
+// runstore package and to keep the in-process fallback dependency-free.
+type RunLocker interface {
+	Lock(ctx context.Context, stage, runID string, ttl time.Duration) (release func() error, err error)
 }
 
 func NewWorkflowRuntime(rootDir string, handler WorkflowStepHandler) *WorkflowRuntime {
@@ -155,8 +186,11 @@ func (r *WorkflowRuntime) StartRun(ctx context.Context, spec WorkflowRunSpec) (*
 
 // ResumeRun resumes a persisted run from its checkpoint and durable step statuses.
 func (r *WorkflowRuntime) ResumeRun(ctx context.Context, stage, runID string) (*state.WorkflowRun, error) {
-	unlock := lockRun(stage, runID)
-	defer unlock()
+	release, err := r.acquireRunLock(ctx, stage, runID)
+	if err != nil {
+		return nil, fmt.Errorf("acquire run lock: %w", err)
+	}
+	defer func() { _ = release() }()
 	return r.resumeRunLocked(ctx, stage, runID)
 }
 
@@ -301,8 +335,11 @@ func (r *WorkflowRuntime) ReplayRunFromStep(ctx context.Context, stage, runID, s
 	if stepID == "" {
 		return nil, fmt.Errorf("step id is required")
 	}
-	unlock := lockRun(stage, runID)
-	defer unlock()
+	release, err := r.acquireRunLock(ctx, stage, runID)
+	if err != nil {
+		return nil, fmt.Errorf("acquire run lock: %w", err)
+	}
+	defer func() { _ = release() }()
 	run, err := state.LoadWorkflowRun(r.RootDir, stage, runID)
 	if err != nil {
 		return nil, err
@@ -531,8 +568,11 @@ func (r *WorkflowRuntime) markCancelled(run *state.WorkflowRun, fromIdx int) (*s
 
 // ResolveApproval stores a human approval decision and unpauses the selected step.
 func (r *WorkflowRuntime) ResolveApproval(stage, runID, stepID, decision, reviewer string) error {
-	unlock := lockRun(stage, runID)
-	defer unlock()
+	release, err := r.acquireRunLock(context.Background(), stage, runID)
+	if err != nil {
+		return fmt.Errorf("acquire run lock: %w", err)
+	}
+	defer func() { _ = release() }()
 	run, err := state.LoadWorkflowRun(r.RootDir, stage, runID)
 	if err != nil {
 		return err

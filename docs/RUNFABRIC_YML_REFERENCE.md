@@ -140,6 +140,7 @@ extensions:
   routerPlugin: cloudflare # kind=router (router command backend)
   secretManagerPlugin: vault-secret-manager # kind=secret-manager (secret manager references)
   secretManagerPluginVersion: 1.0.0 # optional pin
+  runStore: dynamodb://my-runs-table/runs?region=us-east-1 # workflow run store + lock (default: local; env override RUNFABRIC_RUN_STORE). See docs/STATE_BACKENDS.md.
   router:
     autoApply:
       enabled: true
@@ -790,6 +791,10 @@ workflows:
           approvalRequest: "Review generated release actions"
       - id: deploy
         kind: code
+        input:
+          function: api
+          payload:
+            action: release
 ```
 
 Step requirements:
@@ -798,6 +803,12 @@ Step requirements:
 - `kind` is required for every step.
 - AI and approval kind-specific values are read from `steps[].input`.
 - `steps[].model` is a shorthand for `steps[].input.model` (for AI step kinds).
+
+Code step (`kind: code`) input:
+
+- `input.function` (optional) names a function defined in this config; the runtime invokes it through the same provider dispatch as `runfabric invoke` and stores the invocation result in the step output (`output.function`, `output.result`). Validation rejects a `function` value that does not match a defined function.
+- `input.payload` (optional) is sent as the invocation payload (any YAML/JSON value; defaults to `{}`).
+- Without `input.function`, the step is a no-op echo (`output.result: code_executed`) — useful as a placeholder.
 
 ## Human approval lifecycle
 

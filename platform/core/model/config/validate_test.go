@@ -266,7 +266,7 @@ func TestValidate_WorkflowStepInputValidation_AcceptsTypedKinds(t *testing.T) {
 		{
 			Name: "wf",
 			Steps: []WorkflowStep{
-				{ID: "code", Kind: "code", Input: map[string]any{"function": "deploy"}},
+				{ID: "code", Kind: "code", Input: map[string]any{"function": "api"}},
 				{ID: "retrieve", Kind: "ai-retrieval", Input: map[string]any{"query": "risks"}},
 				{ID: "generate", Kind: "ai-generate", Input: map[string]any{"prompt": "summarize"}},
 				{ID: "structured", Kind: "ai-structured", Input: map[string]any{"schema": map[string]any{"type": "object"}}},
@@ -277,6 +277,40 @@ func TestValidate_WorkflowStepInputValidation_AcceptsTypedKinds(t *testing.T) {
 	}
 	if err := Validate(cfg); err != nil {
 		t.Fatalf("expected workflow typed kinds to validate, got: %v", err)
+	}
+}
+
+func TestValidate_WorkflowCodeStepFunctionRef(t *testing.T) {
+	// No function binding stays valid (echo fallback behavior).
+	cfg := minimalValidConfig()
+	cfg.Workflows = []WorkflowConfig{
+		{Name: "wf", Steps: []WorkflowStep{{ID: "s1", Kind: "code"}}},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("code step without input.function should validate, got: %v", err)
+	}
+
+	// input.function must be a non-empty string.
+	cfg.Workflows[0].Steps[0].Input = map[string]any{"function": 42}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected validation error for non-string input.function")
+	}
+	cfg.Workflows[0].Steps[0].Input = map[string]any{"function": "  "}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected validation error for blank input.function")
+	}
+
+	// input.function must reference a defined function.
+	cfg.Workflows[0].Steps[0].Input = map[string]any{"function": "missing"}
+	if err := Validate(cfg); err == nil {
+		t.Fatal("expected validation error for unknown input.function reference")
+	}
+
+	// Array (reference-format) function declarations also count.
+	cfg.Workflows[0].Steps[0].Input = map[string]any{"function": "worker"}
+	cfg.FunctionsConfig = []FunctionOverrideConfig{{Name: "worker"}}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("code step referencing array-form function should validate, got: %v", err)
 	}
 }
 

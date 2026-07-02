@@ -150,7 +150,7 @@ func Validate(cfg *Config) error {
 			}
 		}
 	}
-	if err := validateWorkflows(cfg.Workflows); err != nil {
+	if err := validateWorkflows(cfg); err != nil {
 		return err
 	}
 	if err := validateLayers(cfg.Layers); err != nil {
@@ -160,7 +160,9 @@ func Validate(cfg *Config) error {
 	return nil
 }
 
-func validateWorkflows(workflows []WorkflowConfig) error {
+func validateWorkflows(cfg *Config) error {
+	workflows := cfg.Workflows
+	functionNames := configFunctionNames(cfg)
 	for wi, wf := range workflows {
 		name := strings.TrimSpace(wf.Name)
 		if name == "" {
@@ -178,7 +180,17 @@ func validateWorkflows(workflows []WorkflowConfig) error {
 			input := step.Input
 			switch kind {
 			case "code":
-				// No kind-specific required input.
+				// input.function is optional; when set it must name a defined
+				// function (invoked by the runtime via provider dispatch).
+				if raw, exists := input["function"]; exists {
+					name, ok := raw.(string)
+					if !ok || strings.TrimSpace(name) == "" {
+						return fmt.Errorf("workflows[%d].steps[%d] code input.function must be a non-empty string when set", wi, si)
+					}
+					if _, found := functionNames[strings.TrimSpace(name)]; !found {
+						return fmt.Errorf("workflows[%d].steps[%d] code input.function %q does not match a defined function", wi, si, name)
+					}
+				}
 			case "ai-retrieval":
 				if strings.TrimSpace(readWorkflowStepString(input, "query")) == "" {
 					return fmt.Errorf("workflows[%d].steps[%d] kind ai-retrieval requires input.query", wi, si)
@@ -221,6 +233,21 @@ func validateLayers(layers map[string]LayerConfig) error {
 		}
 	}
 	return nil
+}
+
+// configFunctionNames collects declared function names from both the resolved
+// map (post-Normalize) and the raw array form, so validation works either way.
+func configFunctionNames(cfg *Config) map[string]struct{} {
+	out := map[string]struct{}{}
+	for name := range cfg.Functions {
+		out[name] = struct{}{}
+	}
+	for _, f := range cfg.FunctionsConfig {
+		if name := strings.TrimSpace(f.Name); name != "" {
+			out[name] = struct{}{}
+		}
+	}
+	return out
 }
 
 func readWorkflowStepString(input map[string]any, key string) string {

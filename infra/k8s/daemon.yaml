@@ -1,0 +1,161 @@
+# RunFabric daemon — Kubernetes manifests.
+#
+# Apply:  kubectl apply -f infra/k8s/daemon.yaml
+#
+# Before applying:
+#   1. Create the API key secret (the daemon refuses to bind 0.0.0.0 without it):
+#        kubectl -n runfabric create secret generic runfabric-daemon \
+#          --from-literal=api-key="$(openssl rand -hex 32)"
+#   2. Point RUNFABRIC_DAEMON_CACHE_URL at your Redis (used for the distributed
+#      API cache and, with a real backend, cross-instance rate limiting).
+#
+# Probes use the split health endpoints added to the daemon:
+#   /healthz -> liveness (process up)   /readyz -> readiness (deps reachable)
+# Metrics are scraped from /metrics (Prometheus text format).
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: runfabric
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runfabric-daemon
+  namespace: runfabric
+  labels:
+    app.kubernetes.io/name: runfabric-daemon
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: runfabric-daemon
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0      # zero-downtime: never drop below desired during rollout
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: runfabric-daemon
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8766"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Give in-flight deploy/remove time to drain on rollout/scale-in. Must be
+      # >= the daemon's 25s graceful-shutdown budget.
+      terminationGracePeriodSeconds: 40
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: daemon
+          image: ghcr.io/runfabric/runfabric-daemon:latest
+          imagePullPolicy: IfNotPresent
+          args: ["--address", "0.0.0.0", "--port", "8766", "--rate-limit", "120"]
+          ports:
+            - name: http
+              containerPort: 8766
+          env:
+            - name: RUNFABRIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: runfabric-daemon
+                  key: api-key
+            - name: RUNFABRIC_DAEMON_CACHE_URL
+              value: "redis://runfabric-redis:6379/0"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4318"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Give the pod a moment to finish in-flight work before SIGTERM closes
+          # the listener (belt-and-suspenders with graceful shutdown).
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runfabric-daemon
+  namespace: runfabric
+  labels:
+    app.kubernetes.io/name: runfabric-daemon
+spec:
+  selector:
+    app.kubernetes.io/name: runfabric-daemon
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# Keep at least 2 replicas available during voluntary disruptions (node drains,
+# rollouts) so the API stays up.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: runfabric-daemon
+  namespace: runfabric
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: runfabric-daemon
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: runfabric-daemon
+  namespace: runfabric
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: runfabric-daemon
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

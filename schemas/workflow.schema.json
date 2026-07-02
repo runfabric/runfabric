@@ -46,7 +46,7 @@
         },
         "input": {
           "type": "object",
-          "description": "Kind-specific step input (prompt/query/schema/score/mcp/approval payload).",
+          "description": "Kind-specific step input (prompt/query/schema/score/mcp/approval payload; code steps: function/payload).",
           "additionalProperties": true
         }
       },

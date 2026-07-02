@@ -14,8 +14,27 @@ import (
 
 	"github.com/runfabric/runfabric/platform/core/model/config"
 	state "github.com/runfabric/runfabric/platform/core/state/core"
+	"github.com/runfabric/runfabric/platform/core/state/runstore"
 	workflowruntime "github.com/runfabric/runfabric/platform/workflow/runtime"
 )
+
+// newConfiguredRuntime builds a WorkflowRuntime whose run lock comes from the
+// user-selected backend. The store is chosen by RUNFABRIC_RUN_STORE or
+// extensions.runStore in runfabric.yml (default: local). Choosing the store
+// also chooses how runs are locked — the backend supplies its own RunLocker.
+//
+// NOTE: run-state persistence still goes through the local state files; a remote
+// store currently provides only the lock. Migrating SaveWorkflowRun/LoadWorkflowRun
+// onto RunStore (with CAS) is the remaining step for full multi-instance runs.
+func newConfiguredRuntime(cfg *config.Config, root string, handler workflowruntime.WorkflowStepHandler) (*workflowruntime.WorkflowRuntime, error) {
+	store, err := runstore.Resolve(config.ExtensionString(cfg, "runStore"), root)
+	if err != nil {
+		return nil, fmt.Errorf("resolve run store: %w", err)
+	}
+	rt := workflowruntime.NewWorkflowRuntime(root, handler)
+	rt.Locker = runstore.LockerFor(store)
+	return rt, nil
+}
 
 type WorkflowRunResult struct {
 	Workflow string             `json:"workflow"`
@@ -42,7 +61,11 @@ func WorkflowRun(configPath, stage, providerOverride, workflowName, runID string
 	if err != nil {
 		return nil, err
 	}
-	runtime := workflowruntime.NewWorkflowRuntime(ctx.RootDir, handler)
+	handler.CodeRunner = newInvokeCodeStepRunner(ctx)
+	runtime, err := newConfiguredRuntime(ctx.Config, ctx.RootDir, handler)
+	if err != nil {
+		return nil, err
+	}
 	run, runErr := runtime.StartRun(context.Background(), spec)
 	res := &WorkflowRunResult{
 		Workflow: spec.WorkflowName,
@@ -79,7 +102,11 @@ func WorkflowReplay(configPath, stage, providerOverride, runID, stepID string) (
 	if err != nil {
 		return nil, err
 	}
-	runtime := workflowruntime.NewWorkflowRuntime(ctx.RootDir, handler)
+	handler.CodeRunner = newInvokeCodeStepRunner(ctx)
+	runtime, err := newConfiguredRuntime(ctx.Config, ctx.RootDir, handler)
+	if err != nil {
+		return nil, err
+	}
 	return runtime.ReplayRunFromStep(context.Background(), stage, runID, stepID)
 }
 

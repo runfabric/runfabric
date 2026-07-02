@@ -14,6 +14,7 @@ import (
 
 	"github.com/runfabric/runfabric/platform/daemon/configapi"
 	runfabricruntime "github.com/runfabric/runfabric/platform/extensions/registry/loader/runtime"
+	"github.com/runfabric/runfabric/platform/observability/metrics"
 	"github.com/runfabric/runfabric/platform/observability/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -129,6 +130,8 @@ func (s *Server) Handler(extraRoutes func(mux *http.ServeMux, authorize func(htt
 			"protocol": runfabricruntime.ProtocolVersion,
 		})
 	})
+	// Prometheus scrape endpoint (RED metrics recorded by the middleware below).
+	mux.Handle("GET /metrics", metrics.Handler())
 	mux.HandleFunc("POST /validate", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /resolve", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /plan", apiHandler.ServeHTTP)
@@ -140,7 +143,9 @@ func (s *Server) Handler(extraRoutes func(mux *http.ServeMux, authorize func(htt
 		extraRoutes(mux, configSrv.Authorize)
 	}
 
-	return otelMiddleware(telemetry.Tracer("runfabric/daemon"), maxBodyMiddleware(maxRequestBody, mux))
+	return metrics.HTTPMiddleware(nil,
+		otelMiddleware(telemetry.Tracer("runfabric/daemon"),
+			maxBodyMiddleware(maxRequestBody, mux)))
 }
 
 // maxRequestBody caps any single request body the daemon will read into memory.

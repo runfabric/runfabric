@@ -24,7 +24,10 @@ type CodeStepRunner interface {
 	ExecuteStep(run *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error)
 }
 
-// DefaultCodeStepRunner is the built-in code step executor (stub: invocation is provider/runtime-specific).
+// DefaultCodeStepRunner is the fallback code step executor: it echoes the step
+// input without invoking anything. The app layer injects a runner that invokes
+// input.function through provider dispatch (platform/workflow/app); this
+// fallback covers code steps with no function binding and unwired handlers.
 type DefaultCodeStepRunner struct{}
 
 func (DefaultCodeStepRunner) ExecuteStep(_ *state.WorkflowRun, step state.WorkflowStepRun, output, metadata map[string]any) (*StepExecutionResult, error) {
