@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -26,6 +27,10 @@ type Server struct {
 	mu          sync.Mutex
 	requests    map[string][]time.Time
 	lastSweepAt time.Time
+
+	// deployMu serializes deploy/remove so per-request provider credentials can be
+	// applied to the process env and restored without racing concurrent requests.
+	deployMu sync.Mutex
 }
 
 func NewServer(stage string) *Server {
@@ -199,7 +204,12 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	res, err := s.core.Deploy(cfgPath, s.stage(r))
+	var res *DeployResponse
+	err = s.withProviderCreds(r, func() error {
+		var derr error
+		res, derr = s.core.Deploy(cfgPath, s.stage(r))
+		return derr
+	})
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -213,12 +223,76 @@ func (s *Server) handleRemove(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	res, err := s.core.Remove(cfgPath, s.stage(r))
+	var res *RemoveResponse
+	err = s.withProviderCreds(r, func() error {
+		var rerr error
+		res, rerr = s.core.Remove(cfgPath, s.stage(r))
+		return rerr
+	})
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
 	writeRawOK(w, res.Payload)
+}
+
+// providerCredHeaders are per-request cloud credentials app-service forwards so a
+// deploy runs against the project's OWN account, not the daemon's ambient creds.
+var providerCredEnvByHeader = map[string]string{
+	"X-Provider-Aws-Access-Key-Id":     "AWS_ACCESS_KEY_ID",
+	"X-Provider-Aws-Secret-Access-Key": "AWS_SECRET_ACCESS_KEY",
+	"X-Provider-Aws-Session-Token":     "AWS_SESSION_TOKEN",
+	"X-Provider-Aws-Region":            "AWS_REGION",
+}
+
+// withProviderCreds applies any per-request provider credentials to the process
+// env for the duration of fn, then restores the prior env. Serialized by deployMu
+// so concurrent deploys never see each other's credentials.
+func (s *Server) withProviderCreds(r *http.Request, fn func() error) error {
+	creds := map[string]string{}
+	for header, envKey := range providerCredEnvByHeader {
+		if v := strings.TrimSpace(r.Header.Get(header)); v != "" {
+			creds[envKey] = v
+		}
+	}
+	if len(creds) == 0 {
+		return fn()
+	}
+	// Mirror region to AWS_DEFAULT_REGION so the SDK default chain honors it.
+	if region, ok := creds["AWS_REGION"]; ok {
+		creds["AWS_DEFAULT_REGION"] = region
+	}
+
+	s.deployMu.Lock()
+	defer s.deployMu.Unlock()
+
+	// Snapshot the env keys we are about to touch (plus a clean slate for the
+	// credential keys so a partial set never mixes with ambient creds).
+	touched := []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_REGION", "AWS_DEFAULT_REGION"}
+	type prev struct {
+		val string
+		set bool
+	}
+	saved := map[string]prev{}
+	for _, k := range touched {
+		v, ok := os.LookupEnv(k)
+		saved[k] = prev{val: v, set: ok}
+		_ = os.Unsetenv(k)
+	}
+	for k, v := range creds {
+		_ = os.Setenv(k, v)
+	}
+	defer func() {
+		for _, k := range touched {
+			if p := saved[k]; p.set {
+				_ = os.Setenv(k, p.val)
+			} else {
+				_ = os.Unsetenv(k)
+			}
+		}
+	}()
+
+	return fn()
 }
 
 func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
