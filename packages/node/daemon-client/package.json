@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "description": "RunFabric daemon (runfabricd) HTTP client — deploy/remove/plan/validate/resolve/releases with API-key auth and per-request X-Provider-* credentials",
   "files": [
-    "src"
+    "src",
+    "!src/*.test.js"
   ],
   "main": "src/index.js",
   "types": "src/index.d.ts",
@@ -13,6 +14,13 @@
   "scripts": {
     "test": "node --test src/index.test.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/runfabric/runfabric.git",
+    "directory": "packages/node/daemon-client"
+  },
+  "homepage": "https://github.com/runfabric/runfabric/tree/main/packages/node/daemon-client#readme",
+  "bugs": "https://github.com/runfabric/runfabric/issues",
   "keywords": [
     "runfabric",
     "daemon",

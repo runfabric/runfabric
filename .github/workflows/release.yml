@@ -73,11 +73,12 @@ jobs:
           fi
           ls -la packages/node/cli/bin/
 
-      - name: Set package version from tag (CLI + SDK)
+      - name: Set package version from tag (CLI + SDK + daemon-client)
         run: |
           VER="${GITHUB_REF_NAME#v}"
           [ -d packages/node/cli ] && (cd packages/node/cli && npm version --no-git-tag-version "$VER")
           [ -d packages/node/sdk ] && (cd packages/node/sdk && npm version --no-git-tag-version "$VER")
+          [ -d packages/node/daemon-client ] && (cd packages/node/daemon-client && npm version --no-git-tag-version "$VER")
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -92,6 +93,14 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish @runfabric/sdk to npm
         working-directory: packages/node/sdk
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Test @runfabric/daemon-client
+        working-directory: packages/node/daemon-client
+        run: npm test
+      - name: Publish @runfabric/daemon-client to npm
+        working-directory: packages/node/daemon-client
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
