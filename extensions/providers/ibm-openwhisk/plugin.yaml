@@ -10,4 +10,13 @@ capabilities: [doctor, plan, deploy, remove, invoke, logs]
 supportsRuntime: [nodejs, python]
 supportsTriggers: [http]
 supportsResources: []
+credentials:
+  - envKey: IBM_OPENWHISK_AUTH
+    header: X-Provider-Ibm-Auth
+    required: true
+  - envKey: IBM_OPENWHISK_API_HOST
+    header: X-Provider-Ibm-Api-Host
+    placeholder: "https://us-south.functions.cloud.ibm.com"
+  - envKey: IBM_OPENWHISK_NAMESPACE
+    header: X-Provider-Ibm-Namespace
 permissions: { fs: true, env: true, network: true, cloud: true }

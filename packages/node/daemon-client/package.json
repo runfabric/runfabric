@@ -1,0 +1,29 @@
+{
+  "name": "@runfabric/daemon-client",
+  "version": "0.1.0",
+  "description": "RunFabric daemon (runfabricd) HTTP client — deploy/remove/plan/validate/resolve/releases with API-key auth and per-request X-Provider-* credentials",
+  "files": [
+    "src"
+  ],
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test src/index.test.js"
+  },
+  "keywords": [
+    "runfabric",
+    "daemon",
+    "runfabricd",
+    "serverless",
+    "deploy"
+  ],
+  "author": "RunFabric",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  }
+}

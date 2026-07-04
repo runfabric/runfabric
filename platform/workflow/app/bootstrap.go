@@ -799,6 +799,10 @@ func backendOptionsFromConfigAndEnv(cfg *config.Config, rootDir, kindOverride st
 	s3Bucket := os.Getenv("RUNFABRIC_S3_BUCKET")
 	s3Prefix := os.Getenv("RUNFABRIC_S3_PREFIX")
 	dynamoTable := os.Getenv("RUNFABRIC_DYNAMODB_TABLE")
+	gcsBucket := os.Getenv("RUNFABRIC_GCS_BUCKET")
+	gcsPrefix := os.Getenv("RUNFABRIC_GCS_PREFIX")
+	azblobContainer := os.Getenv("RUNFABRIC_AZBLOB_CONTAINER")
+	azblobPrefix := os.Getenv("RUNFABRIC_AZBLOB_PREFIX")
 	postgresDSN := ""
 	postgresTable := "runfabric_receipts"
 	sqlitePath := ".runfabric/state.db"
@@ -831,8 +835,28 @@ func backendOptionsFromConfigAndEnv(cfg *config.Config, rootDir, kindOverride st
 			sqlitePath = ".runfabric/state.db"
 		}
 		receiptTable = cfg.Backend.ReceiptTable
-		if cfg.Backend.Kind == "postgres" && cfg.Backend.PostgresConnectionStringEnv != "" {
-			postgresDSN = os.Getenv(cfg.Backend.PostgresConnectionStringEnv)
+		if cfg.Backend.Kind == "postgres" {
+			// A custom postgresConnectionStringEnv is an ADDITIONAL alias; the
+			// default key always works so per-request X-State-Postgres-Url
+			// credentials (which target the default) are never silently lost.
+			if cfg.Backend.PostgresConnectionStringEnv != "" {
+				postgresDSN = os.Getenv(cfg.Backend.PostgresConnectionStringEnv)
+			}
+			if postgresDSN == "" {
+				postgresDSN = os.Getenv("RUNFABRIC_STATE_POSTGRES_URL")
+			}
+		}
+		if cfg.Backend.GCSBucket != "" {
+			gcsBucket = cfg.Backend.GCSBucket
+		}
+		if cfg.Backend.GCSPrefix != "" {
+			gcsPrefix = cfg.Backend.GCSPrefix
+		}
+		if cfg.Backend.AzblobContainer != "" {
+			azblobContainer = cfg.Backend.AzblobContainer
+		}
+		if cfg.Backend.AzblobPrefix != "" {
+			azblobPrefix = cfg.Backend.AzblobPrefix
 		}
 	}
 	if kindOverride != "" {
@@ -849,5 +873,9 @@ func backendOptionsFromConfigAndEnv(cfg *config.Config, rootDir, kindOverride st
 		PostgresTable:   postgresTable,
 		SqlitePath:      sqlitePath,
 		ReceiptTable:    receiptTable,
+		GCSBucket:       gcsBucket,
+		GCSPrefix:       gcsPrefix,
+		AzblobContainer: azblobContainer,
+		AzblobPrefix:    azblobPrefix,
 	}
 }

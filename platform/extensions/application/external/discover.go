@@ -50,6 +50,13 @@ type pluginYAML struct {
 		Network bool `yaml:"network"`
 		Cloud   bool `yaml:"cloud"`
 	} `yaml:"permissions"`
+	Credentials []struct {
+		EnvKey      string `yaml:"envKey"`
+		Header      string `yaml:"header"`
+		Required    bool   `yaml:"required"`
+		Mirror      string `yaml:"mirror"`
+		Placeholder string `yaml:"placeholder"`
+	} `yaml:"credentials"`
 }
 
 type InvalidPlugin struct {
@@ -346,6 +353,16 @@ func discoverKindDir(kindRoot string, kind manifests.PluginKind, opts DiscoverOp
 			continue
 		}
 
+		credentials := make([]manifests.CredentialSpec, 0, len(m.Credentials))
+		for _, c := range m.Credentials {
+			credentials = append(credentials, manifests.CredentialSpec{
+				EnvKey:      c.EnvKey,
+				Header:      c.Header,
+				Required:    c.Required,
+				Mirror:      c.Mirror,
+				Placeholder: c.Placeholder,
+			})
+		}
 		out = append(out, &manifests.PluginManifest{
 			ID:                m.ID,
 			Kind:              kind,
@@ -356,6 +373,7 @@ func discoverKindDir(kindRoot string, kind manifests.PluginKind, opts DiscoverOp
 			SupportsRuntime:   append([]string(nil), m.SupportsRuntime...),
 			SupportsTriggers:  append([]string(nil), m.SupportsTriggers...),
 			SupportsResources: append([]string(nil), m.SupportsResources...),
+			Credentials:       credentials,
 			Source:            "external",
 			Version:           m.Version,
 			Path:              bestPath,

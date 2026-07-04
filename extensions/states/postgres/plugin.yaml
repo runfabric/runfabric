@@ -9,6 +9,11 @@ executable: ./bin/postgres-state
 capabilities:
   - state:postgres
   - backend:postgres
+credentials:
+  - envKey: RUNFABRIC_STATE_POSTGRES_URL
+    header: X-State-Postgres-Url
+    required: true
+    placeholder: "postgres://user:pass@localhost:5432/runfabric"
 permissions:
   fs: true
   env: true

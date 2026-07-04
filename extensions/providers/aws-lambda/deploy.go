@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,6 +63,24 @@ func (p *Provider) Deploy(ctx context.Context, req sdkprovider.DeployRequest) (*
 
 	result := sdkprovider.BuildDeployResult(ProviderID, cfg, stage)
 	result.Outputs["region"] = region
+
+	// Surface the bundle size in the receipt so users can spot regressions
+	// early; one zip is shared by every function in the deploy.
+	zipSize := int64(len(zipBytes))
+	result.Outputs["bundle_zip_bytes"] = strconv.FormatInt(zipSize, 10)
+	for i := range result.Artifacts {
+		result.Artifacts[i].SizeBytes = zipSize
+	}
+
+	// Bundles past the Lambda inline cap are uploaded to S3 and referenced.
+	code, err := resolveCodeRef(ctx, clients, service, stage, region, zipBytes)
+	if err != nil {
+		return nil, err
+	}
+	if !code.inline() {
+		result.Outputs["code_s3_uri"] = "s3://" + code.s3Bucket + "/" + code.s3Key
+	}
+
 	enableFunctionURL := functionURLEnabled(cfg)
 
 	functions := sdkprovider.Functions(cfg)
@@ -95,7 +114,7 @@ func (p *Provider) Deploy(ctx context.Context, req sdkprovider.DeployRequest) (*
 			memory:       memory,
 			timeout:      timeout,
 			environment:  fn.Environment,
-			zipBytes:     zipBytes,
+			code:         code,
 		}); err != nil {
 			return nil, err
 		}
@@ -171,14 +190,23 @@ type lambdaDeployInput struct {
 	memory       int32
 	timeout      int32
 	environment  map[string]string
-	zipBytes     []byte
+	code         codeRef
 }
 
 func deployLambdaFunction(ctx context.Context, clients *AWSClients, in lambdaDeployInput) error {
-	_, updateErr := clients.Lambda.UpdateFunctionCode(ctx, &lambdav2.UpdateFunctionCodeInput{
-		FunctionName: awssdk.String(in.functionName),
-		ZipFile:      in.zipBytes,
-	})
+	updateIn := &lambdav2.UpdateFunctionCodeInput{FunctionName: awssdk.String(in.functionName)}
+	fnCode := &lambdatypes.FunctionCode{}
+	if in.code.inline() {
+		updateIn.ZipFile = in.code.zipBytes
+		fnCode.ZipFile = in.code.zipBytes
+	} else {
+		updateIn.S3Bucket = awssdk.String(in.code.s3Bucket)
+		updateIn.S3Key = awssdk.String(in.code.s3Key)
+		fnCode.S3Bucket = awssdk.String(in.code.s3Bucket)
+		fnCode.S3Key = awssdk.String(in.code.s3Key)
+	}
+
+	_, updateErr := clients.Lambda.UpdateFunctionCode(ctx, updateIn)
 	if updateErr != nil {
 		if !isLambdaNotFound(updateErr) {
 			return fmt.Errorf("UpdateFunctionCode %s: %w", in.functionName, updateErr)
@@ -189,7 +217,7 @@ func deployLambdaFunction(ctx context.Context, clients *AWSClients, in lambdaDep
 			Handler:      awssdk.String(in.handler),
 			Role:         awssdk.String(in.roleARN),
 			Environment:  lambdaEnvironment(in.environment),
-			Code:         &lambdatypes.FunctionCode{ZipFile: in.zipBytes},
+			Code:         fnCode,
 			Timeout:      awssdk.Int32(in.timeout),
 			MemorySize:   awssdk.Int32(in.memory),
 		}); createErr != nil {

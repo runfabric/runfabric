@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
+	azblobbackend "github.com/runfabric/runfabric/extensions/states/azblob"
 	dynbackend "github.com/runfabric/runfabric/extensions/states/dynamodb"
+	gcsbackend "github.com/runfabric/runfabric/extensions/states/gcs"
 	localbackend "github.com/runfabric/runfabric/extensions/states/local"
 	pgbackend "github.com/runfabric/runfabric/extensions/states/postgres"
 	s3backend "github.com/runfabric/runfabric/extensions/states/s3"
@@ -23,6 +25,8 @@ func init() {
 	catalog.RegisterStateBackendFactory("sqlite", sqliteStateComponents)
 	catalog.RegisterStateBackendFactory("dynamodb", dynamoDBStateComponents)
 	catalog.RegisterStateBackendFactory("s3", s3StateComponents)
+	catalog.RegisterStateBackendFactory("gcs", gcsStateComponents)
+	catalog.RegisterStateBackendFactory("azblob", azblobStateComponents)
 }
 
 func localStateComponents(_ context.Context, opts catalog.StateBackendOptions) (*catalog.StateBundleComponents, error) {
@@ -102,6 +106,40 @@ func s3StateComponents(ctx context.Context, opts catalog.StateBackendOptions) (*
 		Locks:    &lockBackendAdapter{inner: lockBackend},
 		Journals: &journalBackendAdapter{inner: journalBackend},
 		Receipts: &receiptBackendAdapter{inner: receiptBackend},
+	}, nil
+}
+
+func gcsStateComponents(_ context.Context, opts catalog.StateBackendOptions) (*catalog.StateBundleComponents, error) {
+	if opts.GCSBucket == "" {
+		return nil, fmt.Errorf("backend.gcsBucket required for kind gcs")
+	}
+	client, err := gcsbackend.New(opts.GCSBucket, opts.GCSPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("init gcs receipts: %w", err)
+	}
+	lockBackend := localbackend.NewLockBackend(opts.Root)
+	journalBackend := localbackend.NewJournalBackend(opts.Root)
+	return &catalog.StateBundleComponents{
+		Locks:    &lockBackendAdapter{inner: lockBackend},
+		Journals: &journalBackendAdapter{inner: journalBackend},
+		Receipts: &receiptBackendAdapter{inner: gcsbackend.NewReceiptBackend(client)},
+	}, nil
+}
+
+func azblobStateComponents(_ context.Context, opts catalog.StateBackendOptions) (*catalog.StateBundleComponents, error) {
+	if opts.AzblobContainer == "" {
+		return nil, fmt.Errorf("backend.azblobContainer required for kind azblob")
+	}
+	client, err := azblobbackend.New(opts.AzblobContainer, opts.AzblobPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("init azblob receipts: %w", err)
+	}
+	lockBackend := localbackend.NewLockBackend(opts.Root)
+	journalBackend := localbackend.NewJournalBackend(opts.Root)
+	return &catalog.StateBundleComponents{
+		Locks:    &lockBackendAdapter{inner: lockBackend},
+		Journals: &journalBackendAdapter{inner: journalBackend},
+		Receipts: &receiptBackendAdapter{inner: azblobbackend.NewReceiptBackend(client)},
 	}, nil
 }
 

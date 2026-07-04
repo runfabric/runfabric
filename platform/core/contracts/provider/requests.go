@@ -6,6 +6,22 @@ import (
 	"github.com/runfabric/runfabric/platform/core/model/config"
 )
 
+// CredentialVar is one credential environment variable a provider declares.
+// Hosts derive env requirements (doctor), .env scaffolding, and the daemon's
+// per-request X-Provider-* header mapping from these declarations.
+type CredentialVar struct {
+	// EnvKey is the process environment variable the provider reads.
+	EnvKey string
+	// Header is the daemon's per-request header (X-Provider-*); empty = env-only.
+	Header string
+	// Required marks variables the provider hard-fails without at deploy time.
+	Required bool
+	// Mirror is an env key kept in lockstep with EnvKey (set/cleared together).
+	Mirror string
+	// Placeholder is an example value for generated .env scaffolding.
+	Placeholder string
+}
+
 // ProviderMeta is the plugin metadata returned by ProviderPlugin.Meta().
 type ProviderMeta struct {
 	Name              string
@@ -15,6 +31,7 @@ type ProviderMeta struct {
 	SupportsRuntime   []string
 	SupportsTriggers  []string
 	SupportsResources []string
+	Credentials       []CredentialVar
 }
 
 // ValidateConfigRequest is the input to ValidateConfig.

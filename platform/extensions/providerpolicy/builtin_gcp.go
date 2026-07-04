@@ -19,6 +19,7 @@ func init() {
 			Name:                   "GCP Cloud Functions",
 			Description:            "Deploy and run functions on GCP Cloud Functions Gen 2",
 			IncludeBuiltinManifest: true,
+			Credentials:            toCredentialVars(gcpprovider.CredentialVars),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream:      adaptPrepareDevStream(gcpprovider.PrepareDevStreamPolicy),

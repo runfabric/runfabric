@@ -10,6 +10,12 @@ capabilities: [doctor, plan, deploy, remove, invoke, logs]
 supportsRuntime: [nodejs, python]
 supportsTriggers: [http]
 supportsResources: []
+credentials:
+  - envKey: VERCEL_TOKEN
+    header: X-Provider-Vercel-Token
+    required: true
+  - envKey: VERCEL_TEAM_ID
+    header: X-Provider-Vercel-Team-Id
 permissions:
   fs: true
   env: true

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/runfabric/runfabric/plugin-sdk/go/gcpauth"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
@@ -34,6 +35,8 @@ func (Runner) SyncOrchestrations(ctx context.Context, req sdkprovider.Orchestrat
 	if region == "" {
 		region = "us-central1"
 	}
+	// Best-effort: mint GCP_ACCESS_TOKEN from GOOGLE_APPLICATION_CREDENTIALS when unset.
+	_ = gcpauth.EnsureAccessToken(ctx)
 	token := strings.TrimSpace(sdkprovider.Env("GCP_ACCESS_TOKEN"))
 	if token == "" {
 		return nil, fmt.Errorf("GCP_ACCESS_TOKEN is required for cloud workflows")
@@ -107,6 +110,8 @@ func (Runner) RemoveOrchestrations(ctx context.Context, req sdkprovider.Orchestr
 	if region == "" {
 		region = "us-central1"
 	}
+	// Best-effort: mint GCP_ACCESS_TOKEN from GOOGLE_APPLICATION_CREDENTIALS when unset.
+	_ = gcpauth.EnsureAccessToken(ctx)
 	token := strings.TrimSpace(sdkprovider.Env("GCP_ACCESS_TOKEN"))
 	if project == "" || token == "" {
 		return &sdkprovider.OrchestrationSyncResult{}, nil
@@ -152,6 +157,8 @@ func (Runner) InvokeOrchestration(ctx context.Context, req sdkprovider.Orchestra
 	if region == "" {
 		region = "us-central1"
 	}
+	// Best-effort: mint GCP_ACCESS_TOKEN from GOOGLE_APPLICATION_CREDENTIALS when unset.
+	_ = gcpauth.EnsureAccessToken(ctx)
 	token := strings.TrimSpace(sdkprovider.Env("GCP_ACCESS_TOKEN"))
 	if token == "" {
 		return nil, fmt.Errorf("GCP_ACCESS_TOKEN is required for cloud workflows")
@@ -213,6 +220,8 @@ func (Runner) InspectOrchestrations(ctx context.Context, req sdkprovider.Orchest
 	if region == "" {
 		region = "us-central1"
 	}
+	// Best-effort: mint GCP_ACCESS_TOKEN from GOOGLE_APPLICATION_CREDENTIALS when unset.
+	_ = gcpauth.EnsureAccessToken(ctx)
 	token := strings.TrimSpace(sdkprovider.Env("GCP_ACCESS_TOKEN"))
 	items := make([]map[string]any, 0, len(decls))
 	if project == "" || token == "" {

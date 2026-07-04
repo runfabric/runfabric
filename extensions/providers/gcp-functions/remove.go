@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/runfabric/runfabric/plugin-sdk/go/gcpauth"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
@@ -24,6 +25,8 @@ func (Remover) Remove(ctx context.Context, cfg sdkprovider.Config, stage, root s
 	if rv.Outputs["region"] != "" {
 		region = rv.Outputs["region"]
 	}
+	// Best-effort: mint GCP_ACCESS_TOKEN from GOOGLE_APPLICATION_CREDENTIALS when unset.
+	_ = gcpauth.EnsureAccessToken(ctx)
 	if project == "" || sdkprovider.Env("GCP_ACCESS_TOKEN") == "" {
 		return &sdkprovider.RemoveResult{Provider: "gcp-functions", Removed: true}, nil
 	}

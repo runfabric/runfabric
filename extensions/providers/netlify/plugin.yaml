@@ -10,6 +10,12 @@ capabilities: [doctor, plan, deploy, remove, invoke, logs]
 supportsRuntime: [nodejs, python]
 supportsTriggers: [http]
 supportsResources: []
+credentials:
+  - envKey: NETLIFY_AUTH_TOKEN
+    header: X-Provider-Netlify-Auth-Token
+    required: true
+  - envKey: NETLIFY_SITE_ID
+    header: X-Provider-Netlify-Site-Id
 permissions:
   fs: true
   env: true

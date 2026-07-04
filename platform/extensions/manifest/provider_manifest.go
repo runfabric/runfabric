@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )
 
 // PluginKind is the type of a RunFabric plugin (provider, runtime, simulator, router, secret-manager, or state).
@@ -51,6 +52,37 @@ func IsSupportedPluginKind(kind PluginKind) bool {
 	}
 }
 
+// CredentialSpec declares one credential environment variable a plugin reads.
+// External plugins declare these in plugin.yaml; built-ins declare them in
+// code (CredentialVars). Hosts derive doctor checks, .env scaffolding, and the
+// daemon's per-request X-Provider-* header mapping from them.
+type CredentialSpec struct {
+	EnvKey      string `json:"envKey"`
+	Header      string `json:"header,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+	Mirror      string `json:"mirror,omitempty"`
+	Placeholder string `json:"placeholder,omitempty"`
+}
+
+// CredentialSpecs converts providerpolicy catalog credential declarations
+// into manifest specs.
+func CredentialSpecs(creds []catalog.CredentialVar) []CredentialSpec {
+	if len(creds) == 0 {
+		return nil
+	}
+	out := make([]CredentialSpec, 0, len(creds))
+	for _, c := range creds {
+		out = append(out, CredentialSpec{
+			EnvKey:      c.EnvKey,
+			Header:      c.Header,
+			Required:    c.Required,
+			Mirror:      c.Mirror,
+			Placeholder: c.Placeholder,
+		})
+	}
+	return out
+}
+
 // Permissions describes what a plugin or addon is allowed to access (for validation and UX).
 type Permissions struct {
 	FS      bool `json:"fs,omitempty"`
@@ -61,15 +93,16 @@ type Permissions struct {
 
 // PluginManifest describes a RunFabric Plugin (provider, runtime, simulator, router, secret-manager, state) for list/info/search.
 type PluginManifest struct {
-	ID                string      `json:"id"`
-	Kind              PluginKind  `json:"kind"`
-	Name              string      `json:"name,omitempty"`
-	Description       string      `json:"description,omitempty"`
-	Permissions       Permissions `json:"permissions,omitempty"`
-	Capabilities      []string    `json:"capabilities,omitempty"`
-	SupportsRuntime   []string    `json:"supportsRuntime,omitempty"`
-	SupportsTriggers  []string    `json:"supportsTriggers,omitempty"`
-	SupportsResources []string    `json:"supportsResources,omitempty"`
+	ID                string           `json:"id"`
+	Kind              PluginKind       `json:"kind"`
+	Name              string           `json:"name,omitempty"`
+	Description       string           `json:"description,omitempty"`
+	Permissions       Permissions      `json:"permissions,omitempty"`
+	Capabilities      []string         `json:"capabilities,omitempty"`
+	SupportsRuntime   []string         `json:"supportsRuntime,omitempty"`
+	SupportsTriggers  []string         `json:"supportsTriggers,omitempty"`
+	SupportsResources []string         `json:"supportsResources,omitempty"`
+	Credentials       []CredentialSpec `json:"credentials,omitempty"`
 
 	// Optional metadata for external plugins (Phase 15b). Built-ins omit these fields.
 	Source     string `json:"source,omitempty"`     // builtin | external
@@ -116,6 +149,7 @@ func builtinPluginManifests() []*PluginManifest {
 			Kind:        KindProvider,
 			Name:        p.Name,
 			Description: p.Description,
+			Credentials: CredentialSpecs(p.Credentials),
 		})
 	}
 	return list

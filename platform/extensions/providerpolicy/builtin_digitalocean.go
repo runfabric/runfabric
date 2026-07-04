@@ -19,6 +19,7 @@ func init() {
 			Name:                   "DigitalOcean Functions",
 			Description:            "Deploy and run functions on DigitalOcean App Platform",
 			IncludeBuiltinManifest: true,
+			Credentials:            toCredentialVars(digitaloceanprovider.CredentialVars),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream: adaptPrepareDevStream(digitaloceanprovider.PrepareDevStreamPolicy),

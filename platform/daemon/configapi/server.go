@@ -9,9 +9,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )
 
 // rateWindow is the sliding window over which RateLimitN requests are allowed.
@@ -236,39 +240,108 @@ func (s *Server) handleRemove(w http.ResponseWriter, r *http.Request) {
 	writeRawOK(w, res.Payload)
 }
 
-// providerCredHeaders are per-request cloud credentials app-service forwards so a
-// deploy runs against the project's OWN account, not the daemon's ambient creds.
-var providerCredEnvByHeader = map[string]string{
-	"X-Provider-Aws-Access-Key-Id":     "AWS_ACCESS_KEY_ID",
-	"X-Provider-Aws-Secret-Access-Key": "AWS_SECRET_ACCESS_KEY",
-	"X-Provider-Aws-Session-Token":     "AWS_SESSION_TOKEN",
-	"X-Provider-Aws-Region":            "AWS_REGION",
+// providerCredGroup maps request headers to env keys for ONE provider. When any
+// header of a group is present, the group's FULL env-key set is cleared before
+// the request's values are applied, so a partial set never mixes with the
+// daemon's ambient credentials for that provider.
+type providerCredGroup struct {
+	headerToEnv map[string]string
+	// mirrors maps an env key to a second key kept in lockstep with it
+	// (e.g. AWS_REGION → AWS_DEFAULT_REGION for the SDK default chain).
+	mirrors map[string]string
+	// Extra env keys cleared/restored alongside the mapped ones.
+	alsoTouch []string
+}
+
+// Per-request credentials app-service forwards so a deploy runs against the
+// project's OWN accounts, not the daemon's ambient creds. One group per
+// hostable provider (X-Provider-*) plus one per state backend that accepts
+// per-request secrets (X-State-*), all derived from the plugins' own
+// CredentialVars declarations (the plugin is the single source of truth).
+// Vars declared without a Header (e.g. kubernetes' file-based KUBECONFIG, or
+// bucket names that ride the manifest) get no group entry, and linode
+// declares none — matching the prior hardcoded exclusions.
+var providerCredGroups = buildAllCredGroups()
+
+func buildAllCredGroups() []providerCredGroup {
+	var groups []providerCredGroup
+	for _, d := range providerpolicy.All() {
+		if g, ok := credGroupOf(d.Credentials); ok {
+			groups = append(groups, g)
+		}
+	}
+	// Deterministic order for the state groups (map iteration is random).
+	stateCreds := providerpolicy.AllStateBackendCredentials()
+	kinds := make([]string, 0, len(stateCreds))
+	for kind := range stateCreds {
+		kinds = append(kinds, kind)
+	}
+	sort.Strings(kinds)
+	for _, kind := range kinds {
+		if g, ok := credGroupOf(stateCreds[kind]); ok {
+			groups = append(groups, g)
+		}
+	}
+	return groups
+}
+
+func credGroupOf(creds []catalog.CredentialVar) (providerCredGroup, bool) {
+	g := providerCredGroup{headerToEnv: map[string]string{}, mirrors: map[string]string{}}
+	for _, c := range creds {
+		if c.Header == "" {
+			continue
+		}
+		g.headerToEnv[c.Header] = c.EnvKey
+		if c.Mirror != "" {
+			g.mirrors[c.EnvKey] = c.Mirror
+			g.alsoTouch = append(g.alsoTouch, c.Mirror)
+		}
+	}
+	return g, len(g.headerToEnv) > 0
+}
+
+// collectProviderCreds gathers per-request credentials from headers plus the
+// full set of env keys to snapshot/clear (every key of each ACTIVE group).
+func collectProviderCreds(header http.Header) (creds map[string]string, touched []string) {
+	creds = map[string]string{}
+	for _, group := range providerCredGroups {
+		active := false
+		for h, envKey := range group.headerToEnv {
+			if v := strings.TrimSpace(header.Get(h)); v != "" {
+				creds[envKey] = v
+				active = true
+			}
+		}
+		if !active {
+			continue
+		}
+		for _, envKey := range group.headerToEnv {
+			touched = append(touched, envKey)
+		}
+		touched = append(touched, group.alsoTouch...)
+		// Declared mirrors keep alternate spellings in lockstep (e.g.
+		// AWS_REGION → AWS_DEFAULT_REGION, GCP_PROJECT → GCP_PROJECT_ID).
+		for envKey, mirror := range group.mirrors {
+			if v, ok := creds[envKey]; ok {
+				creds[mirror] = v
+			}
+		}
+	}
+	return creds, touched
 }
 
 // withProviderCreds applies any per-request provider credentials to the process
 // env for the duration of fn, then restores the prior env. Serialized by deployMu
 // so concurrent deploys never see each other's credentials.
 func (s *Server) withProviderCreds(r *http.Request, fn func() error) error {
-	creds := map[string]string{}
-	for header, envKey := range providerCredEnvByHeader {
-		if v := strings.TrimSpace(r.Header.Get(header)); v != "" {
-			creds[envKey] = v
-		}
-	}
+	creds, touched := collectProviderCreds(r.Header)
 	if len(creds) == 0 {
 		return fn()
-	}
-	// Mirror region to AWS_DEFAULT_REGION so the SDK default chain honors it.
-	if region, ok := creds["AWS_REGION"]; ok {
-		creds["AWS_DEFAULT_REGION"] = region
 	}
 
 	s.deployMu.Lock()
 	defer s.deployMu.Unlock()
 
-	// Snapshot the env keys we are about to touch (plus a clean slate for the
-	// credential keys so a partial set never mixes with ambient creds).
-	touched := []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_REGION", "AWS_DEFAULT_REGION"}
 	type prev struct {
 		val string
 		set bool

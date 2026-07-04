@@ -10,6 +10,13 @@ capabilities: [doctor, plan, deploy, remove, invoke, logs]
 supportsRuntime: [nodejs, python]
 supportsTriggers: [http]
 supportsResources: []
+credentials:
+  - envKey: CLOUDFLARE_ACCOUNT_ID
+    header: X-Provider-Cloudflare-Account-Id
+    required: true
+  - envKey: CLOUDFLARE_API_TOKEN
+    header: X-Provider-Cloudflare-Api-Token
+    required: true
 permissions:
   fs: true
   env: true

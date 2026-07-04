@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/runfabric/runfabric/plugin-sdk/go/gcpauth"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
@@ -40,6 +41,8 @@ func RedirectToTunnel(ctx context.Context, cfg sdkprovider.Config, stage, tunnel
 	if cfg == nil || stage == "" || tunnelURL == "" {
 		return nil, fmt.Errorf("config, stage, and tunnel URL required")
 	}
+	// Best-effort: mint GCP_ACCESS_TOKEN from GOOGLE_APPLICATION_CREDENTIALS when unset.
+	_ = gcpauth.EnsureAccessToken(ctx)
 	token := sdkprovider.Env("GCP_ACCESS_TOKEN")
 	project := sdkprovider.Env("GCP_PROJECT")
 	if project == "" {
@@ -193,6 +196,8 @@ func (s *DevStreamState) Restore(ctx context.Context, region string) error {
 	if !s.Applied || s.FunctionResource == "" {
 		return nil
 	}
+	// Best-effort: mint GCP_ACCESS_TOKEN from GOOGLE_APPLICATION_CREDENTIALS when unset.
+	_ = gcpauth.EnsureAccessToken(ctx)
 	token := sdkprovider.Env("GCP_ACCESS_TOKEN")
 	if token == "" {
 		return nil

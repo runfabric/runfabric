@@ -10,6 +10,20 @@ capabilities: [doctor, plan, deploy, remove, invoke, logs]
 supportsRuntime: [nodejs, python]
 supportsTriggers: [http]
 supportsResources: []
+credentials:
+  - envKey: GCP_ACCESS_TOKEN
+    header: X-Provider-Gcp-Access-Token
+  - envKey: GOOGLE_APPLICATION_CREDENTIALS
+    placeholder: "/path/to/service-account.json"
+  - envKey: GCP_PROJECT
+    header: X-Provider-Gcp-Project
+    required: true
+    mirror: GCP_PROJECT_ID
+  - envKey: GCP_UPLOAD_BUCKET
+    header: X-Provider-Gcp-Upload-Bucket
+  - envKey: GCP_REGION
+    header: X-Provider-Gcp-Region
+    placeholder: "us-central1"
 permissions:
   fs: true
   env: true

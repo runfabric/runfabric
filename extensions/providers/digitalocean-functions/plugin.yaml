@@ -10,6 +10,17 @@ capabilities: [doctor, plan, deploy, remove, invoke, logs]
 supportsRuntime: [nodejs, python]
 supportsTriggers: [http]
 supportsResources: []
+credentials:
+  - envKey: DIGITALOCEAN_ACCESS_TOKEN
+    header: X-Provider-Digitalocean-Access-Token
+    required: true
+  - envKey: DO_APP_REPO
+    header: X-Provider-Digitalocean-App-Repo
+    required: true
+    placeholder: "owner/repo"
+  - envKey: DO_REGION
+    header: X-Provider-Digitalocean-Region
+    placeholder: "nyc"
 permissions:
   fs: true
   env: true

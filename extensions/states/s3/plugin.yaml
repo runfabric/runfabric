@@ -9,6 +9,11 @@ executable: ./bin/s3-state
 capabilities:
   - state:s3
   - backend:s3
+credentials:
+  - envKey: RUNFABRIC_S3_BUCKET
+    required: true
+  - envKey: RUNFABRIC_S3_PREFIX
+  - envKey: RUNFABRIC_DYNAMODB_TABLE
 permissions:
   fs: true
   env: true

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/runfabric/runfabric/plugin-sdk/go/gcpauth"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
@@ -30,8 +31,10 @@ func (r Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root 
 	if service == "" {
 		return nil, fmt.Errorf("invalid config")
 	}
-	if sdkprovider.Env("GCP_ACCESS_TOKEN") == "" {
-		return nil, fmt.Errorf("GCP_ACCESS_TOKEN is required (e.g. from gcloud auth print-access-token or a service account)")
+	// Resolves GCP_ACCESS_TOKEN from the env or a GOOGLE_APPLICATION_CREDENTIALS
+	// service-account key (minted + auto-refreshed by the plugin SDK).
+	if err := gcpauth.EnsureAccessToken(ctx); err != nil {
+		return nil, fmt.Errorf("gcp credentials: %w", err)
 	}
 	project := sdkprovider.Env("GCP_PROJECT")
 	if project == "" {
@@ -60,12 +63,18 @@ func (r Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root 
 		return nil, fmt.Errorf("GCP Cloud Functions requires source in GCS: set GCP_SOURCE_BUCKET and GCP_SOURCE_OBJECT, or set GCP_UPLOAD_BUCKET to auto-upload from project root")
 	}
 
+	defaultRuntime := normalizeGcpRuntime(sdkprovider.ProviderRuntime(cfg))
+
 	result := sdkprovider.BuildDeployResult(ProviderID, cfg, stage)
 	result.Outputs["region"] = region
 	for fnName, fn := range sdkprovider.Functions(cfg) {
 		entryPoint := "handler"
 		if fn.Handler != "" {
 			entryPoint = strings.Split(fn.Handler, ".")[0]
+		}
+		runtime := defaultRuntime
+		if fn.Runtime != "" {
+			runtime = normalizeGcpRuntime(fn.Runtime)
 		}
 		funcName := fmt.Sprintf("%s-%s-%s", service, stage, fnName)
 		parent := fmt.Sprintf("projects/%s/locations/%s", project, region)
@@ -75,7 +84,7 @@ func (r Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root 
 			"name":        resourceName,
 			"environment": "GEN_2",
 			"buildConfig": map[string]any{
-				"runtime":    "nodejs20",
+				"runtime":    runtime,
 				"entryPoint": entryPoint,
 				"source": map[string]any{
 					"storageSource": map[string]any{
@@ -187,4 +196,26 @@ func uploadZipToGCS(ctx context.Context, root, bucket, objectName string) error 
 		return fmt.Errorf("GCS upload: %s: %s", resp.Status, string(body))
 	}
 	return nil
+}
+
+// normalizeGcpRuntime maps short/other-cloud runtime names onto Cloud Functions
+// gen-2 runtime ids (e.g. nodejs → nodejs20, nodejs20.x → nodejs20,
+// python/python3.12 → python312, go → go121). Unknown values pass through so
+// explicit GCP runtime ids keep working.
+func normalizeGcpRuntime(runtime string) string {
+	rt := strings.ToLower(strings.TrimSpace(runtime))
+	rt = strings.TrimSuffix(rt, ".x")
+	switch {
+	case rt == "" || rt == "nodejs" || rt == "node":
+		return "nodejs20"
+	case rt == "python":
+		return "python312"
+	case rt == "go" || rt == "golang":
+		return "go121"
+	case strings.HasPrefix(rt, "python3."):
+		// python3.12 → python312
+		return "python" + strings.ReplaceAll(strings.TrimPrefix(rt, "python"), ".", "")
+	default:
+		return rt
+	}
 }

@@ -12,4 +12,9 @@ type Options struct {
 	PostgresTable string
 	SqlitePath    string
 	ReceiptTable  string // DynamoDB table for receipts; if empty and Kind==dynamodb, use DynamoTableName
+	// Object-store receipt backends (gcs/azblob): bucket/container + key prefix.
+	GCSBucket       string
+	GCSPrefix       string
+	AzblobContainer string
+	AzblobPrefix    string
 }

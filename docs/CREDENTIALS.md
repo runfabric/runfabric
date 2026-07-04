@@ -85,31 +85,52 @@ Per-provider real mode flag:
 
 ## Provider Credential Matrix
 
-| Provider                 | Required Credentials                                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `aws-lambda`             | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`                                                   |
-| `gcp-functions`          | `GCP_PROJECT_ID`, `GCP_SERVICE_ACCOUNT_KEY`                                                                  |
-| `azure-functions`        | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` |
-| `kubernetes`             | `KUBECONFIG`, `KUBE_CONTEXT`, `KUBE_NAMESPACE`                                                               |
-| `cloudflare-workers`     | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`                                                              |
-| `vercel`                 | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`                                                         |
-| `netlify`                | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`                                                                      |
-| `alibaba-fc`             | `ALICLOUD_ACCESS_KEY_ID`, `ALICLOUD_ACCESS_KEY_SECRET`, `ALICLOUD_REGION`                                    |
-| `digitalocean-functions` | `DIGITALOCEAN_ACCESS_TOKEN`, `DIGITALOCEAN_NAMESPACE`                                                        |
-| `fly-machines`           | `FLY_API_TOKEN`, `FLY_APP_NAME`                                                                              |
-| `ibm-openwhisk`          | `IBM_CLOUD_API_KEY`, `IBM_CLOUD_REGION`, `IBM_CLOUD_NAMESPACE`                                               |
+Each provider declares its credential env vars in code (`CredentialVars` in
+`extensions/providers/<id>/credentials.go`) and mirrors them in its
+`plugin.yaml` (`credentials:`). The CLI doctor, `.env.example` scaffolding, and
+the daemon's per-request `X-Provider-*` header mapping all derive from that
+single declaration.
+
+| Provider                 | Required                                                                    | Optional                                                     |
+| ------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `aws-lambda`             | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`                  | `AWS_SESSION_TOKEN` (SDK default chain also works)           |
+| `gcp-functions`          | `GCP_PROJECT` (or `GCP_PROJECT_ID`); auth: `GCP_ACCESS_TOKEN` OR `GOOGLE_APPLICATION_CREDENTIALS` (service-account key, auto-refreshed) | `GCP_UPLOAD_BUCKET`, `GCP_REGION`                             |
+| `azure-functions`        | `AZURE_ACCESS_TOKEN`, `AZURE_SUBSCRIPTION_ID`                               | `AZURE_RESOURCE_GROUP` (defaults to `<service>-<stage>`)      |
+| `kubernetes`             | `KUBECONFIG`                                                                | `GHCR_REGISTRY`, `GHCR_USER`, `GHCR_TOKEN`                    |
+| `cloudflare-workers`     | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`                             |                                                               |
+| `vercel`                 | `VERCEL_TOKEN`                                                              | `VERCEL_TEAM_ID`                                              |
+| `netlify`                | `NETLIFY_AUTH_TOKEN`                                                        | `NETLIFY_SITE_ID` (site auto-created when unset)              |
+| `alibaba-fc`             | `ALIBABA_ACCESS_KEY_ID`, `ALIBABA_ACCESS_KEY_SECRET`, `ALIBABA_FC_ACCOUNT_ID` | `ALIBABA_FC_REGION` (defaults to `cn-hangzhou`)              |
+| `digitalocean-functions` | `DIGITALOCEAN_ACCESS_TOKEN`, `DO_APP_REPO`                                  | `DO_REGION`                                                   |
+| `fly-machines`           | `FLY_API_TOKEN`, `FLY_IMAGE`                                                | `FLY_ORG_ID`                                                  |
+| `ibm-openwhisk`          | `IBM_OPENWHISK_AUTH`                                                        | `IBM_OPENWHISK_API_HOST`, `IBM_OPENWHISK_NAMESPACE`           |
 
 Install the corresponding provider adapter package in your project (for example `@runfabric/provider-aws-lambda`).
 
 ## State Backend Credential Matrix
 
-| State Backend | Required Credentials                                                                            |
-| ------------- | ----------------------------------------------------------------------------------------------- |
-| `local`       | none                                                                                            |
-| `postgres`    | `RUNFABRIC_STATE_POSTGRES_URL` (or custom env named by `backend.postgresConnectionStringEnv`)    |
-| `s3`          | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` (or equivalent AWS credential chain) |
-| `gcs`         | `GOOGLE_APPLICATION_CREDENTIALS` (or workload identity)                                         |
-| `azblob`      | `AZURE_STORAGE_CONNECTION_STRING` OR `AZURE_STORAGE_ACCOUNT` + `AZURE_STORAGE_KEY`              |
+State backends declare their env vars in `extensions/states`
+(`BuiltinStateCredentials`), the state-side counterpart of each provider's
+`CredentialVars`. A `backend:` config field satisfies its env var (e.g.
+`backend.s3Bucket` for `RUNFABRIC_S3_BUCKET`); the doctor's
+`state-credentials` check honors that.
+
+State secrets that cannot ride the manifest also accept per-request daemon
+headers (`X-State-Postgres-Url`, `X-State-Azblob-Connection-String` /
+`-Account` / `-Key`), so a tenant can bring their own state store in the same
+request as the provider's `X-Provider-*` credentials. s3/dynamodb state reuses
+the AWS chain from `X-Provider-Aws-*`, and gcs reuses
+`X-Provider-Gcp-Access-Token`.
+
+| State Backend | Required                                                                                       | Optional / notes                                            |
+| ------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `local`       | none                                                                                           |                                                               |
+| `sqlite`      | none                                                                                           | path via `backend.sqlitePath`                                 |
+| `postgres`    | `RUNFABRIC_STATE_POSTGRES_URL` (always honored; `backend.postgresConnectionStringEnv` may add a project-specific alias that wins when set) |                                                               |
+| `s3`          | `RUNFABRIC_S3_BUCKET` (or `backend.s3Bucket`)                                                  | `RUNFABRIC_S3_PREFIX`, `RUNFABRIC_DYNAMODB_TABLE`; AWS creds via the provider/SDK chain |
+| `dynamodb`    | `RUNFABRIC_DYNAMODB_TABLE` (or `backend.lockTable`/`backend.receiptTable`)                     | AWS creds via the provider/SDK chain                          |
+| `gcs`         | `RUNFABRIC_GCS_BUCKET` (or `backend.gcsBucket`); auth: `GCP_ACCESS_TOKEN` OR `GOOGLE_APPLICATION_CREDENTIALS` | `RUNFABRIC_GCS_PREFIX` (or `backend.gcsPrefix`)               |
+| `azblob`      | `RUNFABRIC_AZBLOB_CONTAINER` (or `backend.azblobContainer`); auth: `AZURE_STORAGE_CONNECTION_STRING` OR `AZURE_STORAGE_ACCOUNT` + `AZURE_STORAGE_KEY` | `RUNFABRIC_AZBLOB_PREFIX` (or `backend.azblobPrefix`)         |
 
 ## Real Deploy Execution Matrix
 

@@ -24,8 +24,9 @@ type Config struct {
 	Integrations map[string]any   `yaml:"integrations,omitempty"`
 	Policies     map[string]any   `yaml:"policies,omitempty"`
 	Workflows    []WorkflowConfig `yaml:"workflows,omitempty"`
-	// FunctionsConfig stores function declarations from YAML.
-	FunctionsConfig []FunctionOverrideConfig  `yaml:"functions,omitempty"`
+	// FunctionsConfig stores function declarations from YAML. Accepts BOTH the
+	// reference list format and the canonical name→config map (see FunctionList).
+	FunctionsConfig FunctionList              `yaml:"functions,omitempty"`
 	Functions       map[string]FunctionConfig `yaml:"-"` // resolved by Normalize(); use this everywhere
 	Stages          map[string]StageConfig    `yaml:"stages,omitempty"`
 	// Layers: first-class layer declarations. Key = logical name; value = provider-specific ref. Functions reference by name (e.g. layers: ["node-deps"]) and resolver expands to the concrete ref.
@@ -193,14 +194,31 @@ type WorkflowStep struct {
 	Input map[string]any `yaml:"input,omitempty"`
 }
 
-// FunctionOverrideConfig is the reference-format function (array element: name, entry, runtime, triggers, env, addons).
+// FunctionOverrideConfig is the reference-format function (array element).
+// It carries the FULL function surface so the list format is at parity with
+// the canonical map format: memory/timeout/architecture/layers/secrets/tags/
+// concurrency are first-class here, `environment` is accepted as an alias of
+// `env`, and canonical `events` work alongside reference `triggers`.
 type FunctionOverrideConfig struct {
-	Name     string            `yaml:"name"`
-	Entry    string            `yaml:"entry,omitempty"`
-	Runtime  string            `yaml:"runtime,omitempty"`
-	Triggers []TriggerRef      `yaml:"triggers,omitempty"`
-	Env      map[string]string `yaml:"env,omitempty"`
-	Addons   []string          `yaml:"addons,omitempty"`
+	Name         string            `yaml:"name"`
+	Entry        string            `yaml:"entry,omitempty"`
+	Runtime      string            `yaml:"runtime,omitempty"`
+	Memory       int               `yaml:"memory,omitempty"`
+	Timeout      int               `yaml:"timeout,omitempty"`
+	Architecture string            `yaml:"architecture,omitempty"`
+	Triggers     []TriggerRef      `yaml:"triggers,omitempty"`
+	Events       []EventConfig     `yaml:"events,omitempty"`
+	Env          map[string]string `yaml:"env,omitempty"`
+	// Environment is an alias of Env (the canonical-format key); when both are
+	// set they merge and `env` wins per key.
+	Environment            map[string]string `yaml:"environment,omitempty"`
+	Secrets                map[string]string `yaml:"secrets,omitempty"`
+	Tags                   map[string]string `yaml:"tags,omitempty"`
+	Layers                 []string          `yaml:"layers,omitempty"`
+	Resources              []string          `yaml:"resources,omitempty"`
+	Addons                 []string          `yaml:"addons,omitempty"`
+	ReservedConcurrency    int               `yaml:"reservedConcurrency,omitempty"`
+	ProvisionedConcurrency int               `yaml:"provisionedConcurrency,omitempty"`
 }
 
 type ProviderConfig struct {

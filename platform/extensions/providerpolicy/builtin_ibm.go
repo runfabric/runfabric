@@ -19,6 +19,7 @@ func init() {
 			Name:                   "IBM OpenWhisk",
 			Description:            "Deploy and run functions on IBM Cloud Functions (OpenWhisk)",
 			IncludeBuiltinManifest: true,
+			Credentials:            toCredentialVars(ibmprovider.CredentialVars),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream: adaptPrepareDevStream(ibmprovider.PrepareDevStreamPolicy),

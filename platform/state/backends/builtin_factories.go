@@ -15,6 +15,8 @@ func init() {
 	RegisterBundleFactory("sqlite", newSQLiteBundle)
 	RegisterBundleFactory("dynamodb", newDynamoDBBundle)
 	RegisterBundleFactory("s3", newS3Bundle)
+	RegisterBundleFactory("gcs", newGCSBundle)
+	RegisterBundleFactory("azblob", newAzblobBundle)
 }
 
 func stateCatalogOptions(opts Options) catalog.StateBackendOptions {
@@ -28,6 +30,10 @@ func stateCatalogOptions(opts Options) catalog.StateBackendOptions {
 		PostgresTable:   opts.PostgresTable,
 		SqlitePath:      opts.SqlitePath,
 		ReceiptTable:    opts.ReceiptTable,
+		GCSBucket:       opts.GCSBucket,
+		GCSPrefix:       opts.GCSPrefix,
+		AzblobContainer: opts.AzblobContainer,
+		AzblobPrefix:    opts.AzblobPrefix,
 	}
 }
 
@@ -61,4 +67,12 @@ func newDynamoDBBundle(ctx context.Context, opts Options) (*Bundle, error) {
 
 func newS3Bundle(ctx context.Context, opts Options) (*Bundle, error) {
 	return buildBundleFromCatalogFactory("s3", ctx, opts)
+}
+
+func newGCSBundle(ctx context.Context, opts Options) (*Bundle, error) {
+	return buildBundleFromCatalogFactory("gcs", ctx, opts)
+}
+
+func newAzblobBundle(ctx context.Context, opts Options) (*Bundle, error) {
+	return buildBundleFromCatalogFactory("azblob", ctx, opts)
 }

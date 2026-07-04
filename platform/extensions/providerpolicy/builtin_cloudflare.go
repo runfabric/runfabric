@@ -19,6 +19,7 @@ func init() {
 			Name:                   "Cloudflare Workers",
 			Description:            "Deploy and run functions on Cloudflare Workers",
 			IncludeBuiltinManifest: true,
+			Credentials:            toCredentialVars(cfprovider.CredentialVars),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream: adaptPrepareDevStream(cfprovider.PrepareDevStreamPolicy),

@@ -10,6 +10,16 @@ capabilities: [doctor, plan, deploy, remove, invoke, logs]
 supportsRuntime: [nodejs, python]
 supportsTriggers: [http]
 supportsResources: []
+credentials:
+  - envKey: FLY_API_TOKEN
+    header: X-Provider-Fly-Api-Token
+    required: true
+  - envKey: FLY_IMAGE
+    header: X-Provider-Fly-Image
+    required: true
+    placeholder: "registry.fly.io/myapp:latest"
+  - envKey: FLY_ORG_ID
+    header: X-Provider-Fly-Org-Id
 permissions:
   fs: true
   env: true

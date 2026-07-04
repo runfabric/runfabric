@@ -10,6 +10,13 @@ capabilities: [doctor, plan, deploy, remove, invoke, logs]
 supportsRuntime: [nodejs, python]
 supportsTriggers: [http]
 supportsResources: []
+credentials:
+  - envKey: KUBECONFIG
+    required: true
+    placeholder: "~/.kube/config"
+  - envKey: GHCR_REGISTRY
+  - envKey: GHCR_USER
+  - envKey: GHCR_TOKEN
 permissions:
   fs: true
   env: true

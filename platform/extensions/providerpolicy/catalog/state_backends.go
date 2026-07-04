@@ -19,6 +19,10 @@ type StateBackendOptions struct {
 	PostgresTable   string
 	SqlitePath      string
 	ReceiptTable    string
+	GCSBucket       string
+	GCSPrefix       string
+	AzblobContainer string
+	AzblobPrefix    string
 }
 
 type StateLockBackend interface {

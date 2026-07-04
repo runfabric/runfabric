@@ -1,0 +1,27 @@
+apiVersion: runfabric.io/plugin/v1
+kind: state
+id: azblob
+name: Azure Blob State Backend
+description: External state backend plugin for Azure Blob receipts with local journals/locks
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/azblob-state
+capabilities:
+  - state:azblob
+  - backend:azblob
+credentials:
+  - envKey: RUNFABRIC_AZBLOB_CONTAINER
+    required: true
+  - envKey: RUNFABRIC_AZBLOB_PREFIX
+    placeholder: "runfabric/dev"
+  - envKey: AZURE_STORAGE_CONNECTION_STRING
+    header: X-State-Azblob-Connection-String
+  - envKey: AZURE_STORAGE_ACCOUNT
+    header: X-State-Azblob-Account
+  - envKey: AZURE_STORAGE_KEY
+    header: X-State-Azblob-Key
+permissions:
+  fs: true
+  env: true
+  network: true
+  cloud: true

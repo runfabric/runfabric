@@ -10,4 +10,17 @@ capabilities: [doctor, plan, deploy, remove, invoke, logs]
 supportsRuntime: [nodejs, python]
 supportsTriggers: [http]
 supportsResources: []
+credentials:
+  - envKey: ALIBABA_ACCESS_KEY_ID
+    header: X-Provider-Alibaba-Access-Key-Id
+    required: true
+  - envKey: ALIBABA_ACCESS_KEY_SECRET
+    header: X-Provider-Alibaba-Access-Key-Secret
+    required: true
+  - envKey: ALIBABA_FC_ACCOUNT_ID
+    header: X-Provider-Alibaba-Account-Id
+    required: true
+  - envKey: ALIBABA_FC_REGION
+    header: X-Provider-Alibaba-Region
+    placeholder: "cn-hangzhou"
 permissions: { fs: true, env: true, network: true, cloud: true }

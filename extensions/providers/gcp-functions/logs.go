@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/runfabric/runfabric/plugin-sdk/go/gcpauth"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
@@ -25,6 +26,8 @@ func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function 
 	if project == "" {
 		project = sdkprovider.Env("GCP_PROJECT_ID")
 	}
+	// Best-effort: mint GCP_ACCESS_TOKEN from GOOGLE_APPLICATION_CREDENTIALS when unset.
+	_ = gcpauth.EnsureAccessToken(ctx)
 	if project == "" || sdkprovider.Env("GCP_ACCESS_TOKEN") == "" {
 		return &sdkprovider.LogsResult{
 			Provider: "gcp-functions",

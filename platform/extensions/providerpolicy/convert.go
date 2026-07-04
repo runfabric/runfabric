@@ -12,6 +12,7 @@ import (
 	routercontracts "github.com/runfabric/runfabric/platform/core/contracts/router"
 	runtimecontracts "github.com/runfabric/runfabric/platform/core/contracts/runtime"
 	simulatorcontracts "github.com/runfabric/runfabric/platform/core/contracts/simulators"
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )
 
 func toPluginMetaList(items any) []routercontracts.PluginMeta {
@@ -672,6 +673,45 @@ func reflectValue(v any) reflect.Value {
 		return rv.Elem()
 	}
 	return rv
+}
+
+// toCredentialVars converts an extension's []provider.CredentialVar (plugin-sdk
+// type) into catalog values via reflection, keeping this package free of a
+// direct plugin-sdk import (Rule 2i).
+func toCredentialVars(items any) []catalog.CredentialVar {
+	v := reflect.ValueOf(items)
+	if !v.IsValid() || v.Kind() != reflect.Slice {
+		return nil
+	}
+	out := make([]catalog.CredentialVar, 0, v.Len())
+	for i := 0; i < v.Len(); i++ {
+		item := v.Index(i)
+		if item.Kind() == reflect.Pointer {
+			if item.IsNil() {
+				continue
+			}
+			item = item.Elem()
+		}
+		out = append(out, catalog.CredentialVar{
+			EnvKey:      readStringField(item, "EnvKey"),
+			Header:      readStringField(item, "Header"),
+			Required:    readBoolField(item, "Required"),
+			Mirror:      readStringField(item, "Mirror"),
+			Placeholder: readStringField(item, "Placeholder"),
+		})
+	}
+	return out
+}
+
+func readBoolField(v reflect.Value, name string) bool {
+	if !v.IsValid() {
+		return false
+	}
+	field := v.FieldByName(name)
+	if !field.IsValid() || field.Kind() != reflect.Bool {
+		return false
+	}
+	return field.Bool()
 }
 
 func readStringField(v reflect.Value, name string) string {

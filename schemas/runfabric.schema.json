@@ -129,11 +129,21 @@
       }
     },
     "functions": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/FunctionOverrideConfig"
-      },
-      "description": "Function declarations."
+      "description": "Function declarations: reference list format, or canonical name -> function map.",
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FunctionOverrideConfig"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/FunctionConfig"
+          }
+        }
+      ]
     },
     "layers": {
       "type": "object",
@@ -148,6 +158,37 @@
         "$ref": "#/$defs/StageConfig"
       },
       "description": "Stage-specific overrides (e.g. dev, prod)."
+    },
+    "app": {
+      "type": "string",
+      "description": "Optional app grouping for dashboards/multi-service UI."
+    },
+    "org": {
+      "type": "string",
+      "description": "Optional org grouping for dashboards/multi-service UI."
+    },
+    "addonCatalogUrl": {
+      "type": "string",
+      "description": "Optional URL of an addon catalog (JSON array), merged with built-ins."
+    },
+    "addons": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/AddonConfig"
+      },
+      "description": "Add-on declarations; secrets are injected into function environments at deploy."
+    },
+    "fabric": {
+      "$ref": "#/$defs/FabricConfig"
+    },
+    "logs": {
+      "$ref": "#/$defs/LogsConfig"
+    },
+    "build": {
+      "$ref": "#/$defs/BuildConfig"
+    },
+    "alerts": {
+      "$ref": "#/$defs/AlertsConfig"
     }
   },
   "additionalProperties": false,
@@ -198,7 +239,11 @@
         },
         "serviceType": {
           "type": "string",
-          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer"
+          ],
           "description": "Kubernetes only: Service type. ClusterIP (default) | NodePort | LoadBalancer."
         },
         "image": {
@@ -208,13 +253,16 @@
         "namespace": {
           "type": "string",
           "description": "Kubernetes only: Namespace override. Defaults to {service}-{stage}."
+        },
+        "backend": {
+          "$ref": "#/$defs/BackendConfig"
         }
       },
       "additionalProperties": false
     },
     "StageProviderConfig": {
       "type": "object",
-      "description": "Per-stage provider overrides. All fields optional — only set fields that differ from the top-level provider.",
+      "description": "Per-stage provider overrides. All fields optional \u2014 only set fields that differ from the top-level provider.",
       "properties": {
         "name": {
           "type": "string",
@@ -243,7 +291,10 @@
         },
         "source": {
           "type": "string",
-          "enum": ["builtin", "external"],
+          "enum": [
+            "builtin",
+            "external"
+          ],
           "description": "Provider resolution source."
         },
         "version": {
@@ -252,7 +303,11 @@
         },
         "serviceType": {
           "type": "string",
-          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer"
+          ],
           "description": "Kubernetes only: Service type."
         },
         "image": {
@@ -382,6 +437,26 @@
           "items": {
             "$ref": "#/$defs/EventConfig"
           }
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Only these top-level resource keys are injected; empty = all."
+        },
+        "addons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Only these addon keys get secrets injected; empty = all."
+        },
+        "reservedConcurrency": {
+          "type": "integer"
+        },
+        "provisionedConcurrency": {
+          "type": "integer"
         }
       },
       "additionalProperties": false
@@ -890,7 +965,12 @@
         },
         "strategy": {
           "type": "string",
-          "enum": ["all-at-once", "canary", "blue-green", "per-function"],
+          "enum": [
+            "all-at-once",
+            "canary",
+            "blue-green",
+            "per-function"
+          ],
           "description": "Deployment strategy. 'per-function' creates a separate pod and service for each function (Kubernetes only)."
         }
       }
@@ -1273,6 +1353,159 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "memory": {
+          "type": "integer"
+        },
+        "timeout": {
+          "type": "integer"
+        },
+        "architecture": {
+          "type": "string"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EventConfig"
+          }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Alias of env (canonical-format key); env wins per key when both are set."
+        },
+        "secrets": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "addons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reservedConcurrency": {
+          "type": "integer"
+        },
+        "provisionedConcurrency": {
+          "type": "integer"
+        }
+      }
+    },
+    "AddonConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "options": {
+          "type": "object"
+        },
+        "secrets": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "FabricConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "healthCheck": {
+          "$ref": "#/$defs/HealthCheckConfig"
+        },
+        "routing": {
+          "type": "string",
+          "enum": [
+            "failover",
+            "latency",
+            "round-robin"
+          ]
+        }
+      }
+    },
+    "LogsConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      }
+    },
+    "BuildConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "AlertsConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "webhook": {
+          "type": "string"
+        },
+        "slack": {
+          "type": "string"
+        },
+        "onError": {
+          "type": "boolean"
+        },
+        "onTimeout": {
+          "type": "boolean"
+        }
+      }
+    },
+    "HealthCheckConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "url": {
+          "type": "string"
         }
       }
     }

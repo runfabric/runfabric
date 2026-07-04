@@ -19,6 +19,7 @@ func init() {
 			Name:                   "Fly.io Machines",
 			Description:            "Deploy and run functions on Fly.io Machines",
 			IncludeBuiltinManifest: true,
+			Credentials:            toCredentialVars(flyprovider.CredentialVars),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream: adaptPrepareDevStream(flyprovider.PrepareDevStreamPolicy),

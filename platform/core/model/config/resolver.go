@@ -579,6 +579,51 @@ func applyStageOverride(out *Config, stageCfg StageConfig, resolveValue func(str
 		if len(fnOverride.Events) > 0 {
 			base.Events = fnOverride.Events
 		}
+		// The full function surface is stage-overridable — a field that parses
+		// must never be silently dropped. Maps merge per key (override wins,
+		// values interpolated); scalars/lists replace when set.
+		if len(fnOverride.Environment) > 0 {
+			merged := map[string]string{}
+			for k, v := range base.Environment {
+				merged[k] = v
+			}
+			for k, v := range fnOverride.Environment {
+				if merged[k], err = resolveValue(v); err != nil {
+					return err
+				}
+			}
+			base.Environment = merged
+		}
+		if len(fnOverride.Secrets) > 0 {
+			base.Secrets = mergeStringMaps(base.Secrets, fnOverride.Secrets)
+		}
+		if len(fnOverride.Tags) > 0 {
+			base.Tags = mergeStringMaps(base.Tags, fnOverride.Tags)
+		}
+		if fnOverride.Memory > 0 {
+			base.Memory = fnOverride.Memory
+		}
+		if fnOverride.Timeout > 0 {
+			base.Timeout = fnOverride.Timeout
+		}
+		if fnOverride.Architecture != "" {
+			base.Architecture = fnOverride.Architecture
+		}
+		if len(fnOverride.Layers) > 0 {
+			base.Layers = fnOverride.Layers
+		}
+		if len(fnOverride.Resources) > 0 {
+			base.Resources = fnOverride.Resources
+		}
+		if len(fnOverride.Addons) > 0 {
+			base.Addons = fnOverride.Addons
+		}
+		if fnOverride.ReservedConcurrency > 0 {
+			base.ReservedConcurrency = fnOverride.ReservedConcurrency
+		}
+		if fnOverride.ProvisionedConcurrency > 0 {
+			base.ProvisionedConcurrency = fnOverride.ProvisionedConcurrency
+		}
 		out.Functions[fnName] = base
 	}
 	return nil

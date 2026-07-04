@@ -22,7 +22,8 @@ type APIDispatchProvider interface {
 // apiProviderAdapter connects API-dispatched providers into the provider registry so
 // plan/doctor/lifecycle paths can resolve providers via a single boundary.
 type apiProviderAdapter struct {
-	name string
+	name        string
+	credentials []providers.CredentialVar
 }
 
 func (p *apiProviderAdapter) APIDispatchProvider() {}
@@ -32,6 +33,7 @@ func (p *apiProviderAdapter) Meta() providers.ProviderMeta {
 		Name:            p.name,
 		Capabilities:    []string{"deploy", "remove", "invoke", "logs", "doctor", "plan"},
 		SupportsRuntime: []string{"nodejs", "python"},
+		Credentials:     p.credentials,
 	}
 }
 
@@ -179,6 +181,16 @@ func RegisterAPIProviders(reg *providers.Registry) {
 		if d.ExcludeFromAPIDispatch {
 			continue
 		}
-		_ = reg.Register(&apiProviderAdapter{name: d.ID})
+		creds := make([]providers.CredentialVar, 0, len(d.Credentials))
+		for _, c := range d.Credentials {
+			creds = append(creds, providers.CredentialVar{
+				EnvKey:      c.EnvKey,
+				Header:      c.Header,
+				Required:    c.Required,
+				Mirror:      c.Mirror,
+				Placeholder: c.Placeholder,
+			})
+		}
+		_ = reg.Register(&apiProviderAdapter{name: d.ID, credentials: creds})
 	}
 }

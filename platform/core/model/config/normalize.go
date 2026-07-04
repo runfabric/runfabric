@@ -2,6 +2,21 @@ package config
 
 import "strings"
 
+// mergeStringMaps overlays b onto a (b wins per key); nil when both are empty.
+func mergeStringMaps(a, b map[string]string) map[string]string {
+	if len(a) == 0 && len(b) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(a)+len(b))
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		out[k] = v
+	}
+	return out
+}
+
 // Normalize fills resolved function/addon/deploy defaults after YAML decode.
 // Call after Load so the rest of the code can use cfg.Functions.
 func Normalize(cfg *Config) {
@@ -43,10 +58,20 @@ func Normalize(cfg *Config) {
 
 func functionOverrideToConfig(fo FunctionOverrideConfig, defaultRuntime string) FunctionConfig {
 	fn := FunctionConfig{
-		Handler:     fo.Entry,
-		Runtime:     fo.Runtime,
-		Environment: fo.Env,
-		Addons:      fo.Addons,
+		Handler:                fo.Entry,
+		Runtime:                fo.Runtime,
+		Memory:                 fo.Memory,
+		Timeout:                fo.Timeout,
+		Architecture:           fo.Architecture,
+		Environment:            mergeStringMaps(fo.Environment, fo.Env), // `env` wins per key over the `environment` alias
+		Secrets:                fo.Secrets,
+		Tags:                   fo.Tags,
+		Layers:                 fo.Layers,
+		Resources:              fo.Resources,
+		Addons:                 fo.Addons,
+		ReservedConcurrency:    fo.ReservedConcurrency,
+		ProvisionedConcurrency: fo.ProvisionedConcurrency,
+		Events:                 append([]EventConfig(nil), fo.Events...),
 	}
 	if fn.Runtime == "" {
 		fn.Runtime = defaultRuntime

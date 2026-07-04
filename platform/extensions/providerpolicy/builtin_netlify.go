@@ -19,6 +19,7 @@ func init() {
 			Name:                   "Netlify",
 			Description:            "Deploy and run functions on Netlify Functions",
 			IncludeBuiltinManifest: true,
+			Credentials:            toCredentialVars(netlifyprovider.CredentialVars),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream: adaptPrepareDevStream(netlifyprovider.PrepareDevStreamPolicy),

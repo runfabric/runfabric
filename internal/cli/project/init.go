@@ -14,6 +14,7 @@ import (
 	"github.com/runfabric/runfabric/internal/cli/common"
 	"github.com/runfabric/runfabric/platform/extensions/application/external"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 	planner "github.com/runfabric/runfabric/platform/planner/engine"
@@ -898,45 +899,67 @@ func generateGitignore(lang string) string {
 	}
 }
 
-// providerEnvVars returns env var names (with optional placeholder) for .env.example for a provider.
-var providerEnvVars = map[string][]string{
-	"aws-lambda":             {"AWS_ACCESS_KEY_ID=", "AWS_SECRET_ACCESS_KEY=", "AWS_REGION=us-east-1"},
-	"gcp-functions":          {"GCP_PROJECT_ID=", "GCP_SERVICE_ACCOUNT_KEY="},
-	"azure-functions":        {"AZURE_TENANT_ID=", "AZURE_CLIENT_ID=", "AZURE_CLIENT_SECRET=", "AZURE_SUBSCRIPTION_ID=", "AZURE_RESOURCE_GROUP="},
-	"kubernetes":             {"KUBECONFIG=", "KUBE_CONTEXT=", "KUBE_NAMESPACE="},
-	"cloudflare-workers":     {"CLOUDFLARE_API_TOKEN=", "CLOUDFLARE_ACCOUNT_ID="},
-	"vercel":                 {"VERCEL_TOKEN=", "VERCEL_ORG_ID=", "VERCEL_PROJECT_ID="},
-	"netlify":                {"NETLIFY_AUTH_TOKEN=", "NETLIFY_SITE_ID="},
-	"alibaba-fc":             {"ALICLOUD_ACCESS_KEY_ID=", "ALICLOUD_ACCESS_KEY_SECRET=", "ALICLOUD_REGION="},
-	"digitalocean-functions": {"DIGITALOCEAN_ACCESS_TOKEN=", "DIGITALOCEAN_NAMESPACE="},
-	"fly-machines":           {"FLY_API_TOKEN=", "FLY_APP_NAME="},
-	"ibm-openwhisk":          {"IBM_CLOUD_API_KEY=", "IBM_CLOUD_REGION=", "IBM_CLOUD_NAMESPACE="},
+// providerEnvLines returns .env.example lines for a provider, derived from the
+// provider's own CredentialVars declaration so the scaffold can never drift
+// from what the provider code actually reads. Optional vars are commented out.
+func providerEnvLines(provider string) []string {
+	creds := providerpolicy.ProviderCredentials(provider)
+	lines := make([]string, 0, len(creds))
+	for _, c := range creds {
+		line := c.EnvKey + "=" + c.Placeholder
+		if !c.Required {
+			line = "# " + line
+		}
+		lines = append(lines, line)
+	}
+	return lines
 }
 
-// stateEnvVars returns env var lines for .env.example for a state backend.
-var stateEnvVars = map[string][]string{
-	"local":    {},
-	"postgres": {"RUNFABRIC_STATE_POSTGRES_URL=postgres://user:pass@localhost:5432/runfabric"},
-	"s3":       {"RUNFABRIC_S3_BUCKET=", "RUNFABRIC_DYNAMODB_TABLE=", "# Uses AWS_* from provider if same account"},
-	"gcs":      {"RUNFABRIC_GCS_BUCKET=", "GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json"},
-	"azblob":   {"RUNFABRIC_AZBLOB_CONTAINER=", "AZURE_STORAGE_CONNECTION_STRING=", "# or AZURE_STORAGE_ACCOUNT= + AZURE_STORAGE_KEY="},
+// stateEnvLines returns .env.example lines for a state backend, derived from
+// the backend's CredentialVars declaration (extensions/states); optional vars
+// are commented out. s3/dynamodb reuse AWS_* from the provider section.
+func stateEnvLines(stateBackend string) []string {
+	creds := providerpolicy.StateBackendCredentials(stateBackend)
+	lines := make([]string, 0, len(creds))
+	for _, c := range creds {
+		line := c.EnvKey + "=" + c.Placeholder
+		if !c.Required {
+			line = "# " + line
+		}
+		lines = append(lines, line)
+	}
+	return lines
 }
 
 func generateEnvExample(provider, stateBackend string) string {
 	var b strings.Builder
 	b.WriteString("# RunFabric — copy to .env and fill in values\n")
 	b.WriteString("# Generated for provider: " + provider + ", state: " + stateBackend + "\n\n")
-	if vars, ok := providerEnvVars[provider]; ok {
+	// Provider and state declarations can share vars (e.g. GCP_ACCESS_TOKEN
+	// for gcp-functions + gcs) — emit each env key once.
+	seen := map[string]bool{}
+	envKeyOf := func(line string) string {
+		key := strings.TrimPrefix(line, "# ")
+		if i := strings.Index(key, "="); i > 0 {
+			return key[:i]
+		}
+		return key
+	}
+	if vars := providerEnvLines(provider); len(vars) > 0 {
 		b.WriteString("# Provider\n")
 		for _, v := range vars {
+			seen[envKeyOf(v)] = true
 			b.WriteString(v + "\n")
 		}
 		b.WriteString("\n")
 	}
 	if stateBackend != "local" {
-		if vars, ok := stateEnvVars[stateBackend]; ok && len(vars) > 0 {
+		if vars := stateEnvLines(stateBackend); len(vars) > 0 {
 			b.WriteString("# State backend\n")
 			for _, v := range vars {
+				if seen[envKeyOf(v)] {
+					continue
+				}
 				b.WriteString(v + "\n")
 			}
 		}

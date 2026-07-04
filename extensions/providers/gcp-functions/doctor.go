@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/runfabric/runfabric/plugin-sdk/go/gcpauth"
 	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
@@ -33,12 +34,14 @@ func (Checker) Doctor(ctx context.Context, cfg sdkprovider.Config, stage string)
 		}, nil
 	}
 
+	// Best-effort: mint GCP_ACCESS_TOKEN from GOOGLE_APPLICATION_CREDENTIALS when unset.
+	_ = gcpauth.EnsureAccessToken(ctx)
 	token := sdkprovider.Env("GCP_ACCESS_TOKEN")
 	if token == "" {
 		return &sdkprovider.DoctorResult{
 			Provider: ProviderID,
 			Checks: []string{
-				"GCP_ACCESS_TOKEN is not set (e.g. gcloud auth print-access-token or service account key)",
+				"GCP credentials missing: set GCP_ACCESS_TOKEN (e.g. gcloud auth print-access-token) or GOOGLE_APPLICATION_CREDENTIALS (service-account key file)",
 				"Project: " + project,
 				"See docs/CREDENTIALS.md for GCP setup",
 			},

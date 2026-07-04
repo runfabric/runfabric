@@ -1,0 +1,24 @@
+apiVersion: runfabric.io/plugin/v1
+kind: state
+id: gcs
+name: GCS State Backend
+description: External state backend plugin for GCS receipts with local journals/locks
+version: 0.1.0
+pluginVersion: 1
+executable: ./bin/gcs-state
+capabilities:
+  - state:gcs
+  - backend:gcs
+credentials:
+  - envKey: GCP_ACCESS_TOKEN
+  - envKey: GOOGLE_APPLICATION_CREDENTIALS
+    placeholder: "/path/to/service-account.json"
+  - envKey: RUNFABRIC_GCS_BUCKET
+    required: true
+  - envKey: RUNFABRIC_GCS_PREFIX
+    placeholder: "runfabric/dev"
+permissions:
+  fs: true
+  env: true
+  network: true
+  cloud: true

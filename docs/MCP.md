@@ -36,7 +36,7 @@ Ensure `runfabric` is on `PATH` (e.g. `export PATH="$PWD/bin:$PATH"` from repo r
 In Cursor settings (or `.cursor/mcp.json`), add an MCP server that runs the RunFabric MCP process:
 
 - **Command:** `node`
-- **Args:** `path/to/unifn-framework-scaffold/protocol/mcp/dist/index.js`
+- **Args:** `path/to/runfabric-stack/protocol/mcp/dist/index.js`
 - **Env (optional):** `RUNFABRIC_CMD=/path/to/runfabric` if the CLI is not on PATH
 
 The exact configuration format depends on your Cursor/MCP client; use the stdio transport and point to the built `dist/index.js` (or `npm start` from `protocol/mcp`).

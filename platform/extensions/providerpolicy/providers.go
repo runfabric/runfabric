@@ -151,6 +151,38 @@ func All() []catalog.ProviderDescriptor {
 	return out
 }
 
+// ProviderCredentials returns the credential env vars a built-in provider
+// declares (nil for unknown providers). This is the single source of truth
+// consumed by the CLI doctor, .env scaffolding, and the daemon's per-request
+// X-Provider-* header mapping.
+func ProviderCredentials(providerID string) []catalog.CredentialVar {
+	id := strings.TrimSpace(providerID)
+	for _, e := range orderedProviderEntries() {
+		if e.Descriptor.ID == id {
+			return e.Descriptor.Credentials
+		}
+	}
+	return nil
+}
+
+// StateBackendCredentials returns the credential env vars a built-in state
+// backend declares (nil for unknown kinds or backends needing none, like
+// local/sqlite). Vars with a Header (X-State-*) may also arrive per daemon
+// request, like provider credentials.
+func StateBackendCredentials(kind string) []catalog.CredentialVar {
+	return toCredentialVars(builtinstates.BuiltinStateCredentials()[strings.TrimSpace(kind)])
+}
+
+// AllStateBackendCredentials returns every built-in state backend's credential
+// declaration, keyed by backend kind.
+func AllStateBackendCredentials() map[string][]catalog.CredentialVar {
+	out := map[string][]catalog.CredentialVar{}
+	for kind, creds := range builtinstates.BuiltinStateCredentials() {
+		out[kind] = toCredentialVars(creds)
+	}
+	return out
+}
+
 func BuiltinImplementationIDs() []string {
 	entries := orderedProviderEntries()
 	ids := make([]string, 0, len(entries))

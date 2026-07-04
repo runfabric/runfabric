@@ -10,6 +10,20 @@ capabilities: [doctor, plan, deploy, remove, invoke, logs]
 supportsRuntime: [nodejs, python]
 supportsTriggers: [http]
 supportsResources: []
+credentials:
+  - envKey: AWS_ACCESS_KEY_ID
+    header: X-Provider-Aws-Access-Key-Id
+    required: true
+  - envKey: AWS_SECRET_ACCESS_KEY
+    header: X-Provider-Aws-Secret-Access-Key
+    required: true
+  - envKey: AWS_SESSION_TOKEN
+    header: X-Provider-Aws-Session-Token
+  - envKey: AWS_REGION
+    header: X-Provider-Aws-Region
+    required: true
+    mirror: AWS_DEFAULT_REGION
+    placeholder: "us-east-1"
 permissions:
   fs: true
   env: true
