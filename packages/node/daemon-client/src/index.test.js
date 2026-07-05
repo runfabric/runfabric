@@ -137,3 +137,63 @@ test('CREDENTIALS contract ships provider and state declarations', () => {
   const pg = CREDENTIALS.state.postgres;
   assert.ok(pg.some((c) => c.envKey === 'RUNFABRIC_STATE_POSTGRES_URL' && c.header === 'X-State-Postgres-Url'));
 });
+
+test('traceparent, tracestate and request id are sent; correlation ids come back', async () => {
+  const { newTraceparent, traceIdOf } = require('./index.js');
+  const tp = newTraceparent();
+  assert.match(tp, /^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
+  const traceId = traceIdOf(tp);
+  assert.equal(traceId.length, 32);
+  assert.equal(traceIdOf('garbage'), '');
+
+  const stub = await startStub({ '/deploy': { status: 200, body: { deploymentId: 'dpl-2' } } });
+  try {
+    const client = new DaemonClient({ baseUrl: stub.baseUrl });
+    const result = await client.deploy({ traceparent: tp, tracestate: 'rf=1', requestId: 'req-7' });
+    assert.equal(result.ok, true);
+    const req = stub.seen[0];
+    assert.equal(req.headers['traceparent'], tp);
+    assert.equal(req.headers['tracestate'], 'rf=1');
+    assert.equal(req.headers['x-request-id'], 'req-7');
+    // Stub does not echo X-Trace-Id; the client falls back to the traceparent's id.
+    assert.equal(result.traceId, traceId);
+    assert.equal(result.requestId, 'req-7');
+  } finally {
+    await stub.close();
+  }
+});
+
+test('daemon-echoed X-Trace-Id wins over the traceparent fallback', async () => {
+  const echoed = 'a'.repeat(32);
+  const seen = [];
+  const client = new DaemonClient({
+    baseUrl: 'http://example.invalid',
+    fetch: async (_url, init) => {
+      seen.push(init.headers);
+      return {
+        ok: true,
+        status: 200,
+        headers: new Map([['x-trace-id', echoed], ['x-request-id', 'gen-1']]),
+        json: async () => ({}),
+      };
+    },
+  });
+  const result = await client.deploy({ traceparent: '00-' + 'b'.repeat(32) + '-' + 'c'.repeat(16) + '-01' });
+  assert.equal(result.ok, true);
+  assert.equal(result.traceId, echoed);
+  assert.equal(result.requestId, 'gen-1');
+});
+
+test('network failure still reports the trace id it attempted', async () => {
+  const tp = '00-' + 'd'.repeat(32) + '-' + 'e'.repeat(16) + '-01';
+  const client = new DaemonClient({
+    baseUrl: 'http://example.invalid',
+    fetch: async () => {
+      throw new Error('connect refused');
+    },
+  });
+  const result = await client.deploy({ traceparent: tp, requestId: 'req-9' });
+  assert.equal(result.ok, false);
+  assert.equal(result.traceId, 'd'.repeat(32));
+  assert.equal(result.requestId, 'req-9');
+});

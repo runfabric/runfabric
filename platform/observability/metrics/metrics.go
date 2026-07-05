@@ -24,6 +24,9 @@ var Default = NewRegistry()
 type Registry struct {
 	mu       sync.RWMutex
 	families map[string]*family
+
+	collectorMu sync.Mutex
+	collectors  map[string]func()
 }
 
 type metricType string
@@ -148,9 +151,36 @@ func (r *Registry) Observe(name, help string, buckets []float64, labels map[stri
 	r.mu.Unlock()
 }
 
+// RegisterCollector registers fn to run just before every scrape/render so it
+// can refresh point-in-time gauges (e.g. runtime stats). Registering the same
+// name again replaces the previous collector, keeping registration idempotent.
+func (r *Registry) RegisterCollector(name string, fn func()) {
+	r.collectorMu.Lock()
+	defer r.collectorMu.Unlock()
+	if r.collectors == nil {
+		r.collectors = map[string]func(){}
+	}
+	r.collectors[name] = fn
+}
+
+// runCollectors invokes registered collectors outside the render lock so they
+// are free to call SetGauge/AddCounter without deadlocking.
+func (r *Registry) runCollectors() {
+	r.collectorMu.Lock()
+	fns := make([]func(), 0, len(r.collectors))
+	for _, fn := range r.collectors {
+		fns = append(fns, fn)
+	}
+	r.collectorMu.Unlock()
+	for _, fn := range fns {
+		fn()
+	}
+}
+
 // Handler returns an http.Handler that renders the registry on GET.
 func (r *Registry) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		r.runCollectors()
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		_, _ = w.Write([]byte(r.Render()))
 	})

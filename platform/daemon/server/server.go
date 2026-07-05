@@ -18,6 +18,7 @@ import (
 	"github.com/runfabric/runfabric/platform/observability/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -65,6 +66,9 @@ func New(opts Options) *Server {
 		}
 		cache = newAPICache(cacheURL, ttl)
 	}
+
+	// Process/runtime gauges + build info on /metrics (idempotent registration).
+	metrics.EnableRuntimeMetrics(nil, runfabricruntime.Version)
 
 	return &Server{opts: opts, cache: cache}
 }
@@ -143,9 +147,16 @@ func (s *Server) Handler(extraRoutes func(mux *http.ServeMux, authorize func(htt
 		extraRoutes(mux, configSrv.Authorize)
 	}
 
-	return metrics.HTTPMiddleware(nil,
+	// Chain (outermost first): request-id → access log → RED metrics → span →
+	// body cap → routes. Request id runs first so every later layer (log line,
+	// span attribute, error response) sees the same correlation id.
+	var handler http.Handler = metrics.HTTPMiddleware(nil,
 		otelMiddleware(telemetry.Tracer("runfabric/daemon"),
 			maxBodyMiddleware(maxRequestBody, mux)))
+	if accessLogEnabled() {
+		handler = accessLogMiddleware(handler)
+	}
+	return requestIDMiddleware(handler)
 }
 
 // maxRequestBody caps any single request body the daemon will read into memory.
@@ -199,15 +210,42 @@ func IsLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// traceIDHeader exposes the request's trace id to callers and to the access
+// log so logs and traces correlate even without a tracing backend attached.
+const traceIDHeader = "X-Trace-Id"
+
+// tracePropagation extracts W3C traceparent/tracestate from inbound requests.
+// Explicit (not the global propagator) so extraction works deterministically
+// even when telemetry.Init has not run.
+var tracePropagation = propagation.TraceContext{}
+
 // otelMiddleware creates a span per request when OpenTelemetry is configured.
+// An inbound traceparent header is honored: the span joins the caller's trace
+// (same trace id) instead of starting a new root, so a deploy triggered by an
+// upstream service maps end-to-end in the tracing backend.
 func otelMiddleware(tr trace.Tracer, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, span := tr.Start(r.Context(), r.Method+" "+r.URL.Path)
+		ctx := tracePropagation.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+		ctx, span := tr.Start(ctx, r.Method+" "+r.URL.Path, trace.WithSpanKind(trace.SpanKindServer))
 		defer span.End()
+		sc := span.SpanContext()
+		if !sc.HasTraceID() {
+			sc = trace.SpanContextFromContext(ctx)
+		}
+		if sc.HasTraceID() {
+			id := sc.TraceID().String()
+			w.Header().Set(traceIDHeader, id)
+			// Mirror onto the request so the access-log layer (outside this
+			// middleware) can include trace_id in its line.
+			r.Header.Set(traceIDHeader, id)
+		}
 		span.SetAttributes(
 			attribute.String("http.method", r.Method),
 			attribute.String("http.route", r.URL.Path),
 		)
+		if id := r.Header.Get(requestIDHeader); id != "" {
+			span.SetAttributes(attribute.String("http.request_id", id))
+		}
 		r = r.WithContext(ctx)
 		rec := &otelResponseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)

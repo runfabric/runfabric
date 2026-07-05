@@ -13,11 +13,16 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/runfabric/runfabric/platform/observability/metrics"
 )
 
 const (
 	defaultAPICacheKeyPrefix   = "runfabric:daemon:api:"
 	defaultAPICacheStagePrefix = "runfabric:daemon:api:stage:"
+
+	// metricCacheRequests counts cache lookups, labelled endpoint + hit/miss.
+	metricCacheRequests = "runfabric_daemon_cache_requests_total"
 )
 
 // apiCache backs Config API responses in Redis (validate, resolve, plan, releases). Invalidate on deploy/remove.
@@ -181,11 +186,17 @@ func apiCacheMiddleware(cache *apiCache, defaultStage string, next http.Handler)
 
 		if cache != nil && cacheable[path] {
 			if status, cachedBody, ok := cache.get(path, bodyHash, stage); ok {
+				metrics.Default.IncCounter(metricCacheRequests,
+					"Daemon API cache lookups by endpoint and result.",
+					map[string]string{"endpoint": path, "result": "hit"})
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(status)
 				_, _ = w.Write(cachedBody)
 				return
 			}
+			metrics.Default.IncCounter(metricCacheRequests,
+				"Daemon API cache lookups by endpoint and result.",
+				map[string]string{"endpoint": path, "result": "miss"})
 		}
 
 		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK, body: &bytes.Buffer{}}

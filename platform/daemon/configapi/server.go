@@ -74,6 +74,7 @@ func (s *Server) authorizeAndLimit(w http.ResponseWriter, r *http.Request) error
 	if s.APIKey != "" {
 		got := r.Header.Get("X-API-Key")
 		if subtle.ConstantTimeCompare([]byte(got), []byte(s.APIKey)) != 1 {
+			countAuthRejection("unauthorized")
 			writeErr(w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
 			return fmt.Errorf("unauthorized")
 		}
@@ -99,6 +100,7 @@ func (s *Server) authorizeAndLimit(w http.ResponseWriter, r *http.Request) error
 	}
 	if len(kept) >= s.RateLimitN {
 		s.requests[ip] = kept
+		countAuthRejection("rate_limited")
 		writeErr(w, http.StatusTooManyRequests, fmt.Errorf("rate limit exceeded"))
 		return fmt.Errorf("rate limit exceeded")
 	}
@@ -168,7 +170,10 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.core.Validate(cfgPath, s.stage(r)); err != nil {
+	start := time.Now()
+	err = s.core.Validate(cfgPath, s.stage(r))
+	observeOperation("validate", start, err)
+	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
@@ -181,7 +186,9 @@ func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	start := time.Now()
 	cfg, err := s.core.Resolve(cfgPath, s.stage(r))
+	observeOperation("resolve", start, err)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -195,7 +202,9 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	start := time.Now()
 	res, err := s.core.Plan(cfgPath, s.stage(r))
+	observeOperation("plan", start, err)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -210,11 +219,13 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var res *DeployResponse
+	start := time.Now()
 	err = s.withProviderCreds(r, func() error {
 		var derr error
 		res, derr = s.core.Deploy(cfgPath, s.stage(r))
 		return derr
 	})
+	observeOperation("deploy", start, err)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -229,11 +240,13 @@ func (s *Server) handleRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var res *RemoveResponse
+	start := time.Now()
 	err = s.withProviderCreds(r, func() error {
 		var rerr error
 		res, rerr = s.core.Remove(cfgPath, s.stage(r))
 		return rerr
 	})
+	observeOperation("remove", start, err)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -375,7 +388,9 @@ func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	start := time.Now()
 	res, err := s.core.Releases(cfgPath)
+	observeOperation("releases", start, err)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -389,7 +404,9 @@ func (s *Server) handleReleaseHistory(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	start := time.Now()
 	res, err := s.core.ReleaseHistory(cfgPath, s.stage(r))
+	observeOperation("release_history", start, err)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return

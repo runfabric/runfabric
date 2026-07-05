@@ -53,6 +53,22 @@ func RouterDNSSyncWithOptions(
 	if ctx == nil || ctx.Extensions == nil {
 		return nil, fmt.Errorf("app context extensions are not initialized")
 	}
+	stage := ""
+	if routing != nil {
+		stage = strings.TrimSpace(routing.Stage)
+	}
+	if stage == "" {
+		stage = strings.TrimSpace(ctx.Stage)
+	}
+	// Source the router API token through the configured credential policy —
+	// including apiTokenSecretRef via the secret subsystem — so the deploy
+	// pipeline (CLI and daemon alike) syncs without a pre-exported token. The
+	// CLI router commands prime the env themselves; that makes this a no-op.
+	restoreToken, err := PrimeRouterAPIToken(ctx.Config, RouterDNSSyncPolicyForStage(ctx.Config, stage))
+	if err != nil {
+		return nil, err
+	}
+	defer restoreToken()
 	pluginID := SelectedRouterPlugin(ctx.Config)
 	result, err := ctx.Extensions.SyncRouter(context.Background(), pluginID, RouterSyncRequest{
 		Routing:   routing,
@@ -66,10 +82,6 @@ func RouterDNSSyncWithOptions(
 	}
 	if routing == nil {
 		return result, nil
-	}
-	stage := strings.TrimSpace(routing.Stage)
-	if stage == "" {
-		stage = strings.TrimSpace(ctx.Stage)
 	}
 	snapshot := statecore.RouterSyncSnapshot{
 		Service:   routing.Service,

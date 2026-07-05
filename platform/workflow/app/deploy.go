@@ -103,7 +103,10 @@ func Deploy(configPath, stage, functionName string, rollbackOnFailure, noRollbac
 					TTL:       300,
 					Endpoints: []RouterRoutingEndpoint{{Name: service, URL: serviceURL, Weight: 1}},
 				}
-				_, err := RouterDNSSync(ctx, routing, "", "", false, out)
+				// Zone/account come from the policy's env keys — the pipeline
+				// has no CLI flags; the API token is primed inside the sync.
+				zoneID, accountID := RouterProviderIDs(routerPolicy)
+				_, err := RouterDNSSync(ctx, routing, zoneID, accountID, routerPolicy.DryRun, out)
 				return err
 			},
 		},

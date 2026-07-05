@@ -8,6 +8,13 @@ This is the standard code-only operator flow for global router rollout.
    - `RUNFABRIC_ROUTER_API_TOKEN` (or `extensions.router.credentials.apiTokenSecretRef`)
    - `RUNFABRIC_ROUTER_ZONE_ID`
    - `RUNFABRIC_ROUTER_ACCOUNT_ID` (optional for DNS-only mode)
+
+   The deploy pipeline (including daemon `POST /deploy`) primes the token
+   itself: it resolves `apiTokenSecretRef` through the top-level `secrets:` map
+   and the configured `extensions.secretManagerPlugin` (e.g. `vault://…`,
+   `aws-sm://…`) just for the duration of the sync, then clears it. Exporting
+   `RUNFABRIC_ROUTER_API_TOKEN` manually is only needed when no secret ref is
+   configured.
 2. Set change-reason and approvals when policy requires them:
    - `RUNFABRIC_DNS_SYNC_REASON`
    - stage approval envs (for rollout gates)

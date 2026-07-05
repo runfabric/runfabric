@@ -27,6 +27,27 @@ const DEFAULT_TIMEOUTS_MS = {
   releases: 30_000,
 };
 
+/**
+ * Generate a W3C traceparent header value (new trace id + span id, sampled).
+ * Pass it per request so the daemon's spans and logs join the caller's trace;
+ * platforms already running OpenTelemetry should propagate their ambient
+ * traceparent instead of generating one here.
+ */
+function newTraceparent() {
+  const { randomBytes } = require('node:crypto');
+  const traceId = randomBytes(16).toString('hex');
+  const spanId = randomBytes(8).toString('hex');
+  return `00-${traceId}-${spanId}-01`;
+}
+
+/** Extract the 32-hex trace id from a traceparent value ('' when malformed). */
+function traceIdOf(traceparent) {
+  const m = /^[0-9a-f]{2}-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$/.exec(
+    String(traceparent || '').trim().toLowerCase(),
+  );
+  return m ? m[1] : '';
+}
+
 /** Build X-Provider-Aws-* headers from a flat AWS credential object. */
 function awsProviderHeaders(creds) {
   if (!creds || !creds.accessKeyId || !creds.secretAccessKey) return {};
@@ -100,6 +121,11 @@ class DaemonClient {
 
     const headers = {};
     if (this.apiKey) headers['X-API-Key'] = this.apiKey;
+    // Distributed-trace + request correlation: the daemon joins the trace in
+    // traceparent (echoing X-Trace-Id) and echoes/generates X-Request-Id.
+    if (request.traceparent) headers['traceparent'] = request.traceparent;
+    if (request.tracestate) headers['tracestate'] = request.tracestate;
+    if (request.requestId) headers['X-Request-Id'] = request.requestId;
     if (request.providerHeaders) {
       for (const [name, value] of Object.entries(request.providerHeaders)) {
         if (value) headers[name] = value;
@@ -113,15 +139,22 @@ class DaemonClient {
         headers,
         signal: AbortSignal.timeout(timeoutMs),
       });
+      const traceId = res.headers?.get?.('x-trace-id') || traceIdOf(request.traceparent) || undefined;
+      const requestId = res.headers?.get?.('x-request-id') || request.requestId || undefined;
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         const error =
           (data && typeof data.error === 'string' && data.error) || res.statusText || `HTTP ${res.status}`;
-        return { ok: false, status: res.status, error };
+        return { ok: false, status: res.status, error, traceId, requestId };
       }
-      return { ok: true, status: res.status, data };
+      return { ok: true, status: res.status, data, traceId, requestId };
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+        traceId: traceIdOf(request.traceparent) || undefined,
+        requestId: request.requestId,
+      };
     }
   }
 }
@@ -134,4 +167,11 @@ class DaemonClient {
  */
 const CREDENTIALS = require('./credentials.json');
 
-module.exports = { DaemonClient, awsProviderHeaders, DEFAULT_TIMEOUTS_MS, CREDENTIALS };
+module.exports = {
+  DaemonClient,
+  awsProviderHeaders,
+  newTraceparent,
+  traceIdOf,
+  DEFAULT_TIMEOUTS_MS,
+  CREDENTIALS,
+};

@@ -9,6 +9,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
@@ -22,6 +23,12 @@ var tp *sdktrace.TracerProvider
 // OTEL_TRACES_ENABLED=1 with default localhost:4318). Otherwise a no-op provider is used.
 // Call Shutdown before process exit to flush spans.
 func Init(ctx context.Context) error {
+	// W3C trace-context + baggage propagation: an inbound traceparent header
+	// joins the caller's distributed trace instead of starting a new root, and
+	// outbound instrumented calls carry the context onward.
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{}, propagation.Baggage{}))
+
 	serviceName := os.Getenv("OTEL_SERVICE_NAME")
 	if serviceName == "" {
 		serviceName = "runfabric"

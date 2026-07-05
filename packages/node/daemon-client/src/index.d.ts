@@ -38,14 +38,23 @@ export interface EngineRequest {
    * The daemon applies them to the process env for this operation only.
    */
   providerHeaders?: Record<string, string>;
+  /**
+   * W3C traceparent to propagate (see newTraceparent). The daemon joins this
+   * trace — same trace id end-to-end — and echoes it back as X-Trace-Id.
+   */
+  traceparent?: string;
+  /** Optional W3C tracestate forwarded alongside traceparent. */
+  tracestate?: string;
+  /** Correlation id sent as X-Request-Id (the daemon generates one if absent). */
+  requestId?: string;
   /** Override the operation's default timeout. */
   timeoutMs?: number;
 }
 
 /** Uniform result: HTTP and network failures come back as ok:false, never throw. */
 export type DaemonResult<T> =
-  | { ok: true; status: number; data: T }
-  | { ok: false; status?: number; error: string };
+  | { ok: true; status: number; data: T; traceId?: string; requestId?: string }
+  | { ok: false; status?: number; error: string; traceId?: string; requestId?: string };
 
 /** Provider DeployResult payload returned verbatim by POST /deploy. */
 export interface DeployPayload {
@@ -110,5 +119,15 @@ export declare function awsProviderHeaders(creds: {
   sessionToken?: string;
   region?: string;
 }): Record<string, string>;
+
+/**
+ * Generate a W3C traceparent value (new trace id + span id, sampled) for
+ * correlating a daemon operation end-to-end. Platforms already running
+ * OpenTelemetry should propagate their ambient traceparent instead.
+ */
+export declare function newTraceparent(): string;
+
+/** Extract the 32-hex trace id from a traceparent value ('' when malformed). */
+export declare function traceIdOf(traceparent: string | undefined): string;
 
 export declare const DEFAULT_TIMEOUTS_MS: Required<DaemonTimeoutsMs>;
