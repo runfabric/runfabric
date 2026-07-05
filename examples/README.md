@@ -2,9 +2,9 @@
 
 Examples are grouped by runtime. Today this repo ships **Node/JS/TS** examples under `examples/node/`.
 
-| Directory | Description                                                                                    |
-| --------- | ---------------------------------------------------------------------------------------------- |
-| **node/** | Node/JS/TS examples (hello-aws, hello-http, compose-app, compose-contracts, handler-scenarios) |
+| Directory | Description                                                                                                        |
+| --------- | ----------------------------------------------------------------------------------------------------------------- |
+| **node/** | Node/JS/TS examples (hello-aws, hello-http, compose-app, compose-contracts, handler-scenarios, workflow-pipeline) |
 
 ## Quick start (recommended)
 

@@ -219,6 +219,7 @@ func TestOpsRoutesReachConnector(t *testing.T) {
 		{"/workflow/status?stage=prod&runId=r1", "workflow:status:runfabric.yml:prod:runId=r1:"},
 		{"/workflow/cancel?stage=prod&runId=r1", "workflow:cancel:runfabric.yml:prod:runId=r1:"},
 		{"/workflow/replay?stage=prod&runId=r1&step=s2", "workflow:replay:runfabric.yml:prod:runId=r1,step=s2:"},
+		{"/workflow/approve?stage=prod&runId=r1&decision=approve", "workflow:approve:runfabric.yml:prod:decision=approve,runId=r1:"},
 		{"/workflow/runs?stage=prod&limit=5", "workflow:runs:runfabric.yml:prod:limit=5:"},
 	}
 	for _, tc := range cases {

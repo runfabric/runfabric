@@ -4,8 +4,51 @@ import (
 	"testing"
 
 	"github.com/runfabric/runfabric/platform/core/model/config"
+	state "github.com/runfabric/runfabric/platform/core/state/core"
 	workflowruntime "github.com/runfabric/runfabric/platform/workflow/runtime"
 )
+
+func TestPausedStepID(t *testing.T) {
+	paused := string(state.StepStatusPaused)
+	cases := []struct {
+		name string
+		run  *state.WorkflowRun
+		want string
+	}{
+		{"nil run", nil, ""},
+		{
+			"from checkpoint",
+			&state.WorkflowRun{
+				Checkpoint: &state.WorkflowCheckpoint{CurrentStepID: "gate", CurrentStatus: paused},
+				Steps:      []state.WorkflowStepRun{{StepID: "gate", Status: state.StepStatusPaused}},
+			},
+			"gate",
+		},
+		{
+			"checkpoint not paused falls back to step scan",
+			&state.WorkflowRun{
+				Checkpoint: &state.WorkflowCheckpoint{CurrentStepID: "x", CurrentStatus: string(state.StepStatusRunning)},
+				Steps: []state.WorkflowStepRun{
+					{StepID: "a", Status: state.StepStatusOK},
+					{StepID: "signoff", Status: state.StepStatusPaused},
+				},
+			},
+			"signoff",
+		},
+		{
+			"none awaiting approval",
+			&state.WorkflowRun{Steps: []state.WorkflowStepRun{{StepID: "a", Status: state.StepStatusOK}}},
+			"",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := pausedStepID(tc.run); got != tc.want {
+				t.Errorf("pausedStepID = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestBuildStepsFromConfiguredWorkflows_MapsStepModelOverride(t *testing.T) {
 	workflows := []config.WorkflowConfig{

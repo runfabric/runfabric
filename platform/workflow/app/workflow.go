@@ -122,6 +122,58 @@ func WorkflowReplay(configPath, stage, providerOverride, runID, stepID string) (
 	return runtime.ReplayRunFromStep(context.Background(), stage, runID, stepID)
 }
 
+// WorkflowApprove records a human-approval decision (approve|reject) for a
+// paused step and resumes the run so it advances past the gate. stepID is
+// optional: when empty it targets the run's currently paused step. Returns the
+// resulting run (still paused if a later step also awaits approval).
+func WorkflowApprove(configPath, stage, providerOverride, runID, stepID, decision, reviewer string) (*state.WorkflowRun, error) {
+	ctx, err := Bootstrap(configPath, stage, providerOverride)
+	if err != nil {
+		return nil, err
+	}
+	handler, err := workflowruntime.NewTypedStepHandlerFromConfig(ctx.Config, nil)
+	if err != nil {
+		return nil, err
+	}
+	handler.CodeRunner = newInvokeCodeStepRunner(ctx)
+	runtime, err := newConfiguredRuntime(ctx.Config, ctx.RootDir, handler)
+	if err != nil {
+		return nil, err
+	}
+	// Default to the paused step so callers need only the run id + decision.
+	if strings.TrimSpace(stepID) == "" {
+		run, err := loadRunVia(ctx.Config, ctx.RootDir, stage, runID)
+		if err != nil {
+			return nil, err
+		}
+		stepID = pausedStepID(run)
+		if stepID == "" {
+			return nil, fmt.Errorf("run %q has no step awaiting approval", runID)
+		}
+	}
+	if err := runtime.ResolveApproval(stage, runID, stepID, decision, reviewer); err != nil {
+		return nil, err
+	}
+	return runtime.ResumeRun(context.Background(), stage, runID)
+}
+
+// pausedStepID returns the id of the run's paused step (checkpoint first, then a
+// step scan), or "" when none is awaiting approval.
+func pausedStepID(run *state.WorkflowRun) string {
+	if run == nil {
+		return ""
+	}
+	if run.Checkpoint != nil && run.Checkpoint.CurrentStatus == string(state.StepStatusPaused) {
+		return run.Checkpoint.CurrentStepID
+	}
+	for _, step := range run.Steps {
+		if step.Status == state.StepStatusPaused {
+			return step.StepID
+		}
+	}
+	return ""
+}
+
 func buildWorkflowRunSpec(cfg *config.Config, workflowName, runID string, runInput map[string]any) (workflowruntime.WorkflowRunSpec, string, []string, error) {
 	name := strings.TrimSpace(workflowName)
 	if name == "" {

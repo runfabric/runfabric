@@ -335,6 +335,24 @@ class DaemonClient {
     });
   }
 
+  /**
+   * Resolve a paused human-approval step and resume the run. {decision} is
+   * approve|reject; {step} is optional (defaults to the paused step); {reviewer}
+   * is recorded on the step output for the audit trail.
+   */
+  workflowApprove(request = {}) {
+    return this.#call('workflow/approve', {
+      ...request,
+      params: {
+        runId: request.runId,
+        step: request.step,
+        decision: request.decision,
+        reviewer: request.reviewer,
+        ...(request.params || {}),
+      },
+    });
+  }
+
   /** List the stage's most recent workflow runs. */
   workflowRuns(request = {}) {
     return this.#call('workflow/runs', {

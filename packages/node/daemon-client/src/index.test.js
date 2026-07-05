@@ -344,6 +344,7 @@ test('workflow ops: run body + params, status/cancel/replay/runs paths', async (
     '/workflow/status': { status: 200, body: { id: 'r1', status: 'succeeded' } },
     '/workflow/cancel': { status: 200, body: { id: 'r1', status: 'cancelled' } },
     '/workflow/replay': { status: 200, body: { id: 'r1', status: 'running' } },
+    '/workflow/approve': { status: 200, body: { id: 'r1', status: 'running' } },
     '/workflow/runs': { status: 200, body: [{ id: 'r1' }] },
   });
   try {
@@ -354,6 +355,7 @@ test('workflow ops: run body + params, status/cancel/replay/runs paths', async (
     await client.workflowStatus({ stage: 'prod', runId: 'r1' });
     await client.workflowCancel({ stage: 'prod', runId: 'r1' });
     await client.workflowReplay({ stage: 'prod', runId: 'r1', step: 'extract' });
+    await client.workflowApprove({ stage: 'prod', runId: 'r1', decision: 'approve', reviewer: 'alice' });
     const runs = await client.workflowRuns({ stage: 'prod', limit: 5 });
     assert.equal(runs.ok, true);
 
@@ -363,7 +365,10 @@ test('workflow ops: run body + params, status/cancel/replay/runs paths', async (
     assert.equal(stub.seen[1].query.runId, 'r1');
     assert.equal(stub.seen[2].path, '/workflow/cancel');
     assert.equal(stub.seen[3].query.step, 'extract');
-    assert.equal(stub.seen[4].query.limit, '5');
+    assert.equal(stub.seen[4].path, '/workflow/approve');
+    assert.equal(stub.seen[4].query.decision, 'approve');
+    assert.equal(stub.seen[4].query.reviewer, 'alice');
+    assert.equal(stub.seen[5].query.limit, '5');
   } finally {
     await stub.close();
   }

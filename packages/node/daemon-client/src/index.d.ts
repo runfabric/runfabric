@@ -131,6 +131,17 @@ export interface WorkflowRunsRequest extends EngineRequest {
   limit?: number;
 }
 
+/** workflowApprove(): resolve a paused human-approval step and resume. */
+export interface WorkflowApproveRequest extends EngineRequest {
+  runId: string;
+  /** approve | reject (approved/rejected accepted too). */
+  decision: string;
+  /** Step id awaiting approval; defaults to the run's paused step. */
+  step?: string;
+  /** Recorded on the step output for the audit trail. */
+  reviewer?: string;
+}
+
 /** Uniform result: HTTP and network failures come back as ok:false, never throw. */
 export type DaemonResult<T> =
   | { ok: true; status: number; data: T; traceId?: string; requestId?: string }
@@ -227,6 +238,9 @@ export declare class DaemonClient {
 
   /** Replay a workflow run from one step (journal-backed). */
   workflowReplay(request: WorkflowRunRefRequest): Promise<DaemonResult<unknown>>;
+
+  /** Resolve a paused human-approval step (approve|reject) and resume the run. */
+  workflowApprove(request: WorkflowApproveRequest): Promise<DaemonResult<unknown>>;
 
   /** List the stage's most recent workflow runs. */
   workflowRuns(request?: WorkflowRunsRequest): Promise<DaemonResult<unknown>>;

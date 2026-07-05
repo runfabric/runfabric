@@ -338,6 +338,8 @@ func (coreWorkflowAdapter) WorkflowOp(op, configPath, stage string, params map[s
 		res, err = app.WorkflowCancel(configPath, stage, params["runId"])
 	case "replay":
 		res, err = app.WorkflowReplay(configPath, stage, params["provider"], params["runId"], params["step"])
+	case "approve":
+		res, err = app.WorkflowApprove(configPath, stage, params["provider"], params["runId"], params["step"], params["decision"], params["reviewer"])
 	case "runs":
 		res, err = app.WorkflowRuns(configPath, stage, atoiOr(params["limit"], 50))
 	default:

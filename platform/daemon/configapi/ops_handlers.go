@@ -205,6 +205,8 @@ func (s *Server) handleWorkflowOp(w http.ResponseWriter, r *http.Request) {
 		"runId":    strings.TrimSpace(r.URL.Query().Get("runId")),
 		"step":     strings.TrimSpace(r.URL.Query().Get("step")),
 		"limit":    strings.TrimSpace(r.URL.Query().Get("limit")),
+		"decision": strings.TrimSpace(r.URL.Query().Get("decision")),
+		"reviewer": strings.TrimSpace(r.URL.Query().Get("reviewer")),
 		"provider": provider(r),
 	}
 	s.runOp(w, r, "workflow_"+strings.ReplaceAll(op, "-", "_"), func(cfgPath, stage string) (json.RawMessage, error) {

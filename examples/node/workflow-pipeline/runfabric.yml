@@ -1,0 +1,90 @@
+service: doc-review
+
+provider:
+  name: aws-lambda
+  runtime: nodejs20.x
+  region: ${env:AWS_REGION,us-east-1}
+
+# ---------------------------------------------------------------------------
+# Durable workflows.
+#
+# A workflow is an ordered list of steps run by the RunFabric workflow runtime
+# (`runfabric workflow run|status|cancel|replay`). Each run is journaled to
+# `.runfabric/runs/<stage>/<runId>.json`, so a run can be inspected, resumed,
+# cancelled, or replayed from any step.
+#
+# Every step needs an `id` and a `kind`. Supported kinds:
+#   code           run application code; with `input.function` it invokes a
+#                  deployed function, otherwise it is a pure (no-op) code node.
+#   ai-generate    free-text LLM generation      (requires `input.prompt`)
+#   ai-structured  schema-constrained LLM output (requires `input.schema`)
+#   ai-retrieval   retrieval / RAG lookup        (requires `input.query`)
+#   ai-eval        gate on a numeric score       (requires numeric `input.score`)
+#   human-approval pause for a human decision    (`input.approvalDecision`:
+#                  approve|reject; omit it and the run PAUSES awaiting approval)
+# ---------------------------------------------------------------------------
+workflows:
+  # quickstart-review runs end-to-end LOCALLY with no cloud credentials and no
+  # LLM endpoint — every step here is deterministic. Try it first:
+  #   runfabric workflow run --name quickstart-review
+  - name: quickstart-review
+    steps:
+      - id: validate
+        kind: code # pure code node (no input.function) — runs anywhere
+      - id: score
+        kind: ai-eval
+        input:
+          score: 0.88 # 0.88 >= 0.7 threshold -> the gate passes
+          threshold: 0.7
+      - id: signoff
+        kind: human-approval
+        input:
+          approvalDecision: approve # preset so the run completes unattended;
+          # omit this line and the run pauses at `signoff`
+
+  # ai-review is the full tour. It needs an LLM endpoint for the ai-* steps
+  # (set RUNFABRIC_LLM_ENDPOINT, or deploy to a cloud provider whose managed
+  # model is configured) and a prior `runfabric deploy` for the final code
+  # step, which invokes the deployed `archive` function.
+  - name: ai-review
+    steps:
+      - id: summarize
+        kind: ai-generate
+        input:
+          prompt: "Summarize the submitted document in two sentences."
+      - id: classify
+        kind: ai-structured
+        input:
+          prompt: "Classify the document."
+          schema:
+            type: object
+            properties:
+              category: { type: string }
+              risk: { type: string }
+            required: [category]
+      - id: score
+        kind: ai-eval
+        input:
+          score: 0.91
+          threshold: 0.8
+      - id: signoff
+        kind: human-approval # no decision -> pauses for a human to approve/reject
+      - id: archive
+        kind: code
+        input:
+          function: archive # invokes the deployed `archive` function below
+
+functions:
+  # A normal HTTP entry point — workflows and request/response functions live
+  # in the same service and config.
+  - name: submit
+    entry: src/submit.ts
+    triggers:
+      - type: http
+        method: POST
+        path: /documents
+
+  # Target of the ai-review `archive` code step. It has no trigger: it is
+  # invoked by the workflow runtime, not by an HTTP request.
+  - name: archive
+    entry: src/archive.ts
