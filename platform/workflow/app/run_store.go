@@ -36,6 +36,20 @@ func listRunsVia(cfg *config.Config, root, stage string, limit int) []*state.Wor
 	return runs
 }
 
+// WorkflowRuns lists the stage's most recent workflow runs through the
+// configured run store — the daemon-facing sibling of the per-run
+// WorkflowStatus.
+func WorkflowRuns(configPath, stage string, limit int) ([]*state.WorkflowRun, error) {
+	ctx, err := Bootstrap(configPath, stage, "")
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	return listRunsVia(ctx.Config, ctx.RootDir, ctx.Stage, limit), nil
+}
+
 // loadRunVia loads a single run through the configured store.
 func loadRunVia(cfg *config.Config, root, stage, runID string) (*state.WorkflowRun, error) {
 	run, _, err := resolveRunStore(cfg, root).Load(context.Background(), stage, runID)

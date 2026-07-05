@@ -180,6 +180,38 @@ func (s *Server) handleStateOp(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleWorkflowOp drives the durable workflow runtime:
+// POST /workflow/{run|status|cancel|replay|runs}. run takes the invocation
+// input as JSON body; status/cancel/replay address a run via runId (replay
+// also takes step); runs lists the stage's recent runs (limit).
+func (s *Server) handleWorkflowOp(w http.ResponseWriter, r *http.Request) {
+	op := r.PathValue("op")
+	var payload []byte
+	if op == "run" {
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxInvokePayload+1))
+		_ = r.Body.Close()
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		if len(body) > maxInvokePayload {
+			writeErr(w, http.StatusRequestEntityTooLarge, fmt.Errorf("workflow run input too large"))
+			return
+		}
+		payload = body
+	}
+	params := map[string]string{
+		"name":     strings.TrimSpace(r.URL.Query().Get("name")),
+		"runId":    strings.TrimSpace(r.URL.Query().Get("runId")),
+		"step":     strings.TrimSpace(r.URL.Query().Get("step")),
+		"limit":    strings.TrimSpace(r.URL.Query().Get("limit")),
+		"provider": provider(r),
+	}
+	s.runOp(w, r, "workflow_"+strings.ReplaceAll(op, "-", "_"), func(cfgPath, stage string) (json.RawMessage, error) {
+		return s.core.WorkflowOp(op, cfgPath, stage, params, payload)
+	})
+}
+
 // handleRouterOp runs a router operation over the recorded fabric state:
 // POST /router/{history|simulate|verify|shift|restore}. (/router/sync keeps
 // its dedicated handler.)

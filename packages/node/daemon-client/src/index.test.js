@@ -337,3 +337,34 @@ test('ops endpoints: invoke body, op params, state/router op paths', async () =>
     await stub.close();
   }
 });
+
+test('workflow ops: run body + params, status/cancel/replay/runs paths', async () => {
+  const stub = await startStub({
+    '/workflow/run': { status: 200, body: { workflow: 'etl', run: { id: 'r1', status: 'running' } } },
+    '/workflow/status': { status: 200, body: { id: 'r1', status: 'succeeded' } },
+    '/workflow/cancel': { status: 200, body: { id: 'r1', status: 'cancelled' } },
+    '/workflow/replay': { status: 200, body: { id: 'r1', status: 'running' } },
+    '/workflow/runs': { status: 200, body: [{ id: 'r1' }] },
+  });
+  try {
+    const client = new DaemonClient({ baseUrl: stub.baseUrl });
+
+    const run = await client.workflowRun({ stage: 'prod', name: 'etl', payload: { day: '2026-07-06' } });
+    assert.equal(run.ok, true);
+    await client.workflowStatus({ stage: 'prod', runId: 'r1' });
+    await client.workflowCancel({ stage: 'prod', runId: 'r1' });
+    await client.workflowReplay({ stage: 'prod', runId: 'r1', step: 'extract' });
+    const runs = await client.workflowRuns({ stage: 'prod', limit: 5 });
+    assert.equal(runs.ok, true);
+
+    assert.equal(stub.seen[0].path, '/workflow/run');
+    assert.equal(stub.seen[0].query.name, 'etl');
+    assert.equal(stub.seen[0].headers['content-type'], 'application/json');
+    assert.equal(stub.seen[1].query.runId, 'r1');
+    assert.equal(stub.seen[2].path, '/workflow/cancel');
+    assert.equal(stub.seen[3].query.step, 'extract');
+    assert.equal(stub.seen[4].query.limit, '5');
+  } finally {
+    await stub.close();
+  }
+});

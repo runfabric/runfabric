@@ -153,6 +153,7 @@ func (s *Server) Handler(extraRoutes func(mux *http.ServeMux, authorize func(htt
 	mux.HandleFunc("POST /router/sync", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /router/{op}", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /state/{op}", apiHandler.ServeHTTP)
+	mux.HandleFunc("POST /workflow/{op}", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /invoke", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /logs", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /metrics/functions", apiHandler.ServeHTTP)

@@ -58,6 +58,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /router/sync", s.handleRouterSync)
 	mux.HandleFunc("POST /router/{op}", s.handleRouterOp)
 	mux.HandleFunc("POST /state/{op}", s.handleStateOp)
+	mux.HandleFunc("POST /workflow/{op}", s.handleWorkflowOp)
 	mux.HandleFunc("POST /invoke", s.handleInvoke)
 	mux.HandleFunc("POST /logs", s.handleLogs)
 	mux.HandleFunc("POST /metrics/functions", s.handleFunctionMetrics)

@@ -56,6 +56,10 @@ type CoreWorkflowConnector interface {
 	// history|simulate|verify|shift|restore. params carries op-specific
 	// inputs (requests, down, window, provider, percent, snapshot, latest, dryRun).
 	RouterOp(op, configPath, stage string, params map[string]string) (json.RawMessage, error)
+	// WorkflowOp drives the durable workflow runtime:
+	// run|status|cancel|replay|runs. params carries op-specific inputs
+	// (name, runId, step, provider, limit); payload is run's JSON input.
+	WorkflowOp(op, configPath, stage string, params map[string]string, payload []byte) (json.RawMessage, error)
 }
 
 type coreWorkflowAdapter struct{}
@@ -309,6 +313,35 @@ func (coreWorkflowAdapter) RouterOp(op, configPath, stage string, params map[str
 		res, err = app.RouterRestoreFromSnapshot(configPath, stage, params["snapshot"], params["latest"] == "true", params["dryRun"] == "true", nil)
 	default:
 		return nil, fmt.Errorf("unknown router operation %q", op)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return marshalPayload(res)
+}
+
+func (coreWorkflowAdapter) WorkflowOp(op, configPath, stage string, params map[string]string, payload []byte) (json.RawMessage, error) {
+	var res any
+	var err error
+	switch op {
+	case "run":
+		var input map[string]any
+		if len(payload) > 0 {
+			if jerr := json.Unmarshal(payload, &input); jerr != nil {
+				return nil, fmt.Errorf("decode workflow run input: %w", jerr)
+			}
+		}
+		res, err = app.WorkflowRun(configPath, stage, params["provider"], params["name"], params["runId"], input)
+	case "status":
+		res, err = app.WorkflowStatus(configPath, stage, params["runId"])
+	case "cancel":
+		res, err = app.WorkflowCancel(configPath, stage, params["runId"])
+	case "replay":
+		res, err = app.WorkflowReplay(configPath, stage, params["provider"], params["runId"], params["step"])
+	case "runs":
+		res, err = app.WorkflowRuns(configPath, stage, atoiOr(params["limit"], 50))
+	default:
+		return nil, fmt.Errorf("unknown workflow operation %q", op)
 	}
 	if err != nil {
 		return nil, err

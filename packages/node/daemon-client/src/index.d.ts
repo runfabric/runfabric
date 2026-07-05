@@ -109,6 +109,28 @@ export type StateOpName =
 /** Router operations over recorded fabric state under POST /router/{op}. */
 export type RouterOpName = 'history' | 'simulate' | 'verify' | 'shift' | 'restore';
 
+/** workflowRun(): EngineRequest plus the workflow name, input, and run id. */
+export interface WorkflowRunRequest extends EngineRequest {
+  /** Workflow name from the deployed config. Required. */
+  name: string;
+  /** JSON-serializable run input (sent as the request body). */
+  payload?: unknown;
+  /** Optional deterministic run id. */
+  runId?: string;
+}
+
+/** workflowStatus()/workflowCancel()/workflowReplay(): address a run. */
+export interface WorkflowRunRefRequest extends EngineRequest {
+  runId: string;
+  /** workflowReplay only: step id to replay from. */
+  step?: string;
+}
+
+/** workflowRuns(): EngineRequest plus a result cap. */
+export interface WorkflowRunsRequest extends EngineRequest {
+  limit?: number;
+}
+
 /** Uniform result: HTTP and network failures come back as ok:false, never throw. */
 export type DaemonResult<T> =
   | { ok: true; status: number; data: T; traceId?: string; requestId?: string }
@@ -193,6 +215,21 @@ export declare class DaemonClient {
 
   /** Router op over recorded fabric state; op-specific inputs ride request.params. */
   routerOp(op: RouterOpName, request?: EngineRequest): Promise<DaemonResult<unknown>>;
+
+  /** Start a durable workflow run; data is {workflow, source, run}. */
+  workflowRun(request: WorkflowRunRequest): Promise<DaemonResult<unknown>>;
+
+  /** Load one workflow run (status, steps, outputs). */
+  workflowStatus(request: WorkflowRunRefRequest): Promise<DaemonResult<unknown>>;
+
+  /** Cancel a running workflow run. */
+  workflowCancel(request: WorkflowRunRefRequest): Promise<DaemonResult<unknown>>;
+
+  /** Replay a workflow run from one step (journal-backed). */
+  workflowReplay(request: WorkflowRunRefRequest): Promise<DaemonResult<unknown>>;
+
+  /** List the stage's most recent workflow runs. */
+  workflowRuns(request?: WorkflowRunsRequest): Promise<DaemonResult<unknown>>;
 }
 
 /** One declared credential env var (subset of the Go CredentialVar). */

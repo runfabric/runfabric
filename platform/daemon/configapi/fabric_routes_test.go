@@ -105,6 +105,10 @@ func (s *stubConnector) RouterOp(op, c, st string, params map[string]string) (js
 	s.note("routerop:%s:%s:%s:%s", op, c, st, paramString(params))
 	return json.RawMessage(`{}`), s.err()
 }
+func (s *stubConnector) WorkflowOp(op, c, st string, params map[string]string, payload []byte) (json.RawMessage, error) {
+	s.note("workflow:%s:%s:%s:%s:%s", op, c, st, paramString(params), string(payload))
+	return json.RawMessage(`{}`), s.err()
+}
 
 // paramString renders a params map deterministically for call assertions.
 func paramString(params map[string]string) string {
@@ -212,6 +216,10 @@ func TestOpsRoutesReachConnector(t *testing.T) {
 		{"/router/shift?stage=prod&provider=gcp&percent=20&dryRun=1", "routerop:shift:runfabric.yml:prod:dryRun=true,percent=20,provider=gcp"},
 		{"/router/restore?stage=prod&latest=1", "routerop:restore:runfabric.yml:prod:latest=true"},
 		{"/router/history?stage=prod&window=3", "routerop:history:runfabric.yml:prod:window=3"},
+		{"/workflow/status?stage=prod&runId=r1", "workflow:status:runfabric.yml:prod:runId=r1:"},
+		{"/workflow/cancel?stage=prod&runId=r1", "workflow:cancel:runfabric.yml:prod:runId=r1:"},
+		{"/workflow/replay?stage=prod&runId=r1&step=s2", "workflow:replay:runfabric.yml:prod:runId=r1,step=s2:"},
+		{"/workflow/runs?stage=prod&limit=5", "workflow:runs:runfabric.yml:prod:limit=5:"},
 	}
 	for _, tc := range cases {
 		stub.calls = nil
@@ -221,6 +229,20 @@ func TestOpsRoutesReachConnector(t *testing.T) {
 		if got := strings.Join(stub.calls, "|"); got != tc.want {
 			t.Fatalf("%s calls = %q, want %q", tc.target, got, tc.want)
 		}
+	}
+}
+
+func TestWorkflowRunCarriesJSONBody(t *testing.T) {
+	srv, stub := newStubServer()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/workflow/run?stage=prod&name=etl", strings.NewReader(`{"a":1}`))
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("workflow/run status %d: %s", rec.Code, rec.Body.String())
+	}
+	want := `workflow:run:runfabric.yml:prod:name=etl:{"a":1}`
+	if got := strings.Join(stub.calls, "|"); got != want {
+		t.Fatalf("calls = %q, want %q", got, want)
 	}
 }
 

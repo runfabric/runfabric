@@ -298,6 +298,51 @@ class DaemonClient {
     return this.#call(`router/${op}`, request);
   }
 
+  /**
+   * Start a durable workflow run. {name} is the workflow name from the
+   * deployed config; {payload} (JSON-serializable) is the run input; {runId}
+   * optionally pins a deterministic run id.
+   */
+  workflowRun(request = {}) {
+    return this.#call('workflow/run', {
+      ...request,
+      params: { name: request.name, runId: request.runId, ...(request.params || {}) },
+      body: request.payload ?? {},
+    });
+  }
+
+  /** Load one workflow run (status, steps, outputs). */
+  workflowStatus(request = {}) {
+    return this.#call('workflow/status', {
+      ...request,
+      params: { runId: request.runId, ...(request.params || {}) },
+    });
+  }
+
+  /** Cancel a running workflow run. */
+  workflowCancel(request = {}) {
+    return this.#call('workflow/cancel', {
+      ...request,
+      params: { runId: request.runId, ...(request.params || {}) },
+    });
+  }
+
+  /** Replay a workflow run from one step (journal-backed). */
+  workflowReplay(request = {}) {
+    return this.#call('workflow/replay', {
+      ...request,
+      params: { runId: request.runId, step: request.step, ...(request.params || {}) },
+    });
+  }
+
+  /** List the stage's most recent workflow runs. */
+  workflowRuns(request = {}) {
+    return this.#call('workflow/runs', {
+      ...request,
+      params: { limit: request.limit, ...(request.params || {}) },
+    });
+  }
+
   async #call(op, request = {}) {
     if (!this.available()) {
       return { ok: false, error: 'daemon base URL is not set' };
