@@ -177,7 +177,13 @@ func hasCredentialHeaders(h http.Header) bool {
 // the cache both ways — see hasCredentialHeaders.
 func apiCacheMiddleware(cache *apiCache, defaultStage string, next http.Handler) http.Handler {
 	cacheable := map[string]bool{"validate": true, "plan": true, "releases": true}
-	mutating := map[string]bool{"deploy": true, "remove": true, "fabric/deploy": true, "router/sync": true}
+	mutating := map[string]bool{
+		"deploy": true, "remove": true, "fabric/deploy": true, "router/sync": true,
+		// New lifecycle/ops endpoints that change deployed or recorded state.
+		"recover": true, "router/shift": true, "router/restore": true,
+		"state/restore": true, "state/reconcile": true, "state/migrate": true,
+		"state/unlock": true, "state/lock-steal": true,
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			next.ServeHTTP(w, r)

@@ -13,15 +13,15 @@ import (
 
 // Organization is the mongo-persisted org document.
 type Organization struct {
-	ID          string          `bson:"_id"`
-	Slug        string          `bson:"slug"`
-	Name        string          `bson:"name"`
-	Description string          `bson:"description,omitempty"`
-	Visibility  string          `bson:"default_visibility,omitempty"`
-	CreatedBy   string          `bson:"created_by"`
-	CreatedAt   string          `bson:"created_at"`
-	UpdatedAt   string          `bson:"updated_at"`
-	Members     []OrgMember     `bson:"members"`
+	ID          string      `bson:"_id"`
+	Slug        string      `bson:"slug"`
+	Name        string      `bson:"name"`
+	Description string      `bson:"description,omitempty"`
+	Visibility  string      `bson:"default_visibility,omitempty"`
+	CreatedBy   string      `bson:"created_by"`
+	CreatedAt   string      `bson:"created_at"`
+	UpdatedAt   string      `bson:"updated_at"`
+	Members     []OrgMember `bson:"members"`
 }
 
 type OrgMember struct {

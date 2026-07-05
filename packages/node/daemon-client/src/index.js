@@ -4,8 +4,14 @@
  * RunFabric daemon (runfabricd) HTTP client.
  *
  * Speaks the config API served by platform/daemon/configapi/server.go:
- *   POST /deploy | /remove | /plan | /validate | /resolve | /releases ? config=<rel>&stage=<stage>
- * - No request body: the config path + stage are query params. `config` is
+ *   POST /deploy | /remove | /plan | /validate | /resolve | /releases |
+ *        /releases/history | /fabric/{deploy,health,targets} |
+ *        /router/{sync,history,simulate,verify,shift,restore} |
+ *        /state/{list,pull,backup,restore,reconcile,migrate,unlock,lock-steal} |
+ *        /invoke | /logs | /metrics/functions | /doctor | /recover
+ *        ? config=<rel>&stage=<stage>
+ * - Inputs ride query params (config path, stage, op-specific params); only
+ *   /invoke carries a JSON body (the invocation payload). `config` is
  *   RELATIVE to the daemon's workspace root; the daemon deploys the
  *   runfabric.yml + built artifacts that live on its own filesystem.
  * - Auth is the `X-API-Key` header (the daemon refuses to bind a non-loopback
@@ -25,9 +31,18 @@ const DEFAULT_TIMEOUTS_MS = {
   validate: 60_000,
   resolve: 60_000,
   releases: 30_000,
+  'releases/history': 30_000,
   // Deploys EVERY fabric.targets provider sequentially.
   'fabric/deploy': 600_000,
+  'fabric/health': 60_000,
+  'fabric/targets': 30_000,
   'router/sync': 120_000,
+  'router/shift': 120_000,
+  'router/restore': 120_000,
+  invoke: 120_000,
+  recover: 300_000,
+  'state/migrate': 300_000,
+  'state/restore': 120_000,
 };
 
 /**
@@ -176,6 +191,11 @@ class DaemonClient {
     return this.#call('releases', request);
   }
 
+  /** Retained past receipts for one stage, newest first. */
+  releaseHistory(request) {
+    return this.#call('releases/history', request);
+  }
+
   /**
    * Multi-cloud deploy: deploys to EVERY fabric.targets provider and returns
    * the fabric state ({service, stage, endpoints:[{provider,url},...]}).
@@ -195,15 +215,103 @@ class DaemonClient {
     return this.#call('router/sync', request);
   }
 
+  /** Fabric endpoint health: per-provider endpoints with health status. */
+  fabricHealth(request) {
+    return this.#call('fabric/health', request);
+  }
+
+  /** Fabric target list: the config's fabric.targets provider keys. */
+  fabricTargets(request) {
+    return this.#call('fabric/targets', request);
+  }
+
+  /**
+   * Invoke one deployed function (or `workflow:<name>` orchestration target).
+   * {function} is required; {payload} (JSON-serializable) rides the body.
+   */
+  invoke(request = {}) {
+    return this.#call('invoke', {
+      ...request,
+      params: { function: request.function, ...(request.params || {}) },
+      body: request.payload,
+    });
+  }
+
+  /** Provider + local logs for one function ({function}) or all ("" = all). */
+  logs(request = {}) {
+    return this.#call('logs', {
+      ...request,
+      params: { function: request.function, service: request.service, ...(request.params || {}) },
+    });
+  }
+
+  /**
+   * Per-function metrics from the provider (NOT the daemon's own Prometheus
+   * /metrics). {all:true} includes every function.
+   */
+  functionMetrics(request = {}) {
+    return this.#call('metrics/functions', {
+      ...request,
+      params: { service: request.service, all: request.all ? '1' : undefined, ...(request.params || {}) },
+    });
+  }
+
+  /** Traces aggregated by service/stage from the provider. */
+  traces(request = {}) {
+    return this.#call('traces', {
+      ...request,
+      params: { service: request.service, all: request.all ? '1' : undefined, ...(request.params || {}) },
+    });
+  }
+
+  /** Backend + provider readiness checks ({backend, provider} payload). */
+  doctor(request) {
+    return this.#call('doctor', request);
+  }
+
+  /**
+   * Recover an unfinished transaction journal.
+   * {mode}: rollback|resume|inspect (default rollback); {dryRun:true} previews.
+   */
+  recover(request = {}) {
+    return this.#call('recover', {
+      ...request,
+      params: { mode: request.mode, ...(request.params || {}) },
+    });
+  }
+
+  /**
+   * State-backend operation: list|pull|backup|restore|reconcile|migrate|
+   * unlock|lock-steal. Op-specific inputs ride {params} (out, file, from, to,
+   * force) — paths are relative to the daemon workspace.
+   */
+  stateOp(op, request = {}) {
+    return this.#call(`state/${op}`, request);
+  }
+
+  /**
+   * Router operation over the recorded fabric state: history|simulate|verify|
+   * shift|restore. Op-specific inputs ride {params} (requests, down, window,
+   * percent, snapshot, latest) plus the shared {provider}/{dryRun} fields.
+   */
+  routerOp(op, request = {}) {
+    return this.#call(`router/${op}`, request);
+  }
+
   async #call(op, request = {}) {
     if (!this.available()) {
       return { ok: false, error: 'daemon base URL is not set' };
     }
     const query = new URLSearchParams({ config: request.configPath || 'runfabric.yml' });
     if (request.stage) query.set('stage', request.stage);
-    // providerOverrides key for multi-cloud (CLI --provider equivalent).
+    // providerOverrides key for multi-cloud (CLI --provider equivalent);
+    // doubles as the canary target for router/shift.
     if (request.provider) query.set('provider', request.provider);
     if (request.dryRun) query.set('dryRun', '1');
+    // Op-specific query params (function, service, mode, out, file, ...).
+    for (const [name, value] of Object.entries(request.params || {})) {
+      if (value !== undefined && value !== null && value !== '') query.set(name, String(value));
+    }
     const url = `${this.baseUrl}/${op}?${query.toString()}`;
 
     const headers = {};
@@ -219,11 +327,18 @@ class DaemonClient {
       }
     }
 
+    let body;
+    if (request.body !== undefined && request.body !== null) {
+      body = JSON.stringify(request.body);
+      headers['Content-Type'] = 'application/json';
+    }
+
     const timeoutMs = request.timeoutMs || this.timeoutsMs[op] || 60_000;
     try {
       const res = await this.fetchImpl(url, {
         method: 'POST',
         headers,
+        body,
         signal: AbortSignal.timeout(timeoutMs),
       });
       const traceId = res.headers?.get?.('x-trace-id') || traceIdOf(request.traceparent) || undefined;

@@ -289,3 +289,51 @@ test('fabricDeploy and routerSync hit the multi-cloud routes with provider/dryRu
     await stub.close();
   }
 });
+
+test('ops endpoints: invoke body, op params, state/router op paths', async () => {
+  const stub = await startStub({
+    '/invoke': { status: 200, body: { result: 'pong' } },
+    '/logs': { status: 200, body: { entries: [] } },
+    '/metrics/functions': { status: 200, body: { functions: {} } },
+    '/doctor': { status: 200, body: { backend: {}, provider: {} } },
+    '/recover': { status: 200, body: { recovered: true } },
+    '/fabric/health': { status: 200, body: { endpoints: [] } },
+    '/fabric/targets': { status: 200, body: { targets: ['aws', 'gcp'] } },
+    '/state/backup': { status: 200, body: { path: 'b.json' } },
+    '/router/shift': { status: 200, body: { weights: {} } },
+  });
+  try {
+    const client = new DaemonClient({ baseUrl: stub.baseUrl });
+
+    const inv = await client.invoke({ stage: 'prod', function: 'hello', payload: { name: 'x' } });
+    assert.equal(inv.ok, true);
+    await client.logs({ stage: 'prod', function: 'hello', service: 'api' });
+    await client.functionMetrics({ stage: 'prod', all: true });
+    await client.doctor({ stage: 'prod', provider: 'aws' });
+    await client.recover({ stage: 'prod', mode: 'inspect', dryRun: true });
+    await client.fabricHealth({ stage: 'prod' });
+    const targets = await client.fabricTargets({ stage: 'prod' });
+    assert.deepEqual(targets.data.targets, ['aws', 'gcp']);
+    await client.stateOp('backup', { stage: 'prod', params: { out: 'backups/s.json' } });
+    await client.routerOp('shift', { stage: 'prod', provider: 'gcp', params: { percent: 20 }, dryRun: true });
+
+    assert.equal(stub.seen[0].path, '/invoke');
+    assert.equal(stub.seen[0].query.function, 'hello');
+    assert.equal(stub.seen[0].headers['content-type'], 'application/json');
+    assert.equal(stub.seen[1].query.service, 'api');
+    assert.equal(stub.seen[2].path, '/metrics/functions');
+    assert.equal(stub.seen[2].query.all, '1');
+    assert.equal(stub.seen[3].query.provider, 'aws');
+    assert.equal(stub.seen[4].query.mode, 'inspect');
+    assert.equal(stub.seen[4].query.dryRun, '1');
+    assert.equal(stub.seen[5].path, '/fabric/health');
+    assert.equal(stub.seen[7].path, '/state/backup');
+    assert.equal(stub.seen[7].query.out, 'backups/s.json');
+    assert.equal(stub.seen[8].path, '/router/shift');
+    assert.equal(stub.seen[8].query.provider, 'gcp');
+    assert.equal(stub.seen[8].query.percent, '20');
+    assert.equal(stub.seen[8].query.dryRun, '1');
+  } finally {
+    await stub.close();
+  }
+});

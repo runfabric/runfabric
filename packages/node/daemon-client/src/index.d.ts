@@ -2,7 +2,7 @@
  * RunFabric daemon (runfabricd) HTTP client — typed surface.
  */
 
-/** Per-operation timeouts in milliseconds. */
+/** Per-operation timeouts in milliseconds (keyed by endpoint path, e.g. 'fabric/deploy'). */
 export interface DaemonTimeoutsMs {
   deploy?: number;
   remove?: number;
@@ -10,6 +10,9 @@ export interface DaemonTimeoutsMs {
   validate?: number;
   resolve?: number;
   releases?: number;
+  invoke?: number;
+  recover?: number;
+  [endpoint: string]: number | undefined;
 }
 
 export interface DaemonClientOptions {
@@ -52,11 +55,59 @@ export interface EngineRequest {
    * equivalent); "" / absent targets the config's default provider.
    */
   provider?: string;
-  /** routerSync only: preview the sync without mutating DNS/LB resources. */
+  /** Mutating router/state/recover ops: preview without applying changes. */
   dryRun?: boolean;
   /** Override the operation's default timeout. */
   timeoutMs?: number;
+  /**
+   * Op-specific query params (e.g. stateOp's out/file/from/to/force,
+   * routerOp's requests/down/window/percent/snapshot/latest).
+   */
+  params?: Record<string, string | number | boolean | undefined>;
 }
+
+/** invoke(): EngineRequest plus the function target and JSON payload. */
+export interface InvokeRequest extends EngineRequest {
+  /** Function name or `workflow:<name>` orchestration target. Required. */
+  function: string;
+  /** JSON-serializable invocation payload (sent as the request body). */
+  payload?: unknown;
+}
+
+/** logs(): EngineRequest plus function/service filters. */
+export interface LogsRequest extends EngineRequest {
+  /** Function to fetch logs for ("" / absent = all functions). */
+  function?: string;
+  /** Service scope guard (must match the config's service when set). */
+  service?: string;
+}
+
+/** functionMetrics(): EngineRequest plus service/all filters. */
+export interface FunctionMetricsRequest extends EngineRequest {
+  service?: string;
+  /** Include every function (not just the deployed stage's default view). */
+  all?: boolean;
+}
+
+/** recover(): EngineRequest plus the recovery mode. */
+export interface RecoverRequest extends EngineRequest {
+  /** rollback | resume | inspect (default rollback). */
+  mode?: string;
+}
+
+/** State-backend operations served under POST /state/{op}. */
+export type StateOpName =
+  | 'list'
+  | 'pull'
+  | 'backup'
+  | 'restore'
+  | 'reconcile'
+  | 'migrate'
+  | 'unlock'
+  | 'lock-steal';
+
+/** Router operations over recorded fabric state under POST /router/{op}. */
+export type RouterOpName = 'history' | 'simulate' | 'verify' | 'shift' | 'restore';
 
 /** Uniform result: HTTP and network failures come back as ok:false, never throw. */
 export type DaemonResult<T> =
@@ -99,6 +150,9 @@ export declare class DaemonClient {
   /** List releases known to the daemon's state backend. */
   releases(request?: EngineRequest): Promise<DaemonResult<unknown>>;
 
+  /** Retained past receipts for one stage, newest first. */
+  releaseHistory(request?: EngineRequest): Promise<DaemonResult<unknown>>;
+
   /** Multi-cloud deploy across fabric.targets; data is the fabric state. */
   fabricDeploy(request?: EngineRequest): Promise<DaemonResult<{
     service?: string;
@@ -109,6 +163,36 @@ export declare class DaemonClient {
 
   /** Sync the router over the fabric endpoints; data is {routing, result}. */
   routerSync(request?: EngineRequest): Promise<DaemonResult<Record<string, unknown> | null>>;
+
+  /** Probe every recorded fabric endpoint; data is the fabric state with health. */
+  fabricHealth(request?: EngineRequest): Promise<DaemonResult<Record<string, unknown> | null>>;
+
+  /** List the config's fabric.targets provider keys; data is {targets}. */
+  fabricTargets(request?: EngineRequest): Promise<DaemonResult<{ targets?: string[] }>>;
+
+  /** Invoke one deployed function (or workflow target) with a JSON payload. */
+  invoke(request: InvokeRequest): Promise<DaemonResult<unknown>>;
+
+  /** Provider + local logs for one function ("" = all functions). */
+  logs(request?: LogsRequest): Promise<DaemonResult<unknown>>;
+
+  /** Per-function metrics from the provider (not the daemon's Prometheus /metrics). */
+  functionMetrics(request?: FunctionMetricsRequest): Promise<DaemonResult<unknown>>;
+
+  /** Traces aggregated by service/stage from the provider. */
+  traces(request?: FunctionMetricsRequest): Promise<DaemonResult<unknown>>;
+
+  /** Backend + provider readiness checks; data is {backend, provider}. */
+  doctor(request?: EngineRequest): Promise<DaemonResult<Record<string, unknown> | null>>;
+
+  /** Recover an unfinished transaction journal (dryRun previews). */
+  recover(request?: RecoverRequest): Promise<DaemonResult<unknown>>;
+
+  /** State-backend op; op-specific inputs ride request.params. */
+  stateOp(op: StateOpName, request?: EngineRequest): Promise<DaemonResult<unknown>>;
+
+  /** Router op over recorded fabric state; op-specific inputs ride request.params. */
+  routerOp(op: RouterOpName, request?: EngineRequest): Promise<DaemonResult<unknown>>;
 }
 
 /** One declared credential env var (subset of the Go CredentialVar). */

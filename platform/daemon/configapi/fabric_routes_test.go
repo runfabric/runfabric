@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -63,6 +64,58 @@ func (s *stubConnector) RouterSync(c, st string, dryRun bool) (*RouterSyncRespon
 		return nil, s.err()
 	}
 	return &RouterSyncResponse{Payload: []byte(`{"routing":{"strategy":"failover"}}`)}, nil
+}
+func (s *stubConnector) FabricHealth(c, st string) (json.RawMessage, error) {
+	s.note("fabric-health:%s:%s", c, st)
+	return json.RawMessage(`{}`), s.err()
+}
+func (s *stubConnector) FabricTargets(c, st string) (json.RawMessage, error) {
+	s.note("fabric-targets:%s:%s", c, st)
+	return json.RawMessage(`{}`), s.err()
+}
+func (s *stubConnector) Invoke(c, st, fn, p string, payload []byte) (json.RawMessage, error) {
+	s.note("invoke:%s:%s:%s:%s:%s", c, st, fn, p, string(payload))
+	return json.RawMessage(`{}`), s.err()
+}
+func (s *stubConnector) Logs(c, st, fn, p, svc string) (json.RawMessage, error) {
+	s.note("logs:%s:%s:%s:%s:%s", c, st, fn, p, svc)
+	return json.RawMessage(`{}`), s.err()
+}
+func (s *stubConnector) FunctionMetrics(c, st, p, svc string, all bool) (json.RawMessage, error) {
+	s.note("fnmetrics:%s:%s:%s:%s:%t", c, st, p, svc, all)
+	return json.RawMessage(`{}`), s.err()
+}
+func (s *stubConnector) Traces(c, st, p, svc string, all bool) (json.RawMessage, error) {
+	s.note("traces:%s:%s:%s:%s:%t", c, st, p, svc, all)
+	return json.RawMessage(`{}`), s.err()
+}
+func (s *stubConnector) Doctor(c, st, p string) (json.RawMessage, error) {
+	s.note("doctor:%s:%s:%s", c, st, p)
+	return json.RawMessage(`{}`), s.err()
+}
+func (s *stubConnector) Recover(c, st, mode string, dryRun bool) (json.RawMessage, error) {
+	s.note("recover:%s:%s:%s:%t", c, st, mode, dryRun)
+	return json.RawMessage(`{}`), s.err()
+}
+func (s *stubConnector) StateOp(op, c, st string, params map[string]string) (json.RawMessage, error) {
+	s.note("state:%s:%s:%s:%s", op, c, st, paramString(params))
+	return json.RawMessage(`{}`), s.err()
+}
+func (s *stubConnector) RouterOp(op, c, st string, params map[string]string) (json.RawMessage, error) {
+	s.note("routerop:%s:%s:%s:%s", op, c, st, paramString(params))
+	return json.RawMessage(`{}`), s.err()
+}
+
+// paramString renders a params map deterministically for call assertions.
+func paramString(params map[string]string) string {
+	keys := make([]string, 0, len(params))
+	for k, v := range params {
+		if v != "" {
+			keys = append(keys, k+"="+v)
+		}
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
 }
 
 func newStubServer() (*Server, *stubConnector) {
@@ -132,6 +185,67 @@ func TestFabricDeployAndRouterSyncRoutes(t *testing.T) {
 	}
 	if strings.Join(stub.calls, "|") != strings.Join(want, "|") {
 		t.Fatalf("calls = %v, want %v", stub.calls, want)
+	}
+}
+
+func TestOpsRoutesReachConnector(t *testing.T) {
+	srv, stub := newStubServer()
+
+	cases := []struct {
+		target string
+		want   string
+	}{
+		{"/fabric/health?stage=prod", "fabric-health:runfabric.yml:prod"},
+		{"/fabric/targets?stage=prod", "fabric-targets:runfabric.yml:prod"},
+		{"/invoke?stage=prod&function=hello&provider=aws", "invoke:runfabric.yml:prod:hello:aws:"},
+		{"/logs?stage=prod&function=hello&service=api", "logs:runfabric.yml:prod:hello::api"},
+		{"/metrics/functions?stage=prod&all=1", "fnmetrics:runfabric.yml:prod:::true"},
+		{"/traces?stage=prod&service=api", "traces:runfabric.yml:prod::api:false"},
+		{"/doctor?stage=prod&provider=gcp", "doctor:runfabric.yml:prod:gcp"},
+		{"/recover?stage=prod&dryRun=1", "recover:runfabric.yml:prod:rollback:true"},
+		{"/recover?stage=prod&mode=resume", "recover:runfabric.yml:prod:resume:false"},
+		{"/state/list?stage=prod", "state:list:runfabric.yml:prod:"},
+		{"/state/backup?stage=prod&out=backups/s.json", "state:backup:runfabric.yml:prod:out=backups/s.json"},
+		{"/state/migrate?stage=prod&from=local&to=s3", "state:migrate:runfabric.yml:prod:from=local,to=s3"},
+		{"/state/unlock?stage=prod&force=true", "state:unlock:runfabric.yml:prod:force=true"},
+		{"/router/simulate?stage=prod&requests=50&down=aws", "routerop:simulate:runfabric.yml:prod:down=aws,requests=50"},
+		{"/router/shift?stage=prod&provider=gcp&percent=20&dryRun=1", "routerop:shift:runfabric.yml:prod:dryRun=true,percent=20,provider=gcp"},
+		{"/router/restore?stage=prod&latest=1", "routerop:restore:runfabric.yml:prod:latest=true"},
+		{"/router/history?stage=prod&window=3", "routerop:history:runfabric.yml:prod:window=3"},
+	}
+	for _, tc := range cases {
+		stub.calls = nil
+		if rec := do(t, srv, "POST", tc.target); rec.Code != 200 {
+			t.Fatalf("%s status %d: %s", tc.target, rec.Code, rec.Body.String())
+		}
+		if got := strings.Join(stub.calls, "|"); got != tc.want {
+			t.Fatalf("%s calls = %q, want %q", tc.target, got, tc.want)
+		}
+	}
+}
+
+func TestInvokeRequiresFunction(t *testing.T) {
+	srv, stub := newStubServer()
+	if rec := do(t, srv, "POST", "/invoke?stage=prod"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("invoke without function = %d, want 400", rec.Code)
+	}
+	if len(stub.calls) != 0 {
+		t.Fatalf("connector reached without function: %v", stub.calls)
+	}
+}
+
+func TestStatePathParamsAreWorkspaceConfined(t *testing.T) {
+	srv, stub := newStubServer()
+	for _, target := range []string{
+		"/state/backup?out=../escape.json",
+		"/state/restore?file=/etc/passwd",
+	} {
+		if rec := do(t, srv, "POST", target); rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s = %d, want 400", target, rec.Code)
+		}
+	}
+	if len(stub.calls) != 0 {
+		t.Fatalf("connector reached with escaping path: %v", stub.calls)
 	}
 }
 
