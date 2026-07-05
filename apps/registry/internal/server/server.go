@@ -34,6 +34,7 @@ type Options struct {
 	OIDCIssuer            string
 	OIDCAudience          string
 	OIDCJWKSURL           string
+	OIDCHS256Secret       string
 	OIDCSubjectClaim      string
 	OIDCTenantClaim       string
 	OIDCRolesClaim        string
@@ -67,6 +68,7 @@ type Server struct {
 	oidcAudience          string
 	oidcAudienceMode      string
 	oidcJWKSURL           string
+	oidcHS256Secret       string
 	oidcSubjectClaim      string
 	oidcTenantClaim       string
 	oidcRolesClaim        string
@@ -119,6 +121,7 @@ func New(opts Options) (*Server, error) {
 		oidcAudience:          strings.TrimSpace(opts.OIDCAudience),
 		oidcAudienceMode:      normalizeAudienceMode(opts.OIDCAudienceMode),
 		oidcJWKSURL:           strings.TrimSpace(opts.OIDCJWKSURL),
+		oidcHS256Secret:       strings.TrimSpace(opts.OIDCHS256Secret),
 		oidcSubjectClaim:      defaultString(strings.TrimSpace(opts.OIDCSubjectClaim), "sub"),
 		oidcTenantClaim:       defaultString(strings.TrimSpace(opts.OIDCTenantClaim), "tenant_id"),
 		oidcRolesClaim:        defaultString(strings.TrimSpace(opts.OIDCRolesClaim), "roles"),
@@ -147,6 +150,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/publish/", s.handlePublishStatus)
 	mux.HandleFunc("/v1/uploads/", s.handleUploads)
 	mux.HandleFunc("/v1/audit", s.handleAudit)
+	mux.HandleFunc("/v1/orgs", s.handleOrgsRoot)
+	mux.HandleFunc("/v1/orgs/", s.handleOrgRoutes)
 	mux.HandleFunc("/packages", s.handlePackagesRoot)
 	mux.HandleFunc("/packages/", s.handlePackagesRoutes)
 	mux.HandleFunc("/artifacts/", s.handleArtifacts)

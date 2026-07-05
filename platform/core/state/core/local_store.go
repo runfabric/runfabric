@@ -62,6 +62,11 @@ func Save(root string, receipt *Receipt) error {
 		return fmt.Errorf("marshal receipt: %w", err)
 	}
 
+	// Retain the outgoing head as a release-history snapshot before it is
+	// overwritten, so prior deployments remain inspectable (best-effort — a
+	// snapshot failure never blocks the save).
+	snapshotHistory(root, receipt.Stage)
+
 	if err := WriteStateFile(path, data); err != nil {
 		return err
 	}

@@ -37,6 +37,7 @@ func main() {
 	var oidcIssuer string
 	var oidcAudience string
 	var oidcJWKSURL string
+	var oidcHS256Secret string
 	var oidcSubjectClaim string
 	var oidcTenantClaim string
 	var oidcRolesClaim string
@@ -71,6 +72,7 @@ func main() {
 	flag.StringVar(&oidcIssuer, "oidc-issuer", "", "optional OIDC issuer to validate on Bearer JWT")
 	flag.StringVar(&oidcAudience, "oidc-audience", "", "optional OIDC audience to validate on Bearer JWT")
 	flag.StringVar(&oidcJWKSURL, "oidc-jwks-url", "", "optional OIDC JWKS URL for JWT signature verification")
+	flag.StringVar(&oidcHS256Secret, "oidc-hs256-secret", "", "optional shared secret to verify HS256 (HMAC) bearer tokens")
 	flag.StringVar(&oidcSubjectClaim, "oidc-subject-claim", "", "OIDC claim key/path used for subject identity (default: sub)")
 	flag.StringVar(&oidcTenantClaim, "oidc-tenant-claim", "", "OIDC claim key/path used for tenant identity (default: tenant_id)")
 	flag.StringVar(&oidcRolesClaim, "oidc-roles-claim", "", "OIDC claim key/path used for roles mode=roles (default: roles)")
@@ -295,6 +297,11 @@ func main() {
 			oidcJWKSURL = v
 		}
 	}
+	if !flagSet["oidc-hs256-secret"] {
+		if v := strings.TrimSpace(os.Getenv("REGISTRY_OIDC_HS256_SECRET")); v != "" {
+			oidcHS256Secret = v
+		}
+	}
 	if !flagSet["oidc-subject-claim"] {
 		if v := strings.TrimSpace(os.Getenv("REGISTRY_OIDC_SUBJECT_CLAIM")); v != "" {
 			oidcSubjectClaim = v
@@ -395,6 +402,7 @@ func main() {
 		OIDCIssuer:            oidcIssuer,
 		OIDCAudience:          oidcAudience,
 		OIDCJWKSURL:           oidcJWKSURL,
+		OIDCHS256Secret:       oidcHS256Secret,
 		OIDCSubjectClaim:      oidcSubjectClaim,
 		OIDCTenantClaim:       oidcTenantClaim,
 		OIDCRolesClaim:        oidcRolesClaim,

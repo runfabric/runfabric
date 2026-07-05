@@ -73,6 +73,26 @@ export function createRegistryClient(baseUrl = "", tokenProvider = () => "") {
     },
     extensionAdvisories(id) {
       return request(`/v1/extensions/${encodeURIComponent(id)}/advisories`);
+    },
+    listOrganizations() {
+      return request(`/v1/orgs`);
+    },
+    createOrganization(body) {
+      return request(`/v1/orgs`, { method: "POST", body: JSON.stringify(body) });
+    },
+    getOrganization(slug) {
+      return request(`/v1/orgs/${encodeURIComponent(slug)}`);
+    },
+    addOrganizationMember(slug, body) {
+      return request(`/v1/orgs/${encodeURIComponent(slug)}/members`, {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+    },
+    removeOrganizationMember(slug, userId) {
+      return request(`/v1/orgs/${encodeURIComponent(slug)}/members/${encodeURIComponent(userId)}`, {
+        method: "DELETE"
+      });
     }
   };
 }

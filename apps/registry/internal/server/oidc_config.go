@@ -54,7 +54,7 @@ func parseAllowedJWTAlgorithms(raw string) map[string]bool {
 			continue
 		}
 		switch alg {
-		case "RS256", "RS384", "RS512", "ES256", "ES384", "ES512":
+		case "RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "HS256", "HS384", "HS512":
 			out[alg] = true
 		}
 	}

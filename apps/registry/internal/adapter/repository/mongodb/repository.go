@@ -28,6 +28,7 @@ type Repository struct {
 	packageVersions *mongo.Collection
 	apiKeys         *mongo.Collection
 	auditEvents     *mongo.Collection
+	organizations   *mongo.Collection
 }
 
 type Package struct {
@@ -188,6 +189,7 @@ func New(client *mongo.Client, database string) *Repository {
 		packageVersions: db.Collection("package_versions"),
 		apiKeys:         db.Collection("api_keys"),
 		auditEvents:     db.Collection("audit_events"),
+		organizations:   db.Collection("organizations"),
 	}
 }
 
@@ -237,6 +239,15 @@ func (r *Repository) Migrate(ctx context.Context) error {
 		return err
 	}
 	if _, err := r.auditEvents.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "tenant_id", Value: 1}}}); err != nil {
+		return err
+	}
+	if _, err := r.organizations.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "slug", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	}); err != nil {
+		return err
+	}
+	if _, err := r.organizations.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "members.user_id", Value: 1}}}); err != nil {
 		return err
 	}
 	return nil

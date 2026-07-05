@@ -127,6 +127,7 @@ type Data struct {
 	Packages        map[string]*RegistryPackage                   `json:"packages,omitempty"`
 	PackageVersions map[string]map[string]*RegistryPackageVersion `json:"packageVersions,omitempty"`
 	APIKeys         map[string]*APIKeyRecord                      `json:"apiKeys,omitempty"`
+	Organizations   map[string]*Organization                      `json:"organizations,omitempty"`
 }
 
 type OpenOptions struct {
@@ -321,6 +322,9 @@ func normalizeData(d *Data) {
 	}
 	if d.APIKeys == nil {
 		d.APIKeys = map[string]*APIKeyRecord{}
+	}
+	if d.Organizations == nil {
+		d.Organizations = map[string]*Organization{}
 	}
 }
 

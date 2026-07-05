@@ -1,39 +1,103 @@
+/* ============================================================
+   RunFabric Registry — aligned with the product app-web design
+   system (@runfabric/ui). Same tokens, typography, and component
+   language; restyled onto the registry SPA's existing class names
+   so no markup/JS changes are required.
+   ============================================================ */
+
+/* ---------- Tokens ---------- */
+
 :root {
   color-scheme: light;
-  --font-ui: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
-  --bg: #eef4fb;
-  --bg-accent: #dbe9fb;
-  --panel: #ffffff;
-  --panel-elevated: #f8fbff;
-  --ink: #102133;
-  --muted: #496078;
-  --line: #d0dceb;
-  --accent: #0b66c3;
-  --accent-ink: #ffffff;
-  --ok: #0f8f66;
-  --warn: #ad6f00;
-  --danger: #c23434;
-  --radius: 14px;
-  --shadow: 0 12px 34px rgba(10, 20, 40, 0.1);
+
+  /* Surfaces */
+  --bg-page: #fafafa;
+  --bg-card: #ffffff;
+  --bg-subtle: #f4f4f5;
+  --bg-input: #ffffff;
+  --bg-hover: #f4f4f5;
+
+  /* Borders */
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --border-focus: #0d9488;
+
+  /* Text */
+  --ink: #18181b;
+  --muted: #52525b;
+  --dim: #8e8e98;
+
+  /* Accent (brand teal) */
+  --accent: #0f766e;
+  --accent-hover: #115e59;
+  --accent-fg: #ffffff;
+  --accent-subtle: rgba(13, 148, 136, 0.1);
+
+  /* Status */
+  --ok: #047857;
+  --ok-bg: rgba(5, 150, 105, 0.12);
+  --danger: #b91c1c;
+  --danger-bg: rgba(220, 38, 38, 0.1);
+  --warn: #b45309;
+  --warn-bg: rgba(217, 119, 6, 0.12);
+  --info: #1d4ed8;
+  --info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Code */
+  --code-bg: #f4f4f5;
+  --code-border: #e4e4e7;
+
+  /* Typography */
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Shape + elevation */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 10px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
 body[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0b1320;
-  --bg-accent: #0f2438;
-  --panel: #102033;
-  --panel-elevated: #142942;
-  --ink: #e7f0fb;
-  --muted: #a0b4ca;
-  --line: #28445f;
-  --accent: #46a6ff;
-  --accent-ink: #061322;
+
+  --bg-page: #09090b;
+  --bg-card: #111113;
+  --bg-subtle: #18181b;
+  --bg-input: #161618;
+  --bg-hover: #1d1d21;
+
+  --border: #232327;
+  --border-strong: #34343a;
+  --border-focus: #2dd4bf;
+
+  --ink: #f0f0f2;
+  --muted: #a4a4ae;
+  --dim: #6e6e78;
+
+  --accent: #2dd4bf;
+  --accent-hover: #5eead4;
+  --accent-fg: #052e2b;
+  --accent-subtle: rgba(45, 212, 191, 0.12);
+
   --ok: #34d399;
-  --warn: #f5b348;
-  --danger: #ff8484;
-  --shadow: 0 14px 30px rgba(1, 4, 9, 0.45);
+  --ok-bg: rgba(16, 185, 129, 0.14);
+  --danger: #f87171;
+  --danger-bg: rgba(248, 113, 113, 0.12);
+  --warn: #fbbf24;
+  --warn-bg: rgba(251, 191, 36, 0.12);
+  --info: #60a5fa;
+  --info-bg: rgba(59, 130, 246, 0.14);
+
+  --code-bg: #0c0c0e;
+  --code-border: #232327;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
+
+/* ---------- Base ---------- */
 
 * {
   box-sizing: border-box;
@@ -47,21 +111,43 @@ body {
 
 body {
   font-family: var(--font-ui);
+  font-size: 0.875rem;
+  line-height: 1.5;
   color: var(--ink);
-  background:
-    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--bg-accent) 70%, transparent) 0%, transparent 45%),
-    radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--accent) 16%, transparent) 0%, transparent 42%),
-    var(--bg);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 a {
   color: var(--accent);
   text-decoration: none;
+  font-weight: 500;
 }
 
 a:hover {
   text-decoration: underline;
 }
+
+/* ---------- Layout ---------- */
 
 .layout {
   min-height: 100vh;
@@ -73,86 +159,137 @@ header {
   position: sticky;
   top: 0;
   z-index: 20;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 86%, transparent);
-  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-page) 85%, transparent);
+  backdrop-filter: blur(8px);
 }
 
 .nav {
-  max-width: 1180px;
+  max-width: 80rem;
   margin: 0 auto;
-  padding: 0.85rem 1rem;
+  padding: 0.6rem 1.25rem;
   display: flex;
   gap: 1rem;
   align-items: center;
   justify-content: space-between;
+  min-height: 56px;
 }
 
 .brand {
-  font-weight: 800;
-  letter-spacing: 0.03em;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
   white-space: nowrap;
+}
+
+.brand:hover {
+  text-decoration: none;
 }
 
 .nav-right {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: 0.75rem;
 }
 
 .nav-links {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.25rem;
   flex-wrap: wrap;
 }
 
 .nav-link {
-  padding: 0.35rem 0.65rem;
-  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 500;
   color: var(--muted);
 }
 
-.nav-link.active {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+.nav-link:hover {
+  background: var(--bg-hover);
   color: var(--ink);
+  text-decoration: none;
+}
+
+.nav-link.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
 }
 
 main {
-  max-width: 1180px;
+  max-width: 80rem;
   width: 100%;
-  margin: 1.1rem auto;
-  padding: 0 1rem 2rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
 }
 
+/* The page wrapper is transparent (app-web puts the title above a stack of
+   cards, not everything inside one big card). */
 .surface {
-  background: color-mix(in srgb, var(--panel) 98%, transparent);
-  border: 1px solid var(--line);
-  border-radius: calc(var(--radius) + 2px);
-  box-shadow: var(--shadow);
-  padding: 1.2rem;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
+
+.surface > h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.surface h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0.5rem 0 0;
+}
+
+/* ---------- Cards / panels ---------- */
 
 .grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
 }
 
 .panel {
-  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-elevated) 100%);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
-  padding: 1rem;
+  padding: 1.1rem 1.2rem;
   min-width: 0;
   overflow: hidden;
-  animation: cardIn 220ms ease-out;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.grid .panel:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
 }
 
 .panel h2,
 .panel h3 {
   margin-top: 0;
+  margin-bottom: 0.35rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
+}
+
+.panel h2 {
+  font-size: 1rem;
+}
+
+.panel p {
+  margin: 0.3rem 0;
 }
 
 .panel p,
@@ -165,38 +302,58 @@ main {
   word-break: break-word;
 }
 
+.panel ul {
+  margin: 0.3rem 0;
+  padding-left: 1.1rem;
+}
+
+.panel li {
+  margin: 0.2rem 0;
+}
+
+/* ---------- Badges ---------- */
+
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0.2rem 0.55rem;
-  font-size: 0.8rem;
+  padding: 0.1rem 0.5rem;
+  height: 1.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
   color: var(--muted);
+  background: var(--bg-subtle);
   margin-right: 0.35rem;
   margin-bottom: 0.35rem;
 }
 
 .badge.ok {
-  border-color: color-mix(in srgb, var(--ok) 50%, var(--line));
+  border-color: transparent;
+  background: var(--ok-bg);
   color: var(--ok);
 }
 
 .badge.warn {
-  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+  border-color: transparent;
+  background: var(--warn-bg);
   color: var(--warn);
 }
 
 .badge.danger {
-  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  border-color: transparent;
+  background: var(--danger-bg);
   color: var(--danger);
 }
+
+/* ---------- Forms ---------- */
 
 .input-row {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 input,
@@ -209,113 +366,223 @@ textarea {
 input,
 select,
 textarea {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.58rem 0.74rem;
+  height: 2.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 0.7rem;
   min-width: 220px;
   max-width: 100%;
-  background: var(--panel);
+  background: var(--bg-input);
   color: var(--ink);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--dim);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--bg-subtle);
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 textarea {
+  height: auto;
+  padding: 0.55rem 0.7rem;
   resize: vertical;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
 }
 
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  height: 2.25rem;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: var(--accent-ink);
-  border-radius: 10px;
-  padding: 0.55rem 0.88rem;
+  color: var(--accent-fg);
+  border-radius: var(--radius-sm);
+  padding: 0 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 button.ghost {
   background: transparent;
-  color: var(--accent);
+  border-color: var(--border-strong);
+  color: var(--muted);
+}
+
+button.ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--ink);
+  border-color: var(--border-strong);
 }
 
 button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
+/* ---------- Tables ---------- */
+
 .table-wrap {
   overflow: auto;
-  border-radius: 10px;
-  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: var(--shadow);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 0.8125rem;
 }
 
 th,
 td {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border);
   text-align: left;
-  padding: 0.55rem;
-  vertical-align: top;
+  padding: 0.6rem 0.85rem;
+  vertical-align: middle;
 }
 
+th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--bg-subtle);
+  white-space: nowrap;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr:hover td {
+  background: var(--bg-hover);
+}
+
+/* ---------- Text helpers ---------- */
+
 .copy {
-  font-size: 0.92rem;
+  font-size: 0.8125rem;
   color: var(--muted);
 }
 
 .error {
-  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line));
-  background: color-mix(in srgb, var(--danger) 14%, var(--panel));
+  display: flex;
+  gap: 0.6rem;
+  border: 1px solid transparent;
+  background: var(--danger-bg);
   color: var(--danger);
-  border-radius: 10px;
-  padding: 0.7rem;
+  border-radius: var(--radius);
+  padding: 0.7rem 0.9rem;
+  font-size: 0.8125rem;
 }
 
+/* ---------- Markdown / code ---------- */
+
 .markdown {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 1.2rem 1.4rem;
   line-height: 1.65;
   min-width: 0;
 }
 
+.markdown h1 {
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.markdown h2 {
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+  margin-top: 1.4rem;
+}
+
+.markdown h3 {
+  font-size: 0.95rem;
+}
+
 .markdown pre,
 pre {
-  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
-  border-radius: 10px;
-  padding: 0.8rem;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius);
+  padding: 0.8rem 0.9rem;
   overflow: auto;
   max-width: 100%;
+  font-size: 0.8125rem;
+  line-height: 1.6;
 }
 
 .markdown code,
 code {
   font-family: var(--font-mono);
+  font-size: 0.8125rem;
 }
+
+/* Inline code (not inside a pre) gets a subtle chip. */
+:not(pre) > code {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+pre > code {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+/* ---------- Footer ---------- */
 
 footer {
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  padding: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--dim);
+  padding: 1.25rem;
   text-align: center;
-  font-size: 0.9rem;
+  font-size: 0.8125rem;
 }
 
-@keyframes cardIn {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+/* ---------- Responsive ---------- */
 
 @media (max-width: 760px) {
   .nav {
     align-items: flex-start;
     flex-direction: column;
+    gap: 0.6rem;
   }
 
   .nav-right {
@@ -333,5 +600,82 @@ footer {
   textarea {
     width: 100%;
     min-width: 0;
+  }
+}
+
+/* ---------- Account dashboard (npm-style) ---------- */
+
+.acct-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.acct-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 8px;
+}
+
+.acct-nav-link,
+.acct-nav-sub {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.acct-nav-link:hover,
+.acct-nav-sub:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.acct-nav-link.active,
+.acct-nav-sub.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.acct-nav-group {
+  margin-top: 10px;
+  padding: 6px 12px 2px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+  border-top: 1px solid var(--line);
+}
+
+.acct-nav-sub {
+  padding-left: 18px;
+  font-size: 0.8125rem;
+}
+
+.acct-nav-sub.create {
+  color: var(--accent);
+}
+
+.acct-main {
+  min-width: 0;
+}
+
+.acct-main h2 {
+  margin-top: 0;
+}
+
+@media (max-width: 760px) {
+  .acct-layout {
+    grid-template-columns: 1fr;
   }
 }

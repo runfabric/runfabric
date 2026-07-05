@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/hmac"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -72,6 +73,22 @@ func (s *Server) parseVerifiedJWTClaims(token string) (map[string]any, error) {
 	}
 	if !s.oidcAllowedJWTAlgs[alg] {
 		return nil, fmt.Errorf("unsupported jwt alg: %s", alg)
+	}
+	// HS256 (shared-secret) tokens are verified with the configured symmetric
+	// secret — there is no public key to fetch from JWKS. Used when the identity
+	// service signs with HMAC rather than an asymmetric key.
+	if strings.HasPrefix(alg, "HS") {
+		if strings.TrimSpace(s.oidcHS256Secret) == "" {
+			return nil, fmt.Errorf("hs256 token but no shared secret configured")
+		}
+		sig, err := base64.RawURLEncoding.DecodeString(parts[2])
+		if err != nil {
+			return nil, err
+		}
+		if err := verifyHMACSignature(alg, []byte(s.oidcHS256Secret), []byte(parts[0]+"."+parts[1]), sig); err != nil {
+			return nil, fmt.Errorf("jwt signature verification failed")
+		}
+		return claims, nil
 	}
 	kid := strings.TrimSpace(firstClaimString(header, "kid"))
 	pub, err := s.lookupJWKSKey(jwksURL, kid)
@@ -371,6 +388,20 @@ func parseECPublicKey(curveName, xB64, yB64 string) (*ecdsa.PublicKey, error) {
 	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
 }
 
+func verifyHMACSignature(alg string, secret, signingInput, signature []byte) error {
+	hash, err := hashForAlgorithm(alg)
+	if err != nil {
+		return err
+	}
+	mac := hmac.New(hash.New, secret)
+	mac.Write(signingInput)
+	expected := mac.Sum(nil)
+	if !hmac.Equal(expected, signature) {
+		return fmt.Errorf("hmac verify failed")
+	}
+	return nil
+}
+
 func verifyJWTSignature(alg string, key crypto.PublicKey, signingInput, signature []byte) error {
 	hash, err := hashForAlgorithm(alg)
 	if err != nil {
@@ -411,11 +442,11 @@ func verifyJWTSignature(alg string, key crypto.PublicKey, signingInput, signatur
 
 func hashForAlgorithm(alg string) (crypto.Hash, error) {
 	switch strings.ToUpper(strings.TrimSpace(alg)) {
-	case "RS256", "ES256":
+	case "RS256", "ES256", "HS256":
 		return crypto.SHA256, nil
-	case "RS384", "ES384":
+	case "RS384", "ES384", "HS384":
 		return crypto.SHA384, nil
-	case "RS512", "ES512":
+	case "RS512", "ES512", "HS512":
 		return crypto.SHA512, nil
 	default:
 		return 0, fmt.Errorf("unsupported jwt alg: %s", alg)

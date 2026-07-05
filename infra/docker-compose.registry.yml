@@ -1,4 +1,22 @@
 services:
+  mongo:
+    image: ${MONGO_IMAGE:-mongo:7}
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-registry}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-registry}
+      MONGO_INITDB_DATABASE: ${REGISTRY_MONGODB_DATABASE:-runfabric_registry}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - registry-mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
   registry:
     image: ${REGISTRY_IMAGE:-runfabric-registry:local}
     build:
@@ -10,13 +28,24 @@ services:
         RUNTIME_IMAGE: ${RUNTIME_IMAGE:-public.ecr.aws/docker/library/alpine:3.21}
     ports:
       - "8787:8787"
+    # Base config comes from the registry's .env (single source of truth).
+    env_file:
+      - ../apps/registry/.env
+    # Only values that differ inside a container are overridden here
+    # (environment wins over env_file). Web dir, db/uploads paths and the
+    # casbin policy resolve correctly from the image's /app workdir, and the
+    # UI auth/docs URLs are browser-facing, so those all come from .env as-is.
     environment:
+      # Bind all interfaces so the published port works (.env uses loopback for host runs).
       REGISTRY_LISTEN: 0.0.0.0:8787
-      REGISTRY_WEB_DIR: /app/web/dist
-      REGISTRY_UI_AUTH_URL: https://auth.runfabric.cloud/device
-      REGISTRY_UI_DOCS_URL: https://runfabric.cloud/docs
-      REGISTRY_METADATA_PROVIDER: json
-      REGISTRY_ALLOW_ANONYMOUS_READ: "true"
+      # Reach the mongo service over the compose network (.env targets localhost for host runs).
+      REGISTRY_MONGODB_URI: ${REGISTRY_MONGODB_URI:-mongodb://registry:registry@mongo:27017/runfabric_registry?authSource=admin}
     volumes:
       - ../apps/registry/data:/app/data
+    depends_on:
+      mongo:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  registry-mongo-data:

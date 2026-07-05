@@ -16,6 +16,7 @@ type CoreWorkflowConnector interface {
 	Deploy(configPath, stage string) (*DeployResponse, error)
 	Remove(configPath, stage string) (*RemoveResponse, error)
 	Releases(configPath string) (*ReleasesResponse, error)
+	ReleaseHistory(configPath, stage string) (*ReleasesResponse, error)
 }
 
 type coreWorkflowAdapter struct{}
@@ -84,6 +85,18 @@ func (coreWorkflowAdapter) Remove(configPath, stage string) (*RemoveResponse, er
 
 func (coreWorkflowAdapter) Releases(configPath string) (*ReleasesResponse, error) {
 	res, err := app.Releases(configPath)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := marshalPayload(res)
+	if err != nil {
+		return nil, err
+	}
+	return &ReleasesResponse{Payload: payload}, nil
+}
+
+func (coreWorkflowAdapter) ReleaseHistory(configPath, stage string) (*ReleasesResponse, error) {
+	res, err := app.ReleaseHistory(configPath, stage)
 	if err != nil {
 		return nil, err
 	}

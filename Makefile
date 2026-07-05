@@ -428,9 +428,18 @@ registry-api:
 REGISTRY_IMAGE ?= runfabric-registry:latest
 REGISTRY_CONTAINER ?= runfabric-registry
 REGISTRY_COMPOSE ?= infra/docker-compose.registry.yml
+REGISTRY_ENV_FILE ?= apps/registry/.env
 REGISTRY_WEB_BUILDER_IMAGE ?= public.ecr.aws/docker/library/node:24-alpine
 REGISTRY_GO_BUILDER_IMAGE ?= public.ecr.aws/docker/library/golang:1.25-alpine
 REGISTRY_RUNTIME_IMAGE ?= public.ecr.aws/docker/library/alpine:3.21
+
+# Pass the Makefile's image/builder vars through to compose so both agree on
+# what gets built/run (compose reads these names for its image + build args).
+REGISTRY_COMPOSE_ENV = \
+	REGISTRY_IMAGE=$(REGISTRY_IMAGE) \
+	WEB_BUILDER_IMAGE=$(REGISTRY_WEB_BUILDER_IMAGE) \
+	GO_BUILDER_IMAGE=$(REGISTRY_GO_BUILDER_IMAGE) \
+	RUNTIME_IMAGE=$(REGISTRY_RUNTIME_IMAGE)
 
 docker-registry-build:
 	docker build -t $(REGISTRY_IMAGE) -f apps/registry/Dockerfile \
@@ -439,19 +448,36 @@ docker-registry-build:
 		--build-arg RUNTIME_IMAGE=$(REGISTRY_RUNTIME_IMAGE) \
 		.
 
+# Single container, file-backed metadata (no MongoDB). Loads the registry
+# .env, then overrides the two values a lone container needs: bind all
+# interfaces (the .env uses loopback for host runs) and the json provider
+# (there is no mongo service here). For the full mongo-backed stack use
+# `make docker-registry-up`.
 docker-registry-run: docker-registry-build
-	docker run -d --name $(REGISTRY_CONTAINER) -p 8787:8787 $(REGISTRY_IMAGE)
+	docker run -d --name $(REGISTRY_CONTAINER) -p 8787:8787 \
+		--env-file $(REGISTRY_ENV_FILE) \
+		-e REGISTRY_LISTEN=0.0.0.0:8787 \
+		-e REGISTRY_METADATA_PROVIDER=json \
+		$(REGISTRY_IMAGE)
 
 docker-registry-stop:
 	docker stop $(REGISTRY_CONTAINER) 2>/dev/null || true
 	docker rm $(REGISTRY_CONTAINER) 2>/dev/null || true
 
+# Full stack: MongoDB + registry (metadata provider + env come from the
+# compose file, which loads apps/registry/.env). Removes any stray standalone
+# container first so it doesn't hold port 8787.
 docker-registry-up:
 	docker rm -f $(REGISTRY_CONTAINER) 2>/dev/null || true
-	docker compose -f $(REGISTRY_COMPOSE) up -d --build
+	$(REGISTRY_COMPOSE_ENV) docker compose -f $(REGISTRY_COMPOSE) up -d --build
 
 docker-registry-down:
-	docker compose -f $(REGISTRY_COMPOSE) down
+	$(REGISTRY_COMPOSE_ENV) docker compose -f $(REGISTRY_COMPOSE) down
+	docker rm -f $(REGISTRY_CONTAINER) 2>/dev/null || true
+
+# Same as docker-registry-down but also drops the MongoDB data volume.
+docker-registry-down-volumes:
+	$(REGISTRY_COMPOSE_ENV) docker compose -f $(REGISTRY_COMPOSE) down -v
 	docker rm -f $(REGISTRY_CONTAINER) 2>/dev/null || true
 
 # Test coverage for workspace packages. View: go tool cover -html=coverage.out

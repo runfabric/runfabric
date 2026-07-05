@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -25,6 +26,11 @@ type MetadataRepository interface {
 	DeletePackage(in DeletePackageInput) error
 	RecordAudit(ev AuditEvent) error
 	ListAudit(limit int) ([]AuditEvent, error)
+	CreateOrganization(in CreateOrganizationInput) (*Organization, error)
+	ListOrganizations(in ListOrganizationsInput) ([]*Organization, error)
+	GetOrganization(slug string) (*Organization, error)
+	AddOrganizationMember(in OrgMemberInput) (*Organization, error)
+	RemoveOrganizationMember(slug, userID string) (*Organization, error)
 }
 
 type metadataBackend struct {
@@ -186,6 +192,26 @@ func (r *jsonMetadataRepository) ListAudit(limit int) ([]AuditEvent, error) {
 	return r.store.listAuditJSON(limit)
 }
 
+func (r *jsonMetadataRepository) CreateOrganization(in CreateOrganizationInput) (*Organization, error) {
+	return r.store.createOrganizationJSON(in)
+}
+
+func (r *jsonMetadataRepository) ListOrganizations(in ListOrganizationsInput) ([]*Organization, error) {
+	return r.store.listOrganizationsJSON(in)
+}
+
+func (r *jsonMetadataRepository) GetOrganization(slug string) (*Organization, error) {
+	return r.store.getOrganizationJSON(slug)
+}
+
+func (r *jsonMetadataRepository) AddOrganizationMember(in OrgMemberInput) (*Organization, error) {
+	return r.store.addOrganizationMemberJSON(in)
+}
+
+func (r *jsonMetadataRepository) RemoveOrganizationMember(slug, userID string) (*Organization, error) {
+	return r.store.removeOrganizationMemberJSON(slug, userID)
+}
+
 func (r *postgresMetadataRepository) FindAPIKey(raw string) (*APIKeyRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), metadataOpTimeout)
 	defer cancel()
@@ -316,6 +342,28 @@ func (r *postgresMetadataRepository) ListAudit(limit int) ([]AuditEvent, error) 
 	return out, nil
 }
 
+// Organizations are not yet persisted on the postgres backend; the json and
+// mongodb backends implement them fully.
+func (r *postgresMetadataRepository) CreateOrganization(CreateOrganizationInput) (*Organization, error) {
+	return nil, errOrganizationsUnsupported
+}
+
+func (r *postgresMetadataRepository) ListOrganizations(ListOrganizationsInput) ([]*Organization, error) {
+	return nil, errOrganizationsUnsupported
+}
+
+func (r *postgresMetadataRepository) GetOrganization(string) (*Organization, error) {
+	return nil, errOrganizationsUnsupported
+}
+
+func (r *postgresMetadataRepository) AddOrganizationMember(OrgMemberInput) (*Organization, error) {
+	return nil, errOrganizationsUnsupported
+}
+
+func (r *postgresMetadataRepository) RemoveOrganizationMember(string, string) (*Organization, error) {
+	return nil, errOrganizationsUnsupported
+}
+
 func (r *mongodbMetadataRepository) FindAPIKey(raw string) (*APIKeyRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), metadataOpTimeout)
 	defer cancel()
@@ -444,6 +492,168 @@ func (r *mongodbMetadataRepository) ListAudit(limit int) ([]AuditEvent, error) {
 		})
 	}
 	return out, nil
+}
+
+func fromMongoOrg(in *mongorepo.Organization) *Organization {
+	if in == nil {
+		return nil
+	}
+	members := make([]OrgMember, 0, len(in.Members))
+	for _, m := range in.Members {
+		members = append(members, OrgMember{UserID: m.UserID, Email: m.Email, Role: m.Role})
+	}
+	return &Organization{
+		ID:          in.ID,
+		Slug:        in.Slug,
+		Name:        in.Name,
+		Description: in.Description,
+		Visibility:  in.Visibility,
+		CreatedBy:   in.CreatedBy,
+		CreatedAt:   in.CreatedAt,
+		UpdatedAt:   in.UpdatedAt,
+		Members:     members,
+	}
+}
+
+func mapMongoOrgErr(err error) error {
+	if errors.Is(err, mongorepo.ErrOrgNotFound) {
+		return fmt.Errorf("organization not found")
+	}
+	return err
+}
+
+func (r *mongodbMetadataRepository) CreateOrganization(in CreateOrganizationInput) (*Organization, error) {
+	slug := normalizeOrgSlug(in.Slug)
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		name = slug
+	}
+	createdBy := strings.TrimSpace(in.CreatedBy)
+	if slug == "" || createdBy == "" {
+		return nil, fmt.Errorf("slug and actor are required")
+	}
+	visibility := normalizeVisibility(in.Visibility)
+	if visibility == "" {
+		visibility = VisibilityPublic
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	doc := mongorepo.Organization{
+		ID:          fmt.Sprintf("org_%d", time.Now().UTC().UnixNano()),
+		Slug:        slug,
+		Name:        name,
+		Description: strings.TrimSpace(in.Description),
+		Visibility:  visibility,
+		CreatedBy:   createdBy,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		Members:     []mongorepo.OrgMember{{UserID: createdBy, Email: strings.TrimSpace(in.CreatedByEmail), Role: OrgRoleOwner}},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), metadataOpTimeout)
+	defer cancel()
+	saved, err := r.repo.CreateOrganization(ctx, doc)
+	if err != nil {
+		return nil, err
+	}
+	return fromMongoOrg(saved), nil
+}
+
+func (r *mongodbMetadataRepository) ListOrganizations(in ListOrganizationsInput) ([]*Organization, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), metadataOpTimeout)
+	defer cancel()
+	orgs, err := r.repo.ListOrganizations(ctx, strings.TrimSpace(in.MemberUserID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Organization, 0, len(orgs))
+	for _, org := range orgs {
+		out = append(out, fromMongoOrg(org))
+	}
+	return out, nil
+}
+
+func (r *mongodbMetadataRepository) GetOrganization(slug string) (*Organization, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), metadataOpTimeout)
+	defer cancel()
+	org, err := r.repo.GetOrganization(ctx, slug)
+	if err != nil {
+		return nil, mapMongoOrgErr(err)
+	}
+	return fromMongoOrg(org), nil
+}
+
+func (r *mongodbMetadataRepository) AddOrganizationMember(in OrgMemberInput) (*Organization, error) {
+	slug := normalizeOrgSlug(in.Slug)
+	userID := strings.TrimSpace(in.UserID)
+	role := normalizeOrgRole(in.Role)
+	if slug == "" || userID == "" {
+		return nil, fmt.Errorf("slug and user are required")
+	}
+	if role == "" {
+		return nil, fmt.Errorf("role must be owner, admin, or developer")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), metadataOpTimeout)
+	defer cancel()
+	org, err := r.repo.GetOrganization(ctx, slug)
+	if err != nil {
+		return nil, mapMongoOrgErr(err)
+	}
+	members := org.Members
+	updated := false
+	for i := range members {
+		if members[i].UserID == userID {
+			members[i].Role = role
+			if strings.TrimSpace(in.Email) != "" {
+				members[i].Email = strings.TrimSpace(in.Email)
+			}
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		members = append(members, mongorepo.OrgMember{UserID: userID, Email: strings.TrimSpace(in.Email), Role: role})
+	}
+	saved, err := r.repo.SetMembers(ctx, slug, members, time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return nil, mapMongoOrgErr(err)
+	}
+	return fromMongoOrg(saved), nil
+}
+
+func (r *mongodbMetadataRepository) RemoveOrganizationMember(slug, userID string) (*Organization, error) {
+	slug = normalizeOrgSlug(slug)
+	userID = strings.TrimSpace(userID)
+	ctx, cancel := context.WithTimeout(context.Background(), metadataOpTimeout)
+	defer cancel()
+	org, err := r.repo.GetOrganization(ctx, slug)
+	if err != nil {
+		return nil, mapMongoOrgErr(err)
+	}
+	owners := 0
+	for _, m := range org.Members {
+		if m.Role == OrgRoleOwner {
+			owners++
+		}
+	}
+	kept := make([]mongorepo.OrgMember, 0, len(org.Members))
+	removed := false
+	for _, m := range org.Members {
+		if m.UserID == userID {
+			if m.Role == OrgRoleOwner && owners <= 1 {
+				return nil, fmt.Errorf("cannot remove the last owner")
+			}
+			removed = true
+			continue
+		}
+		kept = append(kept, m)
+	}
+	if !removed {
+		return nil, fmt.Errorf("member not found")
+	}
+	saved, err := r.repo.SetMembers(ctx, slug, kept, time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return nil, mapMongoOrgErr(err)
+	}
+	return fromMongoOrg(saved), nil
 }
 
 func toPGPackageFilter(in PackageFilter) pgrepo.PackageFilter {

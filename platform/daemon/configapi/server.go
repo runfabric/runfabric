@@ -52,6 +52,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /deploy", s.handleDeploy)
 	mux.HandleFunc("POST /remove", s.handleRemove)
 	mux.HandleFunc("POST /releases", s.handleReleases)
+	mux.HandleFunc("POST /releases/history", s.handleReleaseHistory)
 	return s.Authorize(mux.ServeHTTP)
 }
 
@@ -375,6 +376,20 @@ func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := s.core.Releases(cfgPath)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeRawOK(w, res.Payload)
+}
+
+func (s *Server) handleReleaseHistory(w http.ResponseWriter, r *http.Request) {
+	cfgPath, err := configPath(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	res, err := s.core.ReleaseHistory(cfgPath, s.stage(r))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return

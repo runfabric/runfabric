@@ -131,7 +131,7 @@ function navLinks(pathname) {
     ["/docs", "Docs"],
     ["/extensions", "Extensions"],
     ["/search", "Search"],
-    ["/auth", "Auth"],
+    ["/account", "Account"],
   ];
   return links
     .map(([href, label]) => {
@@ -304,7 +304,11 @@ function parseRoute(pathname) {
     return { name: "publisher", publisher: decodeURIComponent(path.slice("/publishers/".length)) };
   }
   if (path === "/search") return { name: "search" };
+  if (path === "/auth/callback") return { name: "auth-callback" };
   if (path === "/auth") return { name: "auth" };
+  if (path === "/account") return { name: "account" };
+  if (path.startsWith("/orgs/")) return { name: "org-detail", slug: decodeURIComponent(path.slice("/orgs/".length)) };
+  if (path === "/orgs") return { name: "account" };
   return { name: "not-found" };
 }
 
@@ -439,8 +443,8 @@ function bindPageEvents() {
   bindNavigation();
   bindThemeToggle();
   bindSearchForms();
-  bindTokenForm();
-  bindLoginRedirect();
+  bindIdentityAuth();
+  bindAccount();
 }
 
 async function renderHome(pathname) {
@@ -815,53 +819,358 @@ async function renderUnifiedSearch(pathname) {
   }
 }
 
+function identityBaseURL() {
+  const issuer = safe(uiConfig.oidcIssuer, DEFAULT_UI_CONFIG.oidcIssuer);
+  return issuer.replace(/\/$/, "");
+}
+
 async function renderAuth(pathname) {
   const token = getSavedToken();
-  const loginURL = safe(uiConfig.authLoginURL, DEFAULT_UI_CONFIG.authLoginURL);
-  const issuerURL = safe(uiConfig.oidcIssuer, DEFAULT_UI_CONFIG.oidcIssuer);
+  const issuerURL = identityBaseURL();
+
+  if (token) {
+    const body = `
+      <p class="copy">You are signed in to the registry.</p>
+      <section class="panel" style="max-width:560px">
+        <h2>Session</h2>
+        <p class="copy">A RunFabric identity token is stored and sent with registry API requests.</p>
+        <div class="input-row" style="margin-top:.6rem">
+          <a href="/" data-nav="1"><button type="button">Go to registry</button></a>
+          <button id="signout-btn" type="button" class="ghost">Sign out</button>
+        </div>
+      </section>
+    `;
+    return layout("Account", body, pathname);
+  }
+
+  // Bounce to the identity service; it authenticates (its own login page) and
+  // redirects back to /auth/callback with a token in the URL fragment.
+  const redirectUri = window.location.origin + "/auth/callback";
+  const authorizeUrl =
+    identityBaseURL() + "/sso/authorize?redirect_uri=" + encodeURIComponent(redirectUri);
+
   const body = `
-    <p class="copy">Configure login redirection and token storage for authenticated registry actions.</p>
-    <div class="grid">
-      <section class="panel">
-        <h2>Login Redirect</h2>
-        <form id="sso-login-form" autocomplete="off">
-          <div class="input-row">
-            <select id="login-mode">
-              <option value="configured">Configured auth URL</option>
-              <option value="issuer">OIDC issuer URL</option>
-              <option value="custom">Custom URL</option>
-            </select>
-            <input id="custom-login-url" type="url" placeholder="https://auth.example.com/device" disabled />
-            <button type="submit">Login</button>
-          </div>
-          <p class="copy">Configured login: <code>${escapeHTML(loginURL)}</code></p>
-          <p class="copy">OIDC issuer: <code>${escapeHTML(issuerURL)}</code></p>
-          <p id="login-message" class="copy"></p>
-        </form>
-      </section>
-      <section class="panel">
-        <h2>CLI Device Login</h2>
-        <ol>
-          <li>Run <code>runfabric login --auth-url ${escapeHTML(issuerURL)}</code>.</li>
-          <li>Complete verification in browser.</li>
-          <li>Paste the access token below.</li>
-        </ol>
-        <p class="copy">Use <code>runfabric whoami</code>, <code>runfabric token list</code>, and <code>runfabric token revoke</code> for lifecycle.</p>
-      </section>
-      <section class="panel">
-        <h2>Token</h2>
-        <form id="token-form" autocomplete="off">
-          <textarea id="token-input" rows="6" placeholder="Paste Bearer token">${escapeHTML(token)}</textarea>
-          <div class="input-row" style="margin-top: 0.6rem;">
-            <button type="submit">Save Token</button>
-            <button id="clear-token" type="button" class="ghost">Clear Token</button>
-          </div>
-        </form>
-        <p class="copy">Current token state: ${token ? "saved" : "empty"}</p>
-      </section>
-    </div>
+    <p class="copy">Sign in with your RunFabric identity to publish and manage extensions.</p>
+    <section class="panel" style="max-width:520px">
+      <h2>Authenticate</h2>
+      <p class="copy">You will be redirected to the RunFabric identity service and returned here once signed in.</p>
+      <div class="input-row" style="margin-top:.6rem">
+        <a href="${escapeHTML(authorizeUrl)}"><button type="button">Sign in with RunFabric</button></a>
+      </div>
+    </section>
+    <p class="copy" style="margin-top:12px">Identity provider: <code>${escapeHTML(issuerURL)}</code></p>
   `;
-  return layout("Auth & SSO", body, pathname);
+  return layout("Sign In", body, pathname);
+}
+
+// Callback landing after the identity service redirects back with the token in
+// the URL fragment (#access_token=...). Store it, clean the URL, go home.
+async function renderAuthCallback(pathname) {
+  const hash = (window.location.hash || "").replace(/^#/, "");
+  const params = new URLSearchParams(hash);
+  const token = params.get("access_token");
+  if (token) {
+    setSavedToken(token);
+    setTimeout(() => {
+      history.replaceState({}, "", "/");
+      void render();
+    }, 0);
+    return layout("Signing in…", '<p class="copy">Signed in. Returning to the registry…</p>', pathname);
+  }
+  const error = params.get("error") || "No token was returned by the identity service.";
+  const body = `
+    <div class="error">${escapeHTML(error)}</div>
+    <p class="copy" style="margin-top:10px"><a href="/auth" data-nav="1">Back to sign in</a></p>
+  `;
+  return layout("Sign in failed", body, pathname);
+}
+
+function bindIdentityAuth() {
+  const signout = document.getElementById("signout-btn");
+  if (signout) {
+    signout.addEventListener("click", () => {
+      setSavedToken("");
+      void render();
+    });
+  }
+}
+
+// --- Account dashboard + organizations (npm-style) ---
+
+function decodeTokenClaims(token) {
+  try {
+    const part = String(token || "").split(".")[1];
+    if (!part) return {};
+    const pad = part + "=".repeat((4 - (part.length % 4)) % 4);
+    const json = atob(pad.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(json);
+  } catch {
+    return {};
+  }
+}
+
+function currentUserId() {
+  const claims = decodeTokenClaims(getSavedToken());
+  return String(claims.sub || claims.user_id || claims.subject || "");
+}
+
+const ACCOUNT_SECTIONS = [
+  ["profile", "Profile"],
+  ["packages", "Packages"],
+  ["access-tokens", "Access Tokens"],
+  ["staged", "Staged Packages"],
+  ["billing", "Billing Info"],
+];
+
+async function renderAccount(pathname) {
+  const token = getSavedToken();
+  if (!token) {
+    setTimeout(() => navigate("/auth"), 0);
+    return layout("Account", '<p class="copy">Redirecting to sign in…</p>', pathname);
+  }
+  const claims = decodeTokenClaims(token);
+  const section = queryParam("section") || "profile";
+
+  let orgs = [];
+  let orgError = "";
+  try {
+    const res = await client.listOrganizations();
+    orgs = Array.isArray(res.items) ? res.items : [];
+  } catch (error) {
+    orgError = error instanceof Error ? error.message : String(error);
+  }
+
+  const navItem = (id, label) =>
+    `<a class="acct-nav-link${section === id ? " active" : ""}" href="/account?section=${id}" data-nav="1">${escapeHTML(label)}</a>`;
+  const orgLinks = orgs
+    .map(
+      (o) =>
+        `<a class="acct-nav-sub" href="/orgs/${encodeURIComponent(o.slug)}" data-nav="1">${escapeHTML(o.name || o.slug)}</a>`,
+    )
+    .join("");
+
+  const nav = `
+    <aside class="acct-nav">
+      ${ACCOUNT_SECTIONS.map(([id, label]) => navItem(id, label)).join("")}
+      <div class="acct-nav-group">Organizations</div>
+      <a class="acct-nav-sub create${section === "new-org" ? " active" : ""}" href="/account?section=new-org" data-nav="1">+ Create New Organization</a>
+      ${orgLinks || '<span class="copy" style="padding:4px 12px;display:block">No organizations yet</span>'}
+    </aside>
+  `;
+
+  const content = accountSectionContent(section, claims, token, orgs, orgError);
+  const body = `<div class="acct-layout">${nav}<section class="acct-main">${content}</section></div>`;
+  return layout("Account", body, pathname);
+}
+
+function accountSectionContent(section, claims, token, orgs, orgError) {
+  const email = safe(claims.email, "");
+  const sub = safe(claims.sub, "");
+  switch (section) {
+    case "packages":
+      return `
+        <h2>Packages</h2>
+        <p class="copy">Packages you publish appear here. Browse everything in the <a href="/extensions" data-nav="1">marketplace</a>.</p>
+      `;
+    case "access-tokens":
+      return `
+        <h2>Access Tokens</h2>
+        <p class="copy">This browser holds a bearer token used for registry API calls.</p>
+        <div class="panel" style="max-width:640px">
+          <p class="copy" style="margin:0 0 8px">Current token</p>
+          <pre style="white-space:pre-wrap;word-break:break-all">${escapeHTML(token.slice(0, 24))}…${escapeHTML(token.slice(-12))}</pre>
+          <div class="input-row" style="margin-top:10px">
+            <button id="copy-token" type="button" class="ghost">Copy token</button>
+            <button id="signout-btn" type="button" class="ghost">Sign out</button>
+          </div>
+        </div>
+      `;
+    case "staged":
+      return `<h2>Staged Packages</h2><p class="copy">No staged packages. Packages awaiting finalize will show here.</p>`;
+    case "billing":
+      return `<h2>Billing Info</h2><p class="copy">Billing is not configured for this registry.</p>`;
+    case "new-org":
+      return `
+        <h2>Create New Organization</h2>
+        <p class="copy">Organizations own a package scope (<code>@your-org/pkg</code>) and have members with roles.</p>
+        <section class="panel" style="max-width:560px">
+          <form id="create-org-form" autocomplete="off">
+            <div style="margin-bottom:12px">
+              <label style="display:block;font-weight:600;font-size:13px;margin-bottom:5px">Organization name (scope)</label>
+              <input id="org-slug" type="text" required placeholder="my-org" style="width:100%" />
+              <p class="copy" style="margin-top:4px">Lowercase letters, numbers and dashes. Used as <code>@my-org</code>.</p>
+            </div>
+            <div style="margin-bottom:12px">
+              <label style="display:block;font-weight:600;font-size:13px;margin-bottom:5px">Display name (optional)</label>
+              <input id="org-name" type="text" placeholder="My Organization" style="width:100%" />
+            </div>
+            <div style="margin-bottom:12px">
+              <label style="display:block;font-weight:600;font-size:13px;margin-bottom:5px">Default package visibility</label>
+              <select id="org-visibility" style="width:100%">
+                <option value="public">Public</option>
+                <option value="tenant">Private (tenant)</option>
+              </select>
+            </div>
+            <div class="input-row"><button type="submit">Create organization</button></div>
+            <p id="create-org-message" class="copy" style="margin-top:10px"></p>
+          </form>
+        </section>
+      `;
+    case "profile":
+    default:
+      return `
+        <h2>Profile</h2>
+        <div class="panel" style="max-width:640px">
+          <table><tbody>
+            <tr><th style="width:140px">Email</th><td>${escapeHTML(email || "—")}</td></tr>
+            <tr><th>User ID</th><td><code>${escapeHTML(sub || "—")}</code></td></tr>
+            <tr><th>Organizations</th><td>${orgError ? `<span class="copy">${escapeHTML(orgError)}</span>` : String(orgs.length)}</td></tr>
+          </tbody></table>
+        </div>
+      `;
+  }
+}
+
+async function renderOrgDetail(pathname, slug) {
+  const token = getSavedToken();
+  if (!token) {
+    setTimeout(() => navigate("/auth"), 0);
+    return layout("Organization", '<p class="copy">Redirecting to sign in…</p>', pathname);
+  }
+  let org;
+  try {
+    org = await client.getOrganization(slug);
+  } catch (error) {
+    return layout("Organization", showError(error), pathname);
+  }
+  const me = currentUserId();
+  const myRole = (org.members || []).find((m) => m.userId === me)?.role || "";
+  const canManage = myRole === "owner" || myRole === "admin";
+
+  const rows = (org.members || [])
+    .map(
+      (m) => `
+        <tr>
+          <td>${escapeHTML(m.email || m.userId)}</td>
+          <td><span class="badge${m.role === "owner" ? " ok" : ""}">${escapeHTML(m.role)}</span></td>
+          <td>${canManage && m.userId !== me ? `<button class="ghost remove-member-btn" data-user="${escapeHTML(m.userId)}" type="button">Remove</button>` : ""}</td>
+        </tr>
+      `,
+    )
+    .join("");
+
+  const manageForm = canManage
+    ? `
+      <section class="panel" style="max-width:640px;margin-top:1rem">
+        <h3>Add member</h3>
+        <form id="add-member-form" autocomplete="off" data-slug="${escapeHTML(org.slug)}">
+          <div class="input-row">
+            <input id="member-user" type="text" placeholder="user id" required />
+            <input id="member-email" type="email" placeholder="email (optional)" />
+            <select id="member-role">
+              <option value="developer">Developer</option>
+              <option value="admin">Admin</option>
+              <option value="owner">Owner</option>
+            </select>
+            <button type="submit">Add</button>
+          </div>
+          <p id="add-member-message" class="copy" style="margin-top:8px"></p>
+        </form>
+      </section>`
+    : "";
+
+  const body = `
+    <p class="copy"><a href="/account?section=new-org" data-nav="1">← Account</a></p>
+    <p>
+      <span class="badge">@${escapeHTML(org.slug)}</span>
+      <span class="badge${org.defaultVisibility === "public" ? " ok" : ""}">${escapeHTML(org.defaultVisibility || "public")}</span>
+      ${myRole ? `<span class="badge">you: ${escapeHTML(myRole)}</span>` : ""}
+    </p>
+    ${org.description ? `<p class="copy">${escapeHTML(org.description)}</p>` : ""}
+    <h2>Members (${(org.members || []).length})</h2>
+    <div class="table-wrap" data-slug="${escapeHTML(org.slug)}">
+      <table>
+        <thead><tr><th>Member</th><th>Role</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    ${manageForm}
+  `;
+  return layout(org.name || org.slug, body, pathname);
+}
+
+function bindAccount() {
+  const copyToken = document.getElementById("copy-token");
+  if (copyToken) {
+    copyToken.addEventListener("click", () => {
+      navigator.clipboard?.writeText(getSavedToken());
+      copyToken.textContent = "Copied";
+      setTimeout(() => (copyToken.textContent = "Copy token"), 1200);
+    });
+  }
+
+  const createForm = document.getElementById("create-org-form");
+  if (createForm) {
+    createForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const message = document.getElementById("create-org-message");
+      const slug = (document.getElementById("org-slug")?.value || "").trim();
+      const name = (document.getElementById("org-name")?.value || "").trim();
+      const visibility = document.getElementById("org-visibility")?.value || "public";
+      if (!slug) {
+        message.textContent = "Organization name is required.";
+        message.className = "error";
+        return;
+      }
+      message.textContent = "Creating…";
+      message.className = "copy";
+      try {
+        const org = await client.createOrganization({ slug, name, visibility });
+        navigate("/orgs/" + encodeURIComponent(org.slug));
+      } catch (error) {
+        message.textContent = error instanceof Error ? error.message : String(error);
+        message.className = "error";
+      }
+    });
+  }
+
+  const addForm = document.getElementById("add-member-form");
+  if (addForm) {
+    addForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const slug = addForm.getAttribute("data-slug");
+      const message = document.getElementById("add-member-message");
+      const userId = (document.getElementById("member-user")?.value || "").trim();
+      const email = (document.getElementById("member-email")?.value || "").trim();
+      const role = document.getElementById("member-role")?.value || "developer";
+      if (!userId) {
+        message.textContent = "User id is required.";
+        message.className = "error";
+        return;
+      }
+      try {
+        await client.addOrganizationMember(slug, { userId, email, role });
+        void render();
+      } catch (error) {
+        message.textContent = error instanceof Error ? error.message : String(error);
+        message.className = "error";
+      }
+    });
+  }
+
+  document.querySelectorAll(".remove-member-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const wrap = btn.closest("[data-slug]");
+      const slug = wrap ? wrap.getAttribute("data-slug") : "";
+      const userId = btn.getAttribute("data-user");
+      try {
+        await client.removeOrganizationMember(slug, userId);
+        void render();
+      } catch (error) {
+        alert(error instanceof Error ? error.message : String(error));
+      }
+    });
+  });
 }
 
 async function renderNotFound(pathname) {
@@ -901,6 +1210,15 @@ async function render() {
       break;
     case "auth":
       html = await renderAuth(pathname);
+      break;
+    case "auth-callback":
+      html = await renderAuthCallback(pathname);
+      break;
+    case "account":
+      html = await renderAccount(pathname);
+      break;
+    case "org-detail":
+      html = await renderOrgDetail(pathname, route.slug);
       break;
     default:
       html = await renderNotFound(pathname);
