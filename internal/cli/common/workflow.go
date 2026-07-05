@@ -16,7 +16,7 @@ func NewWorkflowCmd(opts *GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workflow",
 		Short: "Durable workflow runtime operations",
-		Long:  "Workflow-first runtime operations: run, status, cancel, replay.",
+		Long:  "Workflow-first runtime operations: run, status, cancel, replay, approve.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
@@ -26,6 +26,7 @@ func NewWorkflowCmd(opts *GlobalOptions) *cobra.Command {
 		newWorkflowStatusCmd(opts),
 		newWorkflowCancelCmd(opts),
 		newWorkflowReplayCmd(opts),
+		newWorkflowApproveCmd(opts),
 	)
 	return cmd
 }
@@ -204,6 +205,50 @@ func newWorkflowReplayCmd(opts *GlobalOptions) *cobra.Command {
 	cmd.Flags().StringVar(&providerOverride, "provider", "", "Provider key from providerOverrides (multi-cloud); e.g. aws, gcp")
 	_ = cmd.MarkFlagRequired("run-id")
 	_ = cmd.MarkFlagRequired("from-step")
+	return cmd
+}
+
+func newWorkflowApproveCmd(opts *GlobalOptions) *cobra.Command {
+	var runID string
+	var stepID string
+	var decision string
+	var reviewer string
+	var providerOverride string
+
+	cmd := &cobra.Command{
+		Use:   "approve",
+		Short: "Resolve a paused human-approval step and resume the run",
+		RunE: func(c *cobra.Command, args []string) error {
+			cfgPath, err := resolveCLIConfigPath(opts.ConfigPath)
+			if err != nil {
+				if opts.JSONOutput {
+					return WriteJSONEnvelope(c.OutOrStdout(), false, "workflow approve", nil, &runtime.ErrorResponse{Code: "config_not_found", Message: err.Error()})
+				}
+				return err
+			}
+			StatusRunning(opts.JSONOutput, "Resolving approval...")
+			run, err := app.WorkflowApprove(cfgPath, opts.Stage, providerOverride, runID, stepID, decision, reviewer)
+			if err != nil {
+				StatusFail(opts.JSONOutput, "Workflow approval failed.")
+				if opts.JSONOutput {
+					return WriteJSONEnvelope(c.OutOrStdout(), false, "workflow approve", nil, &runtime.ErrorResponse{Code: "workflow_approve_failed", Message: err.Error()})
+				}
+				return err
+			}
+			StatusDone(opts.JSONOutput, "Workflow approval recorded.")
+			if opts.JSONOutput {
+				return WriteJSONEnvelope(c.OutOrStdout(), true, "workflow approve", map[string]any{"run": run}, nil)
+			}
+			return PrintSuccess("workflow approve", map[string]any{"run": run})
+		},
+	}
+	cmd.Flags().StringVar(&runID, "run-id", "", "Run ID")
+	cmd.Flags().StringVar(&decision, "decision", "", "approve or reject")
+	cmd.Flags().StringVar(&stepID, "step", "", "Step ID awaiting approval (defaults to the paused step)")
+	cmd.Flags().StringVar(&reviewer, "reviewer", "", "Reviewer recorded on the step output")
+	cmd.Flags().StringVar(&providerOverride, "provider", "", "Provider key from providerOverrides (multi-cloud); e.g. aws, gcp")
+	_ = cmd.MarkFlagRequired("run-id")
+	_ = cmd.MarkFlagRequired("decision")
 	return cmd
 }
 
