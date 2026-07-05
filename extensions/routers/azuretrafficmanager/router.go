@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 	sdkrouter "github.com/runfabric/runfabric/plugin-sdk/go/router"
 )
 
@@ -329,13 +330,10 @@ func normalizeProfileID(id string) string {
 	return strings.TrimSuffix(out, "/")
 }
 
+// resolveToken resolves via the declared chain: router token env, then the
+// declarative fallback (AZURE_ACCESS_TOKEN, the azure provider key).
 func resolveToken() string {
-	for _, key := range []string{"RUNFABRIC_ROUTER_API_TOKEN", "AZURE_ACCESS_TOKEN"} {
-		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-			return v
-		}
-	}
-	return ""
+	return sdkprovider.ResolveVar(CredentialVars, "RUNFABRIC_ROUTER_API_TOKEN")
 }
 
 func resolveBaseURL() string {

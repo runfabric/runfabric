@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 	sdkrouter "github.com/runfabric/runfabric/plugin-sdk/go/router"
 )
 
@@ -30,10 +31,20 @@ func (Router) Meta() sdkrouter.PluginMeta {
 }
 
 func (Router) Sync(ctx context.Context, req sdkrouter.RouterSyncRequest) (*sdkrouter.RouterSyncResult, error) {
+	// Request values win; env (router keys, then declared same-cloud provider
+	// fallbacks) fills the gaps.
+	zoneID := strings.TrimSpace(req.ZoneID)
+	if zoneID == "" {
+		zoneID = sdkprovider.ResolveVar(CredentialVars, "RUNFABRIC_ROUTER_ZONE_ID")
+	}
+	accountID := strings.TrimSpace(req.AccountID)
+	if accountID == "" {
+		accountID = sdkprovider.ResolveVar(CredentialVars, "RUNFABRIC_ROUTER_ACCOUNT_ID")
+	}
 	s, err := newCloudflareSyncer(cloudflareConfig{
 		APIToken:  resolveCloudflareAPIToken(),
-		ZoneID:    req.ZoneID,
-		AccountID: req.AccountID,
+		ZoneID:    zoneID,
+		AccountID: accountID,
 	}, req.DryRun, req.Out)
 	if err != nil {
 		return nil, err
@@ -41,6 +52,8 @@ func (Router) Sync(ctx context.Context, req sdkrouter.RouterSyncRequest) (*sdkro
 	return s.sync(ctx, req.Routing)
 }
 
+// resolveCloudflareAPIToken: router token env → token file → declared
+// fallback (the cloudflare-workers provider's CLOUDFLARE_API_TOKEN).
 func resolveCloudflareAPIToken() string {
 	if value := strings.TrimSpace(os.Getenv("RUNFABRIC_ROUTER_API_TOKEN")); value != "" {
 		return value
@@ -48,7 +61,7 @@ func resolveCloudflareAPIToken() string {
 	if value := readCloudflareAPITokenFile("RUNFABRIC_ROUTER_API_TOKEN_FILE"); value != "" {
 		return value
 	}
-	return ""
+	return sdkprovider.ResolveVar(CredentialVars, "RUNFABRIC_ROUTER_API_TOKEN")
 }
 
 func readCloudflareAPITokenFile(envKey string) string {

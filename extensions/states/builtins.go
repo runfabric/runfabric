@@ -69,6 +69,11 @@ func BuiltinStateCredentials() map[string][]sdkprovider.CredentialVar {
 			// per-request header targets it), so it can never be renamed away.
 			{EnvKey: "RUNFABRIC_STATE_POSTGRES_URL", Header: "X-State-Postgres-Url", Required: true, Placeholder: "postgres://user:pass@localhost:5432/runfabric"},
 		},
+		// Note: s3 and dynamodb also honor the SHARED scoped identity
+		// RUNFABRIC_STATE_AWS_* (X-State-Aws-* per daemon request) declared
+		// once at the subsystem level (providerpolicy.StateAWSCredentialVars)
+		// because headers must be globally unique across groups. See
+		// extensions/states/awsauth for the resolution order.
 		"s3": {
 			{EnvKey: "RUNFABRIC_S3_BUCKET", Required: true},
 			{EnvKey: "RUNFABRIC_S3_PREFIX"},

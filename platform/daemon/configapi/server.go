@@ -52,6 +52,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /deploy", s.handleDeploy)
 	mux.HandleFunc("POST /remove", s.handleRemove)
 	mux.HandleFunc("POST /releases", s.handleReleases)
+	mux.HandleFunc("POST /fabric/deploy", s.handleFabricDeploy)
+	mux.HandleFunc("POST /router/sync", s.handleRouterSync)
 	mux.HandleFunc("POST /releases/history", s.handleReleaseHistory)
 	return s.Authorize(mux.ServeHTTP)
 }
@@ -138,6 +140,11 @@ func (s *Server) sweepLocked(cutoff time.Time) {
 	}
 }
 
+// provider returns the requested providerOverrides key ("" = config default).
+func provider(r *http.Request) string {
+	return strings.TrimSpace(r.URL.Query().Get("provider"))
+}
+
 func (s *Server) stage(r *http.Request) string {
 	if st := r.URL.Query().Get("stage"); st != "" {
 		return st
@@ -202,8 +209,16 @@ func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	// Plan Bootstraps (installs the process-global secret resolver) and may
+	// resolve secret refs, so it takes the same serialization + per-request
+	// credential path as deploy.
+	var res *PlanResponse
 	start := time.Now()
-	res, err := s.core.Plan(cfgPath, s.stage(r))
+	err = s.withProviderCreds(r, func() error {
+		var perr error
+		res, perr = s.core.Plan(cfgPath, s.stage(r), provider(r))
+		return perr
+	})
 	observeOperation("plan", start, err)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
@@ -222,7 +237,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	err = s.withProviderCreds(r, func() error {
 		var derr error
-		res, derr = s.core.Deploy(cfgPath, s.stage(r))
+		res, derr = s.core.Deploy(cfgPath, s.stage(r), provider(r))
 		return derr
 	})
 	observeOperation("deploy", start, err)
@@ -243,7 +258,7 @@ func (s *Server) handleRemove(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	err = s.withProviderCreds(r, func() error {
 		var rerr error
-		res, rerr = s.core.Remove(cfgPath, s.stage(r))
+		res, rerr = s.core.Remove(cfgPath, s.stage(r), provider(r))
 		return rerr
 	})
 	observeOperation("remove", start, err)
@@ -269,12 +284,17 @@ type providerCredGroup struct {
 
 // Per-request credentials app-service forwards so a deploy runs against the
 // project's OWN accounts, not the daemon's ambient creds. One group per
-// hostable provider (X-Provider-*) plus one per state backend that accepts
-// per-request secrets (X-State-*), all derived from the plugins' own
-// CredentialVars declarations (the plugin is the single source of truth).
-// Vars declared without a Header (e.g. kubernetes' file-based KUBECONFIG, or
-// bucket names that ride the manifest) get no group entry, and linode
-// declares none — matching the prior hardcoded exclusions.
+// hostable provider (X-Provider-*), one per state backend that accepts
+// per-request secrets (X-State-*), one for the router subsystem (X-Router-*),
+// and one per token-authenticated secret manager (X-Secret-Vault-*) — all
+// derived from CredentialVars declarations (the declaration is the single
+// source of truth; the daemon-client ships the same contract as
+// credentials.json). Vars declared without a Header (e.g. kubernetes'
+// file-based KUBECONFIG, or bucket names that ride the manifest) get no group
+// entry, and linode declares none — matching the prior hardcoded exclusions.
+// Cloud secret managers (aws-sm/gcp-sm/azure-kv) intentionally have no group:
+// they authenticate through their cloud SDK chains and reuse the X-Provider-*
+// groups of the same cloud.
 var providerCredGroups = buildAllCredGroups()
 
 func buildAllCredGroups() []providerCredGroup {
@@ -293,6 +313,26 @@ func buildAllCredGroups() []providerCredGroup {
 	sort.Strings(kinds)
 	for _, kind := range kinds {
 		if g, ok := credGroupOf(stateCreds[kind]); ok {
+			groups = append(groups, g)
+		}
+	}
+	// Router subsystem (per-request DNS-sync credentials).
+	if g, ok := credGroupOf(providerpolicy.RouterCredentialVars()); ok {
+		groups = append(groups, g)
+	}
+	// Shared scoped AWS identity for the s3/dynamodb state backends.
+	if g, ok := credGroupOf(providerpolicy.StateAWSCredentialVars()); ok {
+		groups = append(groups, g)
+	}
+	// Token-authenticated secret managers (deterministic order).
+	smCreds := providerpolicy.SecretManagerCredentialVars()
+	smIDs := make([]string, 0, len(smCreds))
+	for id := range smCreds {
+		smIDs = append(smIDs, id)
+	}
+	sort.Strings(smIDs)
+	for _, id := range smIDs {
+		if g, ok := credGroupOf(smCreds[id]); ok {
 			groups = append(groups, g)
 		}
 	}
@@ -344,17 +384,24 @@ func collectProviderCreds(header http.Header) (creds map[string]string, touched 
 	return creds, touched
 }
 
-// withProviderCreds applies any per-request provider credentials to the process
-// env for the duration of fn, then restores the prior env. Serialized by deployMu
-// so concurrent deploys never see each other's credentials.
+// withProviderCreds applies any per-request credentials (provider, state,
+// router, secret-manager groups) to the process env for the duration of fn,
+// then restores the prior env.
+//
+// deployMu is held for EVERY deploy/remove, not just credentialed ones: the
+// engine mutates process-global state during a lifecycle op regardless —
+// Bootstrap installs the process-wide secret-manager resolver, and the DNS-sync
+// step primes RUNFABRIC_ROUTER_API_TOKEN into the env. Two concurrent ops
+// would corrupt each other's resolver/env even with no headers present.
 func (s *Server) withProviderCreds(r *http.Request, fn func() error) error {
 	creds, touched := collectProviderCreds(r.Header)
-	if len(creds) == 0 {
-		return fn()
-	}
 
 	s.deployMu.Lock()
 	defer s.deployMu.Unlock()
+
+	if len(creds) == 0 {
+		return fn()
+	}
 
 	type prev struct {
 		val string
@@ -382,14 +429,74 @@ func (s *Server) withProviderCreds(r *http.Request, fn func() error) error {
 	return fn()
 }
 
+// handleFabricDeploy deploys to EVERY fabric.targets provider (multi-cloud)
+// and returns the fabric state with per-provider endpoints. Same
+// serialization + per-request credential semantics as /deploy — a request may
+// carry several X-Provider-* groups at once, one per target cloud.
+func (s *Server) handleFabricDeploy(w http.ResponseWriter, r *http.Request) {
+	cfgPath, err := configPath(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	var res *FabricDeployResponse
+	start := time.Now()
+	err = s.withProviderCreds(r, func() error {
+		var derr error
+		res, derr = s.core.FabricDeploy(cfgPath, s.stage(r))
+		return derr
+	})
+	observeOperation("fabric_deploy", start, err)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeRawOK(w, res.Payload)
+}
+
+// handleRouterSync puts the router over the fabric endpoints: multi-cloud
+// routing config (failover/latency/round-robin) synced through the configured
+// router plugin. dryRun=1 previews without mutating DNS/LB resources.
+func (s *Server) handleRouterSync(w http.ResponseWriter, r *http.Request) {
+	cfgPath, err := configPath(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	dryRun := false
+	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("dryRun"))) {
+	case "1", "true", "yes":
+		dryRun = true
+	}
+	var res *RouterSyncResponse
+	start := time.Now()
+	err = s.withProviderCreds(r, func() error {
+		var serr error
+		res, serr = s.core.RouterSync(cfgPath, s.stage(r), dryRun)
+		return serr
+	})
+	observeOperation("router_sync", start, err)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeRawOK(w, res.Payload)
+}
+
 func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
 	cfgPath, err := configPath(r)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	// Releases Bootstraps too — serialize with the other lifecycle ops.
+	var res *ReleasesResponse
 	start := time.Now()
-	res, err := s.core.Releases(cfgPath)
+	err = s.withProviderCreds(r, func() error {
+		var rerr error
+		res, rerr = s.core.Releases(cfgPath)
+		return rerr
+	})
 	observeOperation("releases", start, err)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
@@ -404,8 +511,14 @@ func (s *Server) handleReleaseHistory(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	// ReleaseHistory Bootstraps too — serialize with the other lifecycle ops.
+	var res *ReleasesResponse
 	start := time.Now()
-	res, err := s.core.ReleaseHistory(cfgPath, s.stage(r))
+	err = s.withProviderCreds(r, func() error {
+		var herr error
+		res, herr = s.core.ReleaseHistory(cfgPath, s.stage(r))
+		return herr
+	})
 	observeOperation("release_history", start, err)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)

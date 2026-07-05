@@ -26,9 +26,6 @@
     "backend": {
       "$ref": "#/$defs/BackendConfig"
     },
-    "state": {
-      "$ref": "#/$defs/StateConfig"
-    },
     "deploy": {
       "$ref": "#/$defs/DeployConfig"
     },
@@ -202,20 +199,28 @@
       "properties": {
         "name": {
           "type": "string",
-          "enum": [
-            "aws-lambda",
-            "gcp-functions",
-            "azure-functions",
-            "kubernetes",
-            "cloudflare-workers",
-            "vercel",
-            "netlify",
-            "alibaba-fc",
-            "digitalocean-functions",
-            "fly-machines",
-            "ibm-openwhisk"
+          "anyOf": [
+            {
+              "enum": [
+                "aws-lambda",
+                "gcp-functions",
+                "azure-functions",
+                "kubernetes",
+                "cloudflare-workers",
+                "vercel",
+                "netlify",
+                "alibaba-fc",
+                "digitalocean-functions",
+                "fly-machines",
+                "ibm-openwhisk"
+              ]
+            },
+            {
+              "pattern": "^[a-z0-9][a-z0-9-]*$",
+              "description": "Any installed external provider plugin ID (e.g. linode), discovered from RUNFABRIC_HOME/plugins/providers."
+            }
           ],
-          "description": "Provider ID."
+          "description": "Provider ID. The enum lists built-in providers; IDs of installed external provider plugins (kind=provider) are also valid."
         },
         "runtime": {
           "type": "string",
@@ -262,24 +267,32 @@
     },
     "StageProviderConfig": {
       "type": "object",
-      "description": "Per-stage provider overrides. All fields optional \u2014 only set fields that differ from the top-level provider.",
+      "description": "Per-stage provider overrides. All fields optional — only set fields that differ from the top-level provider.",
       "properties": {
         "name": {
           "type": "string",
-          "enum": [
-            "aws-lambda",
-            "gcp-functions",
-            "azure-functions",
-            "kubernetes",
-            "cloudflare-workers",
-            "vercel",
-            "netlify",
-            "alibaba-fc",
-            "digitalocean-functions",
-            "fly-machines",
-            "ibm-openwhisk"
+          "anyOf": [
+            {
+              "enum": [
+                "aws-lambda",
+                "gcp-functions",
+                "azure-functions",
+                "kubernetes",
+                "cloudflare-workers",
+                "vercel",
+                "netlify",
+                "alibaba-fc",
+                "digitalocean-functions",
+                "fly-machines",
+                "ibm-openwhisk"
+              ]
+            },
+            {
+              "pattern": "^[a-z0-9][a-z0-9-]*$",
+              "description": "Any installed external provider plugin ID (e.g. linode), discovered from RUNFABRIC_HOME/plugins/providers."
+            }
           ],
-          "description": "Provider ID."
+          "description": "Provider ID. The enum lists built-in providers; IDs of installed external provider plugins (kind=provider) are also valid."
         },
         "runtime": {
           "type": "string",
@@ -875,85 +888,6 @@
         },
         "routingKey": {
           "type": "string"
-        }
-      }
-    },
-    "StateConfig": {
-      "type": "object",
-      "properties": {
-        "backend": {
-          "type": "string",
-          "enum": [
-            "local",
-            "postgres",
-            "s3"
-          ]
-        },
-        "keyPrefix": {
-          "type": "string"
-        },
-        "lock": {
-          "$ref": "#/$defs/StateLockConfig"
-        },
-        "local": {
-          "type": "object",
-          "properties": {
-            "dir": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
-        },
-        "postgres": {
-          "type": "object",
-          "properties": {
-            "connectionStringEnv": {
-              "type": "string"
-            },
-            "schema": {
-              "type": "string"
-            },
-            "table": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
-        },
-        "s3": {
-          "type": "object",
-          "properties": {
-            "bucket": {
-              "type": "string"
-            },
-            "region": {
-              "type": "string"
-            },
-            "keyPrefix": {
-              "type": "string"
-            },
-            "useLockfile": {
-              "type": "boolean"
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    "StateLockConfig": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "timeoutSeconds": {
-          "type": "integer"
-        },
-        "heartbeatSeconds": {
-          "type": "integer"
-        },
-        "staleAfterSeconds": {
-          "type": "integer"
         }
       }
     },

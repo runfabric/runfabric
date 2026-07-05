@@ -50,7 +50,6 @@ func main() {
 		},
 		Methods: map[string]sdkserver.MethodFunc{
 			"ResolveSecret": p.resolveSecretMethod,
-			"GetSecret":     p.resolveSecretMethod,
 		},
 	})
 	if err := s.Serve(context.Background(), os.Stdin, os.Stdout); err != nil {

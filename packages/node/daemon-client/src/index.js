@@ -25,6 +25,9 @@ const DEFAULT_TIMEOUTS_MS = {
   validate: 60_000,
   resolve: 60_000,
   releases: 30_000,
+  // Deploys EVERY fabric.targets provider sequentially.
+  'fabric/deploy': 600_000,
+  'router/sync': 120_000,
 };
 
 /**
@@ -46,6 +49,68 @@ function traceIdOf(traceparent) {
     String(traceparent || '').trim().toLowerCase(),
   );
   return m ? m[1] : '';
+}
+
+/**
+ * Build X-Router-* headers so a daemon deploy/remove syncs DNS with the
+ * calling project's OWN router credentials instead of the daemon's ambient
+ * env. The daemon clears the whole router group before applying, so a partial
+ * set never mixes with ambient values.
+ */
+function routerHeaders(creds) {
+  if (!creds) return {};
+  const headers = {};
+  if (creds.apiToken) headers['X-Router-Api-Token'] = creds.apiToken;
+  if (creds.zoneId) headers['X-Router-Zone-Id'] = creds.zoneId;
+  if (creds.accountId) headers['X-Router-Account-Id'] = creds.accountId;
+  return headers;
+}
+
+/**
+ * Build X-Secret-Vault-* headers so secret-manager references (vault://…)
+ * resolve with the calling project's Vault identity for this one operation.
+ * Cloud secret managers (aws-sm/gcp-sm/azure-kv) need no dedicated headers —
+ * they authenticate via the X-Provider-* group of the same cloud.
+ */
+function vaultSecretManagerHeaders(creds) {
+  if (!creds || !creds.token) return {};
+  const headers = { 'X-Secret-Vault-Token': creds.token };
+  if (creds.addr) headers['X-Secret-Vault-Addr'] = creds.addr;
+  if (creds.namespace) headers['X-Secret-Vault-Namespace'] = creds.namespace;
+  return headers;
+}
+
+/**
+ * Build X-State-Aws-* headers: a SCOPED AWS identity for the s3/dynamodb
+ * state backends, so state can live in a different AWS account than the
+ * deploy target (X-Provider-Aws-*) and the aws-sm secret source
+ * (X-Secret-Aws-*). Unset, state falls back to the AWS default chain.
+ */
+function stateAwsHeaders(creds) {
+  if (!creds || !creds.accessKeyId || !creds.secretAccessKey) return {};
+  const headers = {
+    'X-State-Aws-Access-Key-Id': creds.accessKeyId,
+    'X-State-Aws-Secret-Access-Key': creds.secretAccessKey,
+  };
+  if (creds.sessionToken) headers['X-State-Aws-Session-Token'] = creds.sessionToken;
+  if (creds.region) headers['X-State-Aws-Region'] = creds.region;
+  return headers;
+}
+
+/**
+ * Build X-Secret-Aws-* headers: a SCOPED AWS identity for aws-sm:// secret
+ * resolution, independent of the deploy target's and the state store's AWS
+ * identities.
+ */
+function awsSecretManagerHeaders(creds) {
+  if (!creds || !creds.accessKeyId || !creds.secretAccessKey) return {};
+  const headers = {
+    'X-Secret-Aws-Access-Key-Id': creds.accessKeyId,
+    'X-Secret-Aws-Secret-Access-Key': creds.secretAccessKey,
+  };
+  if (creds.sessionToken) headers['X-Secret-Aws-Session-Token'] = creds.sessionToken;
+  if (creds.region) headers['X-Secret-Aws-Region'] = creds.region;
+  return headers;
 }
 
 /** Build X-Provider-Aws-* headers from a flat AWS credential object. */
@@ -111,12 +176,34 @@ class DaemonClient {
     return this.#call('releases', request);
   }
 
+  /**
+   * Multi-cloud deploy: deploys to EVERY fabric.targets provider and returns
+   * the fabric state ({service, stage, endpoints:[{provider,url},...]}).
+   * Forward one X-Provider-* group per target cloud in providerHeaders.
+   */
+  fabricDeploy(request) {
+    return this.#call('fabric/deploy', request);
+  }
+
+  /**
+   * Router over the fabric endpoints: syncs the multi-cloud routing config
+   * (failover/latency/round-robin) through the configured router plugin.
+   * Pass {dryRun:true} to preview. Router creds ride X-Router-* headers or
+   * fall back to the same-cloud provider group per the declared fallbacks.
+   */
+  routerSync(request) {
+    return this.#call('router/sync', request);
+  }
+
   async #call(op, request = {}) {
     if (!this.available()) {
       return { ok: false, error: 'daemon base URL is not set' };
     }
     const query = new URLSearchParams({ config: request.configPath || 'runfabric.yml' });
     if (request.stage) query.set('stage', request.stage);
+    // providerOverrides key for multi-cloud (CLI --provider equivalent).
+    if (request.provider) query.set('provider', request.provider);
+    if (request.dryRun) query.set('dryRun', '1');
     const url = `${this.baseUrl}/${op}?${query.toString()}`;
 
     const headers = {};
@@ -170,6 +257,10 @@ const CREDENTIALS = require('./credentials.json');
 module.exports = {
   DaemonClient,
   awsProviderHeaders,
+  stateAwsHeaders,
+  awsSecretManagerHeaders,
+  routerHeaders,
+  vaultSecretManagerHeaders,
   newTraceparent,
   traceIdOf,
   DEFAULT_TIMEOUTS_MS,

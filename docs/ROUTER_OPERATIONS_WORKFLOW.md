@@ -15,6 +15,26 @@ This is the standard code-only operator flow for global router rollout.
    `aws-sm://…`) just for the duration of the sync, then clears it. Exporting
    `RUNFABRIC_ROUTER_API_TOKEN` manually is only needed when no secret ref is
    configured.
+
+   Same-cloud provider credentials work as a declared fallback: with the
+   cloudflare router, `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ZONE_ID` /
+   `CLOUDFLARE_ACCOUNT_ID` (the cloudflare-workers provider keys) are used
+   when no router-specific values are set — one set of provider credentials
+   serves deploy and DNS sync. ns1 falls back to `NS1_API_KEY`, azure-tm to
+   `AZURE_ACCESS_TOKEN`, route53 uses the AWS default chain. Router-specific
+   values always win. The fallbacks are declared in each plugin's
+   `credentials:` (see `fallback:` in plugin.yaml) and surfaced by
+   `GET /extensions`.
+
+   Multi-tenant daemons can instead receive credentials **per request**:
+   `X-Router-Api-Token` / `X-Router-Zone-Id` / `X-Router-Account-Id` headers on
+   `POST /deploy|/remove|/plan` are applied to the environment for that one
+   operation only (whole group cleared first — a partial set never mixes with
+   ambient values — and prior env restored after). Vault-backed secret refs can
+   ride the same request via `X-Secret-Vault-Addr/-Token/-Namespace`. The
+   `@runfabric/daemon-client` helpers `routerHeaders()` and
+   `vaultSecretManagerHeaders()` build these from the shipped
+   `credentials.json` contract.
 2. Set change-reason and approvals when policy requires them:
    - `RUNFABRIC_DNS_SYNC_REASON`
    - stage approval envs (for rollout gates)

@@ -33,11 +33,7 @@ func (a *ExternalSecretManagerAdapter) ResolveSecret(ctx context.Context, ref st
 
 	raw, err := a.callSecretMethod("ResolveSecret", ref)
 	if err != nil {
-		// Compatibility fallback for plugins that expose GetSecret.
-		raw, err = a.callSecretMethod("GetSecret", ref)
-		if err != nil {
-			return "", err
-		}
+		return "", err
 	}
 
 	value, ok := parseSecretValue(raw)

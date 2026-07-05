@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 	sdkrouter "github.com/runfabric/runfabric/plugin-sdk/go/router"
 )
 
@@ -320,13 +321,10 @@ func toInt(v any) int {
 	}
 }
 
+// resolveToken resolves via the declared chain: router token env, then the
+// declarative fallback (NS1_API_KEY).
 func resolveToken() string {
-	for _, k := range []string{"RUNFABRIC_ROUTER_API_TOKEN", "NS1_API_KEY"} {
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-			return v
-		}
-	}
-	return ""
+	return sdkprovider.ResolveVar(CredentialVars, "RUNFABRIC_ROUTER_API_TOKEN")
 }
 
 func resolveBaseURL() string {

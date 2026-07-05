@@ -10,6 +10,12 @@ capabilities:
   - resolve-secret
   - scheme:azure-kv
   - scheme:azure-keyvault
+credentials:
+  - envKey: AZURE_KEY_VAULT_NAME
+    required: true
+    placeholder: "my-vault"
+# Addressing only — auth rides the ambient az/Azure identity
+# (X-Provider-Azure-* per daemon request).
 permissions:
   fs: false
   env: true

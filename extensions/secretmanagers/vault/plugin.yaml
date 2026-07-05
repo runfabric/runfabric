@@ -9,6 +9,16 @@ executable: ./bin/vault-secret-manager
 capabilities:
   - resolve-secret
   - scheme:vault
+credentials:
+  - envKey: VAULT_ADDR
+    header: X-Secret-Vault-Addr
+    placeholder: "https://vault.example.com"
+  - envKey: VAULT_TOKEN
+    header: X-Secret-Vault-Token
+    required: true
+    placeholder: "hvs.example-token"
+  - envKey: VAULT_NAMESPACE
+    header: X-Secret-Vault-Namespace
 permissions:
   fs: false
   env: true

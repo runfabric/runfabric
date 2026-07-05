@@ -197,3 +197,95 @@ test('network failure still reports the trace id it attempted', async () => {
   assert.equal(result.traceId, 'd'.repeat(32));
   assert.equal(result.requestId, 'req-9');
 });
+
+test('routerHeaders and vaultSecretManagerHeaders build the contract headers', () => {
+  const { routerHeaders, vaultSecretManagerHeaders, CREDENTIALS } = require('./index.js');
+
+  assert.deepEqual(routerHeaders({ apiToken: 'tok', zoneId: 'z1', accountId: 'a1' }), {
+    'X-Router-Api-Token': 'tok',
+    'X-Router-Zone-Id': 'z1',
+    'X-Router-Account-Id': 'a1',
+  });
+  assert.deepEqual(routerHeaders(undefined), {});
+  assert.deepEqual(routerHeaders({ zoneId: 'z1' }), { 'X-Router-Zone-Id': 'z1' });
+
+  assert.deepEqual(vaultSecretManagerHeaders({ token: 'hvs.1', addr: 'https://v:8200', namespace: 'ns' }), {
+    'X-Secret-Vault-Token': 'hvs.1',
+    'X-Secret-Vault-Addr': 'https://v:8200',
+    'X-Secret-Vault-Namespace': 'ns',
+  });
+  // Token is the anchor: no token, no headers (a bare addr is useless).
+  assert.deepEqual(vaultSecretManagerHeaders({ addr: 'https://v:8200' }), {});
+
+  // Helpers stay aligned with the shipped contract.
+  const routerContract = CREDENTIALS.router.map((c) => c.header);
+  assert.deepEqual(routerContract, ['X-Router-Api-Token', 'X-Router-Zone-Id', 'X-Router-Account-Id']);
+  const vaultContract = CREDENTIALS.secretManagers['vault-secret-manager'].map((c) => c.header);
+  assert.ok(vaultContract.includes('X-Secret-Vault-Token'));
+});
+
+test('scoped AWS identity helpers (state + secret manager) stay isolated from provider headers', () => {
+  const { stateAwsHeaders, awsSecretManagerHeaders, CREDENTIALS } = require('./index.js');
+
+  const state = stateAwsHeaders({ accessKeyId: 'AKIA_STATE', secretAccessKey: 's', sessionToken: 't', region: 'eu-central-1' });
+  assert.deepEqual(state, {
+    'X-State-Aws-Access-Key-Id': 'AKIA_STATE',
+    'X-State-Aws-Secret-Access-Key': 's',
+    'X-State-Aws-Session-Token': 't',
+    'X-State-Aws-Region': 'eu-central-1',
+  });
+  const sm = awsSecretManagerHeaders({ accessKeyId: 'AKIA_SM', secretAccessKey: 's2' });
+  assert.deepEqual(sm, {
+    'X-Secret-Aws-Access-Key-Id': 'AKIA_SM',
+    'X-Secret-Aws-Secret-Access-Key': 's2',
+  });
+  // Partial identities produce nothing.
+  assert.deepEqual(stateAwsHeaders({ accessKeyId: 'only' }), {});
+  assert.deepEqual(awsSecretManagerHeaders(undefined), {});
+
+  // The three AWS identities target disjoint header namespaces.
+  const provider = new Set(Object.keys(require('./index.js').awsProviderHeaders({ accessKeyId: 'a', secretAccessKey: 'b' })));
+  for (const k of [...Object.keys(state), ...Object.keys(sm)]) {
+    assert.ok(!provider.has(k), `header ${k} must not collide with provider headers`);
+  }
+
+  // Contract ships both scoped groups.
+  assert.ok(CREDENTIALS.stateAws.some((c) => c.header === 'X-State-Aws-Access-Key-Id'));
+  assert.ok(CREDENTIALS.secretManagers['aws-secret-manager'].some((c) => c.header === 'X-Secret-Aws-Access-Key-Id'));
+  // Router plugin declarations ship with DECLARATIVE same-cloud fallbacks
+  // (env-only; headers are the shared router group).
+  const cfToken = CREDENTIALS.routerPlugins.cloudflare.find((c) => c.envKey === 'RUNFABRIC_ROUTER_API_TOKEN');
+  assert.equal(cfToken.fallback, 'CLOUDFLARE_API_TOKEN');
+  const ns1Token = CREDENTIALS.routerPlugins.ns1.find((c) => c.envKey === 'RUNFABRIC_ROUTER_API_TOKEN');
+  assert.equal(ns1Token.fallback, 'NS1_API_KEY');
+  assert.equal(CREDENTIALS.routerPlugins.route53, undefined); // AWS default chain — declares none
+});
+
+test('fabricDeploy and routerSync hit the multi-cloud routes with provider/dryRun params', async () => {
+  const stub = await startStub({
+    '/fabric/deploy': { status: 200, body: { service: 's', endpoints: [{ provider: 'aws', url: 'https://a' }, { provider: 'gcp', url: 'https://g' }] } },
+    '/router/sync': { status: 200, body: { routing: { strategy: 'failover' }, result: { actions: [] } } },
+    '/deploy': { status: 200, body: { deploymentId: 'dpl-3' } },
+  });
+  try {
+    const client = new DaemonClient({ baseUrl: stub.baseUrl });
+
+    const fab = await client.fabricDeploy({ configPath: 't/p/runfabric.yml', stage: 'prod' });
+    assert.equal(fab.ok, true);
+    assert.equal(fab.data.endpoints.length, 2);
+
+    const sync = await client.routerSync({ stage: 'prod', dryRun: true });
+    assert.equal(sync.ok, true);
+
+    // Single-target multi-cloud selection rides the provider query param.
+    const dep = await client.deploy({ stage: 'prod', provider: 'gcp' });
+    assert.equal(dep.ok, true);
+
+    assert.equal(stub.seen[0].path, '/fabric/deploy');
+    assert.equal(stub.seen[1].path, '/router/sync');
+    assert.equal(stub.seen[1].query.dryRun, '1');
+    assert.equal(stub.seen[2].query.provider, 'gcp');
+  } finally {
+    await stub.close();
+  }
+});

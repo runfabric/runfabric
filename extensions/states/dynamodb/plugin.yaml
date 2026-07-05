@@ -9,6 +9,12 @@ executable: ./bin/dynamodb-state
 capabilities:
   - state:dynamodb
   - backend:dynamodb
+credentials:
+  - envKey: RUNFABRIC_DYNAMODB_TABLE
+    required: true
+# AWS identity: the default chain, or the shared scoped identity
+# RUNFABRIC_STATE_AWS_* (X-State-Aws-* per daemon request) declared at the
+# subsystem level (providerpolicy.StateAWSCredentialVars), not per plugin.
 permissions:
   fs: true
   env: true

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/runfabric/runfabric/platform/extensions/providerpolicy/catalog"
 )
 
 // hostableProviders are the built-ins that take per-request credentials via
@@ -145,6 +147,7 @@ func TestPluginYamlCredentialsMatchDeclarations(t *testing.T) {
 		Required    bool   `yaml:"required"`
 		Mirror      string `yaml:"mirror"`
 		Placeholder string `yaml:"placeholder"`
+		Fallback    string `yaml:"fallback"`
 	}
 	var manifest struct {
 		Credentials []yamlCred `yaml:"credentials"`
@@ -166,9 +169,146 @@ func TestPluginYamlCredentialsMatchDeclarations(t *testing.T) {
 		}
 		for i, c := range declared {
 			y := manifest.Credentials[i]
-			if y.EnvKey != c.EnvKey || y.Header != c.Header || y.Required != c.Required || y.Mirror != c.Mirror || y.Placeholder != c.Placeholder {
+			if y.EnvKey != c.EnvKey || y.Header != c.Header || y.Required != c.Required || y.Mirror != c.Mirror || y.Placeholder != c.Placeholder || y.Fallback != c.Fallback {
 				t.Errorf("%s: credential %d differs: plugin.yaml=%+v code=%+v", id, i, y, c)
 			}
+		}
+	}
+
+	// State backends and secret managers ship plugin.yaml too — pin them the
+	// same way so the external-plugin declaration cannot drift from the code.
+	readManifest := func(path string) []yamlCred {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		manifest.Credentials = nil
+		if err := yaml.Unmarshal(data, &manifest); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		return manifest.Credentials
+	}
+	assertMatch := func(id, path string, declared []catalog.CredentialVar) {
+		got := readManifest(path)
+		if len(got) != len(declared) {
+			t.Errorf("%s: plugin.yaml declares %d credentials, code declares %d", id, len(got), len(declared))
+			return
+		}
+		for i, c := range declared {
+			y := got[i]
+			if y.EnvKey != c.EnvKey || y.Header != c.Header || y.Required != c.Required || y.Mirror != c.Mirror || y.Placeholder != c.Placeholder || y.Fallback != c.Fallback {
+				t.Errorf("%s: credential %d differs: plugin.yaml=%+v code=%+v", id, i, y, c)
+			}
+		}
+	}
+	// States: discovered from the filesystem and matched by each
+	// plugin.yaml's own id (no hardcoded kind list) — kinds without
+	// declarations (local, sqlite) are automatically pinned to declare none.
+	stateDirs := filepath.Join("..", "..", "..", "extensions", "states")
+	stateEntries, err := os.ReadDir(stateDirs)
+	if err != nil {
+		t.Fatalf("read states dir: %v", err)
+	}
+	for _, e := range stateEntries {
+		if !e.IsDir() {
+			continue
+		}
+		path := filepath.Join(stateDirs, e.Name(), "plugin.yaml")
+		if _, statErr := os.Stat(path); statErr != nil {
+			continue // helper packages (awsauth, cmd) are not plugins
+		}
+		var idOnly struct {
+			ID string `yaml:"id"`
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read %s: %v", path, readErr)
+		}
+		if err := yaml.Unmarshal(data, &idOnly); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		assertMatch("state:"+idOnly.ID, path, StateBackendCredentials(idOnly.ID))
+	}
+	smDirs := map[string]string{
+		"aws-secret-manager":             "aws",
+		"vault-secret-manager":           "vault",
+		"gcp-secret-manager":             "gcp",
+		"azure-key-vault-secret-manager": "azure",
+	}
+	for id, creds := range SecretManagerCredentialVars() {
+		dir, ok := smDirs[id]
+		if !ok {
+			t.Errorf("SecretManagerCredentialVars declares %q but no plugin dir is mapped in this test", id)
+			continue
+		}
+		assertMatch(id,
+			filepath.Join("..", "..", "..", "extensions", "secretmanagers", dir, "plugin.yaml"),
+			creds)
+	}
+	// Routers: discovered from the filesystem and matched by each
+	// plugin.yaml's OWN id — no hardcoded ID or directory lists (manifest IDs
+	// and dir names may differ, e.g. azure-traffic-manager /
+	// azuretrafficmanager). Built-ins will move external over time and the
+	// engine (and its tests) must stay dynamic. Plugins without declarations
+	// (AWS-chain routers) are pinned to declare none.
+	routerVars := RouterPluginCredentialVars()
+	routersDir := filepath.Join("..", "..", "..", "extensions", "routers")
+	entries, err := os.ReadDir(routersDir)
+	if err != nil {
+		t.Fatalf("read routers dir: %v", err)
+	}
+	seenRouterIDs := map[string]bool{}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		path := filepath.Join(routersDir, e.Name(), "plugin.yaml")
+		if _, statErr := os.Stat(path); statErr != nil {
+			continue // not a plugin dir (e.g. shared helpers)
+		}
+		var idOnly struct {
+			ID string `yaml:"id"`
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read %s: %v", path, readErr)
+		}
+		if err := yaml.Unmarshal(data, &idOnly); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		seenRouterIDs[idOnly.ID] = true
+		assertMatch("router:"+idOnly.ID, path, routerVars[idOnly.ID])
+	}
+	for id := range routerVars {
+		if !seenRouterIDs[id] {
+			t.Errorf("RouterPluginCredentialVars declares %q but no router plugin.yaml carries that id", id)
+		}
+	}
+	for _, meta := range BuiltinRouterManifests() {
+		if !seenRouterIDs[meta.ID] {
+			t.Errorf("builtin router %q has no plugin.yaml on disk", meta.ID)
+		}
+	}
+	// Runtimes and simulators take no credentials — pin every plugin.yaml
+	// found under their kind directories (no hardcoded plugin lists).
+	runtimeDirs := filepath.Join("..", "..", "..", "extensions", "runtimes")
+	if entries, err := os.ReadDir(runtimeDirs); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			path := filepath.Join(runtimeDirs, e.Name(), "plugin.yaml")
+			if _, statErr := os.Stat(path); statErr != nil {
+				continue
+			}
+			if got := readManifest(path); len(got) != 0 {
+				t.Errorf("%s: runtimes must declare no credentials, got %v", path, got)
+			}
+		}
+	}
+	if simPath := filepath.Join("..", "..", "..", "extensions", "simulators", "plugin.yaml"); true {
+		if got := readManifest(simPath); len(got) != 0 {
+			t.Errorf("%s: simulators must declare no credentials, got %v", simPath, got)
 		}
 	}
 }

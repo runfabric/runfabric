@@ -20,4 +20,29 @@ type CredentialVar struct {
 	Mirror string
 	// Placeholder is an example value for generated .env scaffolding.
 	Placeholder string
+	// Fallback is an env key consulted when EnvKey is unset — typically the
+	// same-cloud provider credential, so one set of provider creds serves
+	// dependent extensions (e.g. the cloudflare router's
+	// RUNFABRIC_ROUTER_API_TOKEN falls back to CLOUDFLARE_API_TOKEN).
+	// Resolution goes through ResolveVar; explicit values always win.
+	Fallback string
+}
+
+// ResolveVar resolves the credential named envKey from vars: the env var
+// itself first, then the declared Fallback. Returns "" when neither is set or
+// envKey is not declared.
+func ResolveVar(vars []CredentialVar, envKey string) string {
+	for _, v := range vars {
+		if v.EnvKey != envKey {
+			continue
+		}
+		if value := Env(v.EnvKey); value != "" {
+			return value
+		}
+		if v.Fallback != "" {
+			return Env(v.Fallback)
+		}
+		return ""
+	}
+	return ""
 }

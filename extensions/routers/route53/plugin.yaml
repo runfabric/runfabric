@@ -8,6 +8,8 @@ pluginVersion: 1
 executable: ./bin/route53-router
 capabilities:
   - sync
+# No credentials block: route53 authenticates via the AWS default credential
+# chain (env, profile, IMDS, IRSA) — no runfabric-specific token vars.
 permissions:
   fs: false
   env: true

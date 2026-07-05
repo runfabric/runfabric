@@ -8,6 +8,18 @@ pluginVersion: 1
 executable: ./bin/cloudflare-router
 capabilities:
   - sync
+credentials:
+  - envKey: RUNFABRIC_ROUTER_API_TOKEN
+    fallback: CLOUDFLARE_API_TOKEN
+  - envKey: RUNFABRIC_ROUTER_API_TOKEN_FILE
+    placeholder: "/run/secrets/cf-token"
+  - envKey: RUNFABRIC_ROUTER_ZONE_ID
+    fallback: CLOUDFLARE_ZONE_ID
+  - envKey: RUNFABRIC_ROUTER_ACCOUNT_ID
+    fallback: CLOUDFLARE_ACCOUNT_ID
+# fallback = same-cloud provider key: one set of cloudflare-workers provider
+# credentials serves deploy AND DNS sync unless router-specific values are
+# set. Per-request headers ride the shared router group (X-Router-*).
 permissions:
   fs: true
   env: true

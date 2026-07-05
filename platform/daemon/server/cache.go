@@ -152,16 +152,51 @@ func apiCacheTTL(endpoint string) time.Duration {
 	}
 }
 
+// credentialHeaderPrefixes mark per-request credential headers. A request
+// carrying any of them is tenant-specific: its response may embed data only
+// that caller's credentials could produce, so it must bypass the shared cache
+// entirely (no read, no write).
+var credentialHeaderPrefixes = []string{"X-Provider-", "X-State-", "X-Router-", "X-Secret-"}
+
+func hasCredentialHeaders(h http.Header) bool {
+	for name := range h {
+		for _, prefix := range credentialHeaderPrefixes {
+			if strings.HasPrefix(http.CanonicalHeaderKey(name), prefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // apiCacheMiddleware wraps the Config API handler with Redis caching for validate, plan, releases. On deploy/remove success, invalidates cache for that stage.
 //
 // /resolve is deliberately NOT cached: its response contains resolved secret
 // values, which must never be persisted at rest in a shared cache.
+// Credentialed requests (X-Provider-*/X-State-*/X-Router-*/X-Secret-*) bypass
+// the cache both ways — see hasCredentialHeaders.
 func apiCacheMiddleware(cache *apiCache, defaultStage string, next http.Handler) http.Handler {
 	cacheable := map[string]bool{"validate": true, "plan": true, "releases": true}
-	mutating := map[string]bool{"deploy": true, "remove": true}
+	mutating := map[string]bool{"deploy": true, "remove": true, "fabric/deploy": true, "router/sync": true}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			next.ServeHTTP(w, r)
+			return
+		}
+		if hasCredentialHeaders(r.Header) {
+			// Tenant-specific request: never serve or store shared cache
+			// entries. Deploy/remove invalidation still applies below via the
+			// non-credentialed path only; invalidate here explicitly so a
+			// credentialed deploy also clears stale cached plans for its stage.
+			rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK, body: &bytes.Buffer{}}
+			next.ServeHTTP(rec, r)
+			if cache != nil && mutating[strings.TrimPrefix(r.URL.Path, "/")] && rec.status >= 200 && rec.status < 300 {
+				stage := r.URL.Query().Get("stage")
+				if stage == "" {
+					stage = defaultStage
+				}
+				cache.invalidateStage(stage)
+			}
 			return
 		}
 		path := strings.TrimPrefix(r.URL.Path, "/")

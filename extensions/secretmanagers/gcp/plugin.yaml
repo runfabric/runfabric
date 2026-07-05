@@ -9,6 +9,12 @@ executable: ./bin/gcp-secret-manager
 capabilities:
   - resolve-secret
   - scheme:gcp-sm
+credentials:
+  - envKey: GCP_PROJECT_ID
+    placeholder: "my-project"
+  - envKey: GOOGLE_CLOUD_PROJECT
+# Addressing only — auth rides the ambient gcloud/ADC identity
+# (X-Provider-Gcp-* per daemon request).
 permissions:
   fs: false
   env: true

@@ -18,6 +18,9 @@ type CredentialVar struct {
 	Mirror string
 	// Placeholder is an example value for generated .env scaffolding.
 	Placeholder string
+	// Fallback is an env key consulted when EnvKey is unset — typically the
+	// same-cloud provider credential (see plugin-sdk provider.ResolveVar).
+	Fallback string
 }
 
 // ProviderDescriptor defines how a provider should be surfaced by the extension system.

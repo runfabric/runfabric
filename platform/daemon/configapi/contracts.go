@@ -26,3 +26,13 @@ type RemoveResponse struct {
 type ReleasesResponse struct {
 	Payload json.RawMessage
 }
+
+// FabricDeployResponse is the daemon-owned DTO for multi-cloud fabric deploys.
+type FabricDeployResponse struct {
+	Payload json.RawMessage
+}
+
+// RouterSyncResponse is the daemon-owned DTO for fabric router-sync responses.
+type RouterSyncResponse struct {
+	Payload json.RawMessage
+}

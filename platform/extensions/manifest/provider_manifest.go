@@ -62,6 +62,9 @@ type CredentialSpec struct {
 	Required    bool   `json:"required,omitempty"`
 	Mirror      string `json:"mirror,omitempty"`
 	Placeholder string `json:"placeholder,omitempty"`
+	// Fallback is an env key consulted when EnvKey is unset (typically the
+	// same-cloud provider credential).
+	Fallback string `json:"fallback,omitempty"`
 }
 
 // CredentialSpecs converts providerpolicy catalog credential declarations
@@ -78,6 +81,7 @@ func CredentialSpecs(creds []catalog.CredentialVar) []CredentialSpec {
 			Required:    c.Required,
 			Mirror:      c.Mirror,
 			Placeholder: c.Placeholder,
+			Fallback:    c.Fallback,
 		})
 	}
 	return out

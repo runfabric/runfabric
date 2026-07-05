@@ -136,12 +136,18 @@ func (s *Server) Handler(extraRoutes func(mux *http.ServeMux, authorize func(htt
 	})
 	// Prometheus scrape endpoint (RED metrics recorded by the middleware below).
 	mux.Handle("GET /metrics", metrics.Handler())
+	// Extension catalog: every plugin kind, its runfabric.yml selector key, and
+	// the plugins available to this daemon (built-in + installed external).
+	// Authorized: it reveals the installed-plugin inventory.
+	mux.HandleFunc("GET /extensions", configSrv.Authorize(handleExtensions))
 	mux.HandleFunc("POST /validate", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /resolve", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /plan", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /deploy", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /remove", apiHandler.ServeHTTP)
 	mux.HandleFunc("POST /releases", apiHandler.ServeHTTP)
+	mux.HandleFunc("POST /fabric/deploy", apiHandler.ServeHTTP)
+	mux.HandleFunc("POST /router/sync", apiHandler.ServeHTTP)
 
 	if extraRoutes != nil {
 		extraRoutes(mux, configSrv.Authorize)

@@ -9,6 +9,18 @@ executable: ./bin/aws-secret-manager
 capabilities:
   - resolve-secret
   - scheme:aws-sm
+credentials:
+  - envKey: RUNFABRIC_SM_AWS_ACCESS_KEY_ID
+    header: X-Secret-Aws-Access-Key-Id
+    placeholder: "AKIA..."
+  - envKey: RUNFABRIC_SM_AWS_SECRET_ACCESS_KEY
+    header: X-Secret-Aws-Secret-Access-Key
+    placeholder: "secret"
+  - envKey: RUNFABRIC_SM_AWS_SESSION_TOKEN
+    header: X-Secret-Aws-Session-Token
+  - envKey: RUNFABRIC_SM_AWS_REGION
+    header: X-Secret-Aws-Region
+    placeholder: "us-east-1"
 permissions:
   fs: false
   env: true

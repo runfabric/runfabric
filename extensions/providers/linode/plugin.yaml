@@ -1,4 +1,4 @@
-apiVersion: runfabric/v1
+apiVersion: runfabric.io/plugin/v1
 kind: provider
 id: linode
 name: linode
@@ -19,6 +19,9 @@ supportsRuntime:
 supportsTriggers:
   - http
 supportsResources: []
+credentials:
+  - envKey: LINODE_TOKEN
+    required: true
 permissions:
   fs: true
   env: true

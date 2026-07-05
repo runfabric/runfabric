@@ -43,6 +43,11 @@ func Bootstrap(configPath, stage, providerOverride string) (*AppContext, error) 
 	if err := loadDotEnvForConfig(configPath); err != nil {
 		return nil, appErrs.Wrap(appErrs.CodeConfigLoad, "failed to load .env", err)
 	}
+	// Uniform scoped-credential convention: RUNFABRIC_PROVIDER_/STATE_/SM_/
+	// ROUTER_-prefixed vars resolve into their native names when the native
+	// var is unset (see scoped_env.go). Runs after .env so project-local
+	// scoped vars are honored too.
+	promoteScopedCredentialEnv()
 
 	cfg, err := config.Load(configPath)
 	if err != nil {

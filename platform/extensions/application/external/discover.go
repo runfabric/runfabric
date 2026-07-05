@@ -56,6 +56,7 @@ type pluginYAML struct {
 		Required    bool   `yaml:"required"`
 		Mirror      string `yaml:"mirror"`
 		Placeholder string `yaml:"placeholder"`
+		Fallback    string `yaml:"fallback"`
 	} `yaml:"credentials"`
 }
 
@@ -361,6 +362,7 @@ func discoverKindDir(kindRoot string, kind manifests.PluginKind, opts DiscoverOp
 				Required:    c.Required,
 				Mirror:      c.Mirror,
 				Placeholder: c.Placeholder,
+				Fallback:    c.Fallback,
 			})
 		}
 		out = append(out, &manifests.PluginManifest{
@@ -491,6 +493,26 @@ func readPluginYAML(dir string) (*pluginYAML, error) {
 func validatePluginMetadata(m *pluginYAML) error {
 	if m == nil {
 		return fmt.Errorf("plugin metadata is required")
+	}
+	// Credential declarations are validated for EVERY kind at load time —
+	// malformed env keys/headers, duplicates, or self-referential mirrors
+	// reject the plugin here (it lands in the Invalid report) instead of
+	// surfacing later as a broken credential group or manifest.
+	if len(m.Credentials) > 0 {
+		specs := make([]manifests.CredentialSpec, 0, len(m.Credentials))
+		for _, c := range m.Credentials {
+			specs = append(specs, manifests.CredentialSpec{
+				EnvKey:      c.EnvKey,
+				Header:      c.Header,
+				Required:    c.Required,
+				Mirror:      c.Mirror,
+				Placeholder: c.Placeholder,
+				Fallback:    c.Fallback,
+			})
+		}
+		if err := manifests.ValidateCredentialSpecs(specs); err != nil {
+			return fmt.Errorf("plugin.yaml credentials: %w", err)
+		}
 	}
 	if manifests.NormalizePluginKind(m.Kind) != manifests.KindProvider {
 		return nil

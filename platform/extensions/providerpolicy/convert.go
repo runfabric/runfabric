@@ -698,6 +698,7 @@ func toCredentialVars(items any) []catalog.CredentialVar {
 			Required:    readBoolField(item, "Required"),
 			Mirror:      readStringField(item, "Mirror"),
 			Placeholder: readStringField(item, "Placeholder"),
+			Fallback:    readStringField(item, "Fallback"),
 		})
 	}
 	return out

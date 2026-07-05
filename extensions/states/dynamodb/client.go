@@ -3,8 +3,9 @@ package dynamodb
 import (
 	"context"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	dynamodbv2 "github.com/aws/aws-sdk-go-v2/service/dynamodb"
+
+	"github.com/runfabric/runfabric/extensions/states/awsauth"
 )
 
 type Client struct {
@@ -13,7 +14,9 @@ type Client struct {
 }
 
 func New(ctx context.Context, region, tableName string) (*Client, error) {
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	// Scoped RUNFABRIC_STATE_AWS_* identity wins over the default chain, so
+	// state can live in a different account than the deploy target.
+	cfg, err := awsauth.LoadConfig(ctx, region)
 	if err != nil {
 		return nil, err
 	}

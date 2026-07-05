@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
+	awscreds "github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	sdkserver "github.com/runfabric/runfabric/plugin-sdk/go/server"
 )
@@ -21,6 +22,16 @@ const (
 	defaultAPICap     = "ResolveSecret"
 	envAWSRegion      = "AWS_REGION"
 	envAWSDefaultZone = "AWS_DEFAULT_REGION"
+
+	// Scoped identity for secret reads: when set, these win over the AWS
+	// default chain, so secrets can live in a different AWS account than the
+	// deploy target (AWS_* / X-Provider-Aws-*) and the state store
+	// (RUNFABRIC_STATE_AWS_*). The daemon forwards them per request as
+	// X-Secret-Aws-* headers.
+	envSMAccessKeyID     = "RUNFABRIC_SM_AWS_ACCESS_KEY_ID"
+	envSMSecretAccessKey = "RUNFABRIC_SM_AWS_SECRET_ACCESS_KEY"
+	envSMSessionToken    = "RUNFABRIC_SM_AWS_SESSION_TOKEN"
+	envSMRegion          = "RUNFABRIC_SM_AWS_REGION"
 )
 
 type secretFetcher func(ctx context.Context, region, secretID, versionStage, versionID string) (string, error)
@@ -53,7 +64,6 @@ func main() {
 		},
 		Methods: map[string]sdkserver.MethodFunc{
 			"ResolveSecret": p.resolveSecretMethod,
-			"GetSecret":     p.resolveSecretMethod,
 		},
 	})
 	if err := s.Serve(context.Background(), os.Stdin, os.Stdout); err != nil {
@@ -84,6 +94,11 @@ func (p *plugin) ResolveSecret(ctx context.Context, ref string) (string, error) 
 		return "", err
 	}
 	region := strings.TrimSpace(parsed.Region)
+	if region == "" {
+		// Scoped region first: secrets may live in a different account/region
+		// than the deploy target's AWS_REGION.
+		region = strings.TrimSpace(p.getenv(envSMRegion))
+	}
 	if region == "" {
 		region = strings.TrimSpace(p.getenv(envAWSRegion))
 	}
@@ -186,8 +201,22 @@ func selectSecretValue(raw, jsonKey string) (string, error) {
 	return s, nil
 }
 
+// awsLoadOptions builds the SDK load options: the scoped RUNFABRIC_SM_AWS_*
+// static identity when set, the default chain otherwise. getenv is injected
+// for tests.
+func awsLoadOptions(region string, getenv func(string) string) []func(*awscfg.LoadOptions) error {
+	opts := []func(*awscfg.LoadOptions) error{awscfg.WithRegion(region)}
+	access := strings.TrimSpace(getenv(envSMAccessKeyID))
+	secret := strings.TrimSpace(getenv(envSMSecretAccessKey))
+	if access != "" && secret != "" {
+		opts = append(opts, awscfg.WithCredentialsProvider(
+			awscreds.NewStaticCredentialsProvider(access, secret, strings.TrimSpace(getenv(envSMSessionToken)))))
+	}
+	return opts
+}
+
 func fetchAWSSecretValue(ctx context.Context, region, secretID, versionStage, versionID string) (string, error) {
-	cfg, err := awscfg.LoadDefaultConfig(ctx, awscfg.WithRegion(region))
+	cfg, err := awscfg.LoadDefaultConfig(ctx, awsLoadOptions(region, os.Getenv)...)
 	if err != nil {
 		return "", fmt.Errorf("load aws config: %w", err)
 	}

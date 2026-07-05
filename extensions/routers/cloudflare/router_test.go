@@ -14,12 +14,19 @@ func TestResolveCloudflareAPIToken_UsesRouterEnv(t *testing.T) {
 	}
 }
 
-func TestResolveCloudflareAPIToken_IgnoresCloudflareEnvFallback(t *testing.T) {
+func TestResolveCloudflareAPIToken_TokenFileBeatsProviderFallback(t *testing.T) {
+	// Behavior change (declarative fallback): CLOUDFLARE_API_TOKEN is now the
+	// declared last-resort fallback — but every router-specific source,
+	// including the token file, still wins over it.
 	t.Setenv("RUNFABRIC_ROUTER_API_TOKEN", "")
-	t.Setenv("CLOUDFLARE_API_TOKEN", "cloudflare-token")
-	got := resolveCloudflareAPIToken()
-	if got != "" {
-		t.Fatalf("expected CLOUDFLARE_API_TOKEN fallback to be ignored, got %q", got)
+	path := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(path, []byte("file-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RUNFABRIC_ROUTER_API_TOKEN_FILE", path)
+	t.Setenv("CLOUDFLARE_API_TOKEN", "provider-token")
+	if got := resolveCloudflareAPIToken(); got != "file-token" {
+		t.Fatalf("expected token file to beat the provider fallback, got %q", got)
 	}
 }
 

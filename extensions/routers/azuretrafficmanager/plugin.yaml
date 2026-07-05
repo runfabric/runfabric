@@ -8,6 +8,14 @@ pluginVersion: 1
 executable: ./bin/azure-traffic-manager-router
 capabilities:
   - sync
+credentials:
+  - envKey: RUNFABRIC_ROUTER_API_TOKEN
+    fallback: AZURE_ACCESS_TOKEN
+  - envKey: AZURE_TRAFFIC_MANAGER_PROFILE_ID
+  - envKey: AZURE_API_BASE_URL
+    placeholder: "https://management.azure.com"
+# fallback = the azure provider key: one Azure credential serves deploy and
+# traffic-manager sync. Per-request headers ride the shared router group.
 permissions:
   fs: false
   env: true

@@ -11,8 +11,6 @@ type Config struct {
 	// ProviderOverrides: multi-cloud. Key = logical name for --provider (e.g. aws, gcp). When set and CLI passes --provider X, Provider is replaced by ProviderOverrides[X].
 	ProviderOverrides map[string]ProviderConfig `yaml:"providerOverrides,omitempty"`
 
-	// State provides detail blocks for legacy/state-engine paths.
-	State      *StateConfig      `yaml:"state,omitempty"`
 	Deploy     *DeployConfig     `yaml:"deploy,omitempty"`
 	Extensions map[string]any    `yaml:"extensions,omitempty"`
 	Hooks      []string          `yaml:"hooks,omitempty"`
@@ -116,40 +114,6 @@ type TriggerRef struct {
 type TriggerHTTP struct {
 	Method string `yaml:"method"`
 	Path   string `yaml:"path"`
-}
-
-// StateConfig captures backend detail blocks for legacy/state-engine paths.
-type StateConfig struct {
-	Backend   string           `yaml:"backend,omitempty"`
-	KeyPrefix string           `yaml:"keyPrefix,omitempty"`
-	Lock      *StateLockConfig `yaml:"lock,omitempty"`
-	Local     *StateLocal      `yaml:"local,omitempty"`
-	Postgres  *StatePostgres   `yaml:"postgres,omitempty"`
-	S3        *StateS3         `yaml:"s3,omitempty"`
-}
-
-type StateLockConfig struct {
-	Enabled           bool `yaml:"enabled,omitempty"`
-	TimeoutSeconds    int  `yaml:"timeoutSeconds,omitempty"`
-	HeartbeatSeconds  int  `yaml:"heartbeatSeconds,omitempty"`
-	StaleAfterSeconds int  `yaml:"staleAfterSeconds,omitempty"`
-}
-
-type StateLocal struct {
-	Dir string `yaml:"dir,omitempty"`
-}
-
-type StatePostgres struct {
-	ConnectionStringEnv string `yaml:"connectionStringEnv,omitempty"`
-	Schema              string `yaml:"schema,omitempty"`
-	Table               string `yaml:"table,omitempty"`
-}
-
-type StateS3 struct {
-	Bucket      string `yaml:"bucket,omitempty"`
-	Region      string `yaml:"region,omitempty"`
-	KeyPrefix   string `yaml:"keyPrefix,omitempty"`
-	UseLockfile bool   `yaml:"useLockfile,omitempty"`
 }
 
 // DeployConfig holds deploy policy (e.g. rollbackOnFailure), optional health check, scaling defaults, and canary/blue-green strategy.

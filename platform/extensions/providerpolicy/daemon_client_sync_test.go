@@ -22,6 +22,7 @@ type credentialJSON struct {
 	Required    bool   `json:"required,omitempty"`
 	Mirror      string `json:"mirror,omitempty"`
 	Placeholder string `json:"placeholder,omitempty"`
+	Fallback    string `json:"fallback,omitempty"`
 }
 
 func credentialContract() ([]byte, error) {
@@ -30,7 +31,7 @@ func credentialContract() ([]byte, error) {
 		for _, c := range creds {
 			out = append(out, credentialJSON{
 				EnvKey: c.EnvKey, Header: c.Header, Required: c.Required,
-				Mirror: c.Mirror, Placeholder: c.Placeholder,
+				Mirror: c.Mirror, Placeholder: c.Placeholder, Fallback: c.Fallback,
 			})
 		}
 		return out
@@ -48,7 +49,22 @@ func credentialContract() ([]byte, error) {
 		state[kind] = toJSON(creds)
 	}
 	sort.Strings(kinds)
-	data, err := json.MarshalIndent(map[string]any{"providers": providers, "state": state}, "", "  ")
+	secretManagers := map[string][]credentialJSON{}
+	for id, creds := range SecretManagerCredentialVars() {
+		secretManagers[id] = toJSON(creds)
+	}
+	routerPlugins := map[string][]credentialJSON{}
+	for id, creds := range RouterPluginCredentialVars() {
+		routerPlugins[id] = toJSON(creds)
+	}
+	data, err := json.MarshalIndent(map[string]any{
+		"providers":      providers,
+		"state":          state,
+		"stateAws":       toJSON(StateAWSCredentialVars()),
+		"router":         toJSON(RouterCredentialVars()),
+		"routerPlugins":  routerPlugins,
+		"secretManagers": secretManagers,
+	}, "", "  ")
 	if err != nil {
 		return nil, err
 	}
