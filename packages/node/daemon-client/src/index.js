@@ -40,6 +40,7 @@ const DEFAULT_TIMEOUTS_MS = {
   'router/shift': 120_000,
   'router/restore': 120_000,
   invoke: 120_000,
+  'invoke-local': 120_000,
   recover: 300_000,
   'state/migrate': 300_000,
   'state/restore': 120_000,
@@ -197,6 +198,39 @@ class DaemonClient {
   }
 
   /**
+   * The engine's plugin catalog (GET /extensions): every plugin kind, the
+   * runfabric.yml key that selects it, and the available plugins with their
+   * runtimes, triggers, credential surface, and `runfabric init` scaffold. Lets a
+   * platform drive a metadata-driven New Project flow without hardcoding provider
+   * knowledge. data is { kinds: [...] }.
+   */
+  extensions() {
+    return this.#get('extensions');
+  }
+
+  /**
+   * Generate a starter project (runfabric.yml + handler + .env.example + …) from
+   * provider/state metadata, no workspace required (POST /scaffold). data is
+   * { ok, files: { path: content }, entry, runtime }.
+   */
+  scaffold(opts = {}) {
+    return this.#call('scaffold', {
+      params: {
+        provider: opts.provider,
+        template: opts.template,
+        lang: opts.lang,
+        stateBackend: opts.stateBackend,
+        service: opts.service,
+        secretManager: opts.secretManager,
+        pm: opts.pm,
+        withCI: opts.withCI,
+        // withBuild defaults to true on the daemon; only send when disabling.
+        withBuild: opts.withBuild === false ? 'false' : undefined,
+      },
+    });
+  }
+
+  /**
    * Multi-cloud deploy: deploys to EVERY fabric.targets provider and returns
    * the fabric state ({service, stage, endpoints:[{provider,url},...]}).
    * Forward one X-Provider-* group per target cloud in providerHeaders.
@@ -234,6 +268,27 @@ class DaemonClient {
       ...request,
       params: { function: request.function, ...(request.params || {}) },
       body: request.payload,
+    });
+  }
+
+  /**
+   * Run one function locally through the built-in simulator WITHOUT deploying
+   * (POST /invoke-local). The project is shipped inline — {runfabricYaml,
+   * handlerCode} — with one HTTP-shaped {request:{method,path,query,headers,body}}.
+   * No workspace on disk: the daemon materializes a throwaway one and cleans up.
+   * data is { ok, function, runtime, simulated, statusCode, headers, body }.
+   * Real execution is Node-only (single-file handlers, no third-party deps);
+   * other runtimes echo the request metadata (simulated=false).
+   */
+  invokeLocal(opts = {}) {
+    return this.#call('invoke-local', {
+      body: {
+        runfabricYaml: opts.runfabricYaml,
+        handlerCode: opts.handlerCode,
+        function: opts.function,
+        stage: opts.stage,
+        request: opts.request,
+      },
     });
   }
 
@@ -359,6 +414,31 @@ class DaemonClient {
       ...request,
       params: { limit: request.limit, ...(request.params || {}) },
     });
+  }
+
+  async #get(op) {
+    if (!this.available()) {
+      return { ok: false, error: 'daemon base URL is not set' };
+    }
+    const headers = {};
+    if (this.apiKey) headers['X-API-Key'] = this.apiKey;
+    const timeoutMs = this.timeoutsMs[op] || 60_000;
+    try {
+      const res = await this.fetchImpl(`${this.baseUrl}/${op}`, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const error =
+          (data && typeof data.error === 'string' && data.error) || res.statusText || `HTTP ${res.status}`;
+        return { ok: false, status: res.status, error };
+      }
+      return { ok: true, status: res.status, data };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   async #call(op, request = {}) {

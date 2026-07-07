@@ -19,6 +19,9 @@ credentials:
     required: true
   - envKey: AZURE_RESOURCE_GROUP
     header: X-Provider-Azure-Resource-Group
+# scaffold shapes `runfabric init` output for this provider (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Provider: azure-functions — set AZURE_*; supports http, cron, queue, storage"
 permissions:
   fs: true
   env: true

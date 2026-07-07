@@ -17,6 +17,13 @@ credentials:
     required: true
   - envKey: RUNFABRIC_GCS_PREFIX
     placeholder: "runfabric/dev"
+# scaffold shapes the `runfabric init` backend: block for this state backend.
+scaffold:
+  config:
+    - key: gcsBucket
+      value: "${env:RUNFABRIC_GCS_BUCKET}"
+    - key: gcsPrefix
+      value: "runfabric/dev"
 permissions:
   fs: true
   env: true

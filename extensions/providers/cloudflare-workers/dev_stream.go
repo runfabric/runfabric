@@ -83,7 +83,7 @@ func RedirectToTunnel(ctx context.Context, cfg sdkprovider.Config, stage, tunnel
 	}
 
 	var routesResp cfRoutesResponse
-	routesURL := cfAPI + "/zones/" + zoneID + "/workers/routes"
+	routesURL := cloudflareAPIBase() + "/zones/" + zoneID + "/workers/routes"
 	if err := sdkprovider.APIGet(ctx, routesURL, "CLOUDFLARE_API_TOKEN", &routesResp); err != nil {
 		state.EffectiveMode = "lifecycle-only"
 		state.StatusMessage = fmt.Sprintf("provider-side mutation skipped: route lookup failed: %v", err)
@@ -97,7 +97,7 @@ func RedirectToTunnel(ctx context.Context, cfg sdkprovider.Config, stage, tunnel
 	}
 
 	proxyCode := buildTunnelProxyScript(tunnelURL)
-	putURL := cfAPI + "/accounts/" + accountID + "/workers/scripts/" + proxyWorker
+	putURL := cloudflareAPIBase() + "/accounts/" + accountID + "/workers/scripts/" + proxyWorker
 	if _, err := sdkprovider.APIPut(ctx, putURL, "CLOUDFLARE_API_TOKEN", []byte(proxyCode), "application/javascript"); err != nil {
 		state.EffectiveMode = "lifecycle-only"
 		state.StatusMessage = fmt.Sprintf("provider-side mutation skipped: could not create proxy worker: %v", err)
@@ -113,7 +113,7 @@ func RedirectToTunnel(ctx context.Context, cfg sdkprovider.Config, stage, tunnel
 			state.StatusMessage = "provider-side mutation skipped: no matching Cloudflare routes were found and no fallback pattern is configured (set stages.<stage>.http.domain.name or CLOUDFLARE_DEV_ROUTE_PATTERN)"
 			return state, nil
 		}
-		createURL := cfAPI + "/zones/" + zoneID + "/workers/routes"
+		createURL := cloudflareAPIBase() + "/zones/" + zoneID + "/workers/routes"
 		payload := map[string]string{"pattern": pattern, "script": proxyWorker}
 		var created cfRouteResponse
 		if err := sdkprovider.APIPost(ctx, createURL, "CLOUDFLARE_API_TOKEN", payload, &created); err != nil {
@@ -136,7 +136,7 @@ func RedirectToTunnel(ctx context.Context, cfg sdkprovider.Config, stage, tunnel
 	}
 
 	for _, route := range state.RouteRestore {
-		updateURL := cfAPI + "/zones/" + zoneID + "/workers/routes/" + route.ID
+		updateURL := cloudflareAPIBase() + "/zones/" + zoneID + "/workers/routes/" + route.ID
 		payload := map[string]string{"pattern": route.Pattern, "script": proxyWorker}
 		body, _ := json.Marshal(payload)
 		if _, err := sdkprovider.APIPut(ctx, updateURL, "CLOUDFLARE_API_TOKEN", body, "application/json"); err != nil {
@@ -184,7 +184,7 @@ func (s *DevStreamState) Restore(ctx context.Context, accountID string) error {
 		if script == "" {
 			script = s.WorkerName
 		}
-		updateURL := cfAPI + "/zones/" + s.ZoneID + "/workers/routes/" + route.ID
+		updateURL := cloudflareAPIBase() + "/zones/" + s.ZoneID + "/workers/routes/" + route.ID
 		payload := map[string]string{"pattern": route.Pattern, "script": script}
 		body, _ := json.Marshal(payload)
 		if _, err := sdkprovider.APIPut(ctx, updateURL, "CLOUDFLARE_API_TOKEN", body, "application/json"); err != nil {
@@ -196,13 +196,13 @@ func (s *DevStreamState) Restore(ctx context.Context, accountID string) error {
 		if route.ID == "" || route.ID == "created-without-id" {
 			continue
 		}
-		deleteRouteURL := cfAPI + "/zones/" + s.ZoneID + "/workers/routes/" + route.ID
+		deleteRouteURL := cloudflareAPIBase() + "/zones/" + s.ZoneID + "/workers/routes/" + route.ID
 		if err := sdkprovider.DoDelete(ctx, deleteRouteURL, "CLOUDFLARE_API_TOKEN"); err != nil {
 			errs = append(errs, fmt.Errorf("delete created route %s (%s): %w", route.ID, route.Pattern, err))
 		}
 	}
 
-	deleteURL := cfAPI + "/accounts/" + accountID + "/workers/scripts/" + s.ProxyWorker
+	deleteURL := cloudflareAPIBase() + "/accounts/" + accountID + "/workers/scripts/" + s.ProxyWorker
 	if err := sdkprovider.DoDelete(ctx, deleteURL, "CLOUDFLARE_API_TOKEN"); err != nil {
 		errs = append(errs, fmt.Errorf("delete proxy worker %s: %w", s.ProxyWorker, err))
 	}

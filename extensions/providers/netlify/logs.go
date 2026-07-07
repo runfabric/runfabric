@@ -22,7 +22,7 @@ func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function 
 	if siteID == "" {
 		return &sdkprovider.LogsResult{Provider: "netlify", Function: function, Lines: []string{"No site_id in rv."}}, nil
 	}
-	url := netlifyAPI + "/sites/" + siteID + "/log"
+	url := netlifyAPIBase() + "/sites/" + siteID + "/log"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("Authorization", "Bearer "+sdkprovider.Env("NETLIFY_AUTH_TOKEN"))
 	resp, err := sdkprovider.DefaultClient.Do(req)

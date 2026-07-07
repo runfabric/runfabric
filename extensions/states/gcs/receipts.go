@@ -35,7 +35,7 @@ func (b *ReceiptBackend) Load(stage string) (*statetypes.Receipt, error) {
 	if b.Client == nil {
 		return nil, fmt.Errorf("gcs receipt backend: client not initialized")
 	}
-	u := fmt.Sprintf("%s/b/%s/o/%s?alt=media", b.Client.BaseURL, url.PathEscape(b.Client.Bucket), url.PathEscape(b.key(stage)))
+	u := fmt.Sprintf("%s/b/%s/o/%s?alt=media", b.Client.baseURL(), url.PathEscape(b.Client.Bucket), url.PathEscape(b.key(stage)))
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func (b *ReceiptBackend) Save(receipt *statetypes.Receipt) error {
 		return err
 	}
 	u := fmt.Sprintf("%s/b/%s/o?uploadType=media&name=%s",
-		b.Client.UploadBaseURL, url.PathEscape(b.Client.Bucket), url.QueryEscape(b.key(receipt.Stage)))
+		b.Client.uploadURL(), url.PathEscape(b.Client.Bucket), url.QueryEscape(b.key(receipt.Stage)))
 	req, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(data))
 	if err != nil {
 		return err
@@ -87,7 +87,7 @@ func (b *ReceiptBackend) Delete(stage string) error {
 	if b.Client == nil {
 		return fmt.Errorf("gcs receipt backend: client not initialized")
 	}
-	u := fmt.Sprintf("%s/b/%s/o/%s", b.Client.BaseURL, url.PathEscape(b.Client.Bucket), url.PathEscape(b.key(stage)))
+	u := fmt.Sprintf("%s/b/%s/o/%s", b.Client.baseURL(), url.PathEscape(b.Client.Bucket), url.PathEscape(b.key(stage)))
 	req, err := http.NewRequest(http.MethodDelete, u, nil)
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func (b *ReceiptBackend) ListReleases() ([]statetypes.ReleaseEntry, error) {
 	var out []statetypes.ReleaseEntry
 	pageToken := ""
 	for {
-		u := fmt.Sprintf("%s/b/%s/o?prefix=%s", b.Client.BaseURL, url.PathEscape(b.Client.Bucket), url.QueryEscape(prefix))
+		u := fmt.Sprintf("%s/b/%s/o?prefix=%s", b.Client.baseURL(), url.PathEscape(b.Client.Bucket), url.QueryEscape(prefix))
 		if pageToken != "" {
 			u += "&pageToken=" + url.QueryEscape(pageToken)
 		}

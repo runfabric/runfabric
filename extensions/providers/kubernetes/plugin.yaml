@@ -17,6 +17,9 @@ credentials:
   - envKey: GHCR_REGISTRY
   - envKey: GHCR_USER
   - envKey: GHCR_TOKEN
+# scaffold shapes `runfabric init` output for this provider (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Provider: kubernetes — set KUBECONFIG; supports http, cron"
 permissions:
   fs: true
   env: true

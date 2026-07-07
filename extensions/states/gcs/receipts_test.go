@@ -188,6 +188,69 @@ func TestGCSServiceAccountFlow(t *testing.T) {
 	}
 }
 
+// TestGCSEndpointOverride proves that with GCP_ENDPOINT_URL set, put/get
+// receipt requests hit the override host at its /storage/v1 (and
+// /upload/storage/v1) paths rather than storage.googleapis.com, while the
+// client keeps its default production BaseURL/UploadBaseURL.
+func TestGCSEndpointOverride(t *testing.T) {
+	var sawHosts []string
+	objects := map[string][]byte{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Host, "googleapis.com") {
+			t.Errorf("request reached canonical host: %s", r.Host)
+		}
+		sawHosts = append(sawHosts, r.Host)
+		switch {
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/upload/storage/v1/b/"):
+			name := r.URL.Query().Get("name")
+			body, _ := io.ReadAll(r.Body)
+			objects[name] = body
+			_ = json.NewEncoder(w).Encode(map[string]string{"name": name})
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/storage/v1/b/") && strings.Contains(r.URL.Path, "/o/"):
+			name, _ := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/storage/v1/b/bkt/o/"))
+			data, ok := objects[name]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write(data)
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("GCP_ACCESS_TOKEN", "test-token")
+	t.Setenv("GCP_ENDPOINT_URL", server.URL)
+	client, err := New("bkt", "runfabric/dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Client keeps production defaults; the override rewrites the host per call.
+	if client.BaseURL != defaultBaseURL || client.UploadBaseURL != defaultUploadURL {
+		t.Fatalf("client should retain default URLs, got %s / %s", client.BaseURL, client.UploadBaseURL)
+	}
+	b := NewReceiptBackend(client)
+
+	receipt := &statetypes.Receipt{Service: "svc", Stage: "dev", UpdatedAt: "2026-07-04T00:00:00Z"}
+	if err := b.Save(receipt); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if _, ok := objects["runfabric/dev/receipts/dev.receipt.json"]; !ok {
+		t.Fatalf("object not written at expected key, have %v", keysOf(objects))
+	}
+	loaded, err := b.Load("dev")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if loaded.Service != "svc" {
+		t.Errorf("unexpected receipt: %+v", loaded)
+	}
+	if len(sawHosts) == 0 {
+		t.Fatal("override host never received a request")
+	}
+}
+
 func keysOf(m map[string][]byte) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

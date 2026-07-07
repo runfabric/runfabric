@@ -20,6 +20,9 @@ credentials:
     placeholder: "registry.fly.io/myapp:latest"
   - envKey: FLY_ORG_ID
     header: X-Provider-Fly-Org-Id
+# scaffold shapes `runfabric init` output for this provider (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Provider: fly-machines — set FLY_*; http only"
 permissions:
   fs: true
   env: true

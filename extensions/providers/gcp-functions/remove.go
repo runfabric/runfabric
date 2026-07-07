@@ -36,7 +36,7 @@ func (Remover) Remove(ctx context.Context, cfg sdkprovider.Config, stage, root s
 	token := sdkprovider.Env("GCP_ACCESS_TOKEN")
 	for fnName := range functions {
 		funcName := fmt.Sprintf("%s-%s-%s", service, stage, fnName)
-		url := fmt.Sprintf("%s/projects/%s/locations/%s/functions/%s", gcpAPI, project, region, funcName)
+		url := fmt.Sprintf("%s/projects/%s/locations/%s/functions/%s", gcpHost(gcpAPI), project, region, funcName)
 		req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		sdkprovider.DefaultClient.Do(req) // best effort

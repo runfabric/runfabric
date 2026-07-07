@@ -14,6 +14,15 @@ credentials:
     required: true
   - envKey: RUNFABRIC_S3_PREFIX
   - envKey: RUNFABRIC_DYNAMODB_TABLE
+# scaffold shapes the `runfabric init` backend: block for this state backend.
+scaffold:
+  config:
+    - key: s3Bucket
+      value: "${env:RUNFABRIC_S3_BUCKET}"
+    - key: s3Prefix
+      value: "runfabric/dev"
+    - key: lockTable
+      value: "${env:RUNFABRIC_DYNAMODB_TABLE}"
 permissions:
   fs: true
   env: true

@@ -704,6 +704,79 @@ func toCredentialVars(items any) []catalog.CredentialVar {
 	return out
 }
 
+// toScaffold converts an extension's provider.Scaffold (plugin-sdk type) into a
+// catalog value via reflection, keeping this package free of a direct plugin-sdk
+// import (Rule 2i). Accepts the struct by value or pointer.
+func toScaffold(item any) catalog.ProviderScaffold {
+	v := reflect.ValueOf(item)
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return catalog.ProviderScaffold{}
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return catalog.ProviderScaffold{}
+	}
+	return catalog.ProviderScaffold{
+		Comment:       readStringField(v, "Comment"),
+		Entry:         readStringField(v, "Entry"),
+		EntryFile:     readStringField(v, "EntryFile"),
+		Sample:        readStringField(v, "Sample"),
+		RuntimeByLang: readStringMapField(v, "RuntimeByLang"),
+	}
+}
+
+// toStateConfigLines converts a state backend's []provider.ScaffoldConfigLine
+// (plugin-sdk type) into catalog config lines via reflection, keeping this package
+// free of a direct plugin-sdk import (Rule 2i).
+func toStateConfigLines(items any) []catalog.StateConfigLine {
+	v := reflect.ValueOf(items)
+	if !v.IsValid() || v.Kind() != reflect.Slice {
+		return nil
+	}
+	out := make([]catalog.StateConfigLine, 0, v.Len())
+	for i := 0; i < v.Len(); i++ {
+		item := v.Index(i)
+		if item.Kind() == reflect.Pointer {
+			if item.IsNil() {
+				continue
+			}
+			item = item.Elem()
+		}
+		out = append(out, catalog.StateConfigLine{
+			Key:   readStringField(item, "Key"),
+			Value: readStringField(item, "Value"),
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// readStringMapField reads a map[string]string struct field via reflection.
+func readStringMapField(v reflect.Value, name string) map[string]string {
+	if !v.IsValid() {
+		return nil
+	}
+	field := v.FieldByName(name)
+	if !field.IsValid() || field.Kind() != reflect.Map || field.IsNil() {
+		return nil
+	}
+	out := make(map[string]string, field.Len())
+	iter := field.MapRange()
+	for iter.Next() {
+		if iter.Key().Kind() == reflect.String && iter.Value().Kind() == reflect.String {
+			out[iter.Key().String()] = iter.Value().String()
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func readBoolField(v reflect.Value, name string) bool {
 	if !v.IsValid() {
 		return false

@@ -10,6 +10,9 @@ capabilities:
   - sync
 # No credentials block: route53 authenticates via the AWS default credential
 # chain (env, profile, IMDS, IRSA) — no runfabric-specific token vars.
+# scaffold: uniform init-scaffold surface across plugin kinds (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Router: route53 — AWS Route 53 DNS for fabric active-active routing"
 permissions:
   fs: false
   env: true

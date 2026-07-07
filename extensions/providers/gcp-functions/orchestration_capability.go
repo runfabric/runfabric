@@ -50,7 +50,7 @@ func (Runner) SyncOrchestrations(ctx context.Context, req sdkprovider.Orchestrat
 		}
 		source = applyCloudWorkflowBindings(source, decl, req.FunctionResourceByName)
 		workflowName := fmt.Sprintf("projects/%s/locations/%s/workflows/%s", project, region, decl.Name)
-		workflowURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows/%s", gcpWorkflowsAPI, project, region, decl.Name)
+		workflowURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows/%s", gcpHost(gcpWorkflowsAPI), project, region, decl.Name)
 
 		body := map[string]any{"sourceContents": source}
 		bodyBytes, _ := json.Marshal(body)
@@ -69,7 +69,7 @@ func (Runner) SyncOrchestrations(ctx context.Context, req sdkprovider.Orchestrat
 		if patchResp.StatusCode == http.StatusNotFound {
 			createBody := map[string]any{"workflow": body}
 			createBytes, _ := json.Marshal(createBody)
-			createURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows?workflowId=%s", gcpWorkflowsAPI, project, region, url.QueryEscape(decl.Name))
+			createURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows?workflowId=%s", gcpHost(gcpWorkflowsAPI), project, region, url.QueryEscape(decl.Name))
 			createReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, createURL, bytes.NewReader(createBytes))
 			createReq.Header.Set("Authorization", "Bearer "+token)
 			createReq.Header.Set("Content-Type", "application/json")
@@ -119,7 +119,7 @@ func (Runner) RemoveOrchestrations(ctx context.Context, req sdkprovider.Orchestr
 
 	res := &sdkprovider.OrchestrationSyncResult{Metadata: map[string]string{}, Outputs: map[string]string{}}
 	for _, decl := range decls {
-		workflowURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows/%s", gcpWorkflowsAPI, project, region, decl.Name)
+		workflowURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows/%s", gcpHost(gcpWorkflowsAPI), project, region, decl.Name)
 		delReq, _ := http.NewRequestWithContext(ctx, http.MethodDelete, workflowURL, nil)
 		delReq.Header.Set("Authorization", "Bearer "+token)
 		delResp, err := sdkprovider.DefaultClient.Do(delReq)
@@ -170,7 +170,7 @@ func (Runner) InvokeOrchestration(ctx context.Context, req sdkprovider.Orchestra
 	}
 	body := map[string]any{"argument": argument}
 	bodyBytes, _ := json.Marshal(body)
-	execURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows/%s/executions", gcpWorkflowsAPI, project, region, name)
+	execURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows/%s/executions", gcpHost(gcpWorkflowsAPI), project, region, name)
 	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, execURL, bytes.NewReader(bodyBytes))
 	httpReq.Header.Set("Authorization", "Bearer "+token)
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -233,7 +233,7 @@ func (Runner) InspectOrchestrations(ctx context.Context, req sdkprovider.Orchest
 
 	for _, decl := range decls {
 		item := map[string]any{"name": decl.Name, "declared": true}
-		workflowURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows/%s", gcpWorkflowsAPI, project, region, decl.Name)
+		workflowURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows/%s", gcpHost(gcpWorkflowsAPI), project, region, decl.Name)
 		getReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, workflowURL, nil)
 		getReq.Header.Set("Authorization", "Bearer "+token)
 		resp, err := sdkprovider.DefaultClient.Do(getReq)
@@ -263,7 +263,7 @@ func (Runner) InspectOrchestrations(ctx context.Context, req sdkprovider.Orchest
 		}
 		item["console"] = cloudWorkflowConsoleLink(project, region, decl.Name)
 
-		execURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows/%s/executions?pageSize=1", gcpWorkflowsAPI, project, region, decl.Name)
+		execURL := fmt.Sprintf("%s/projects/%s/locations/%s/workflows/%s/executions?pageSize=1", gcpHost(gcpWorkflowsAPI), project, region, decl.Name)
 		execReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, execURL, nil)
 		execReq.Header.Set("Authorization", "Bearer "+token)
 		execResp, err := sdkprovider.DefaultClient.Do(execReq)

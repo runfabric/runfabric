@@ -39,6 +39,22 @@ jobs:
       - name: Coverage report
         run: make coverage
 
+      # `make release-check` above runs `go test -race ./...`, which in workspace
+      # mode only covers the ROOT module. The modules below are separate go.mod's
+      # (go.work members or standalone), so `./...` skips them — test each
+      # explicitly. Standalone modules (not in go.work) need GOWORK=off.
+      - name: Test plugin-sdk module
+        run: cd packages/go/plugin-sdk && go test -race ./...
+
+      - name: Test sdk module
+        run: cd packages/go/sdk && GOWORK=off go test -race ./...
+
+      - name: Test registry module
+        run: cd apps/registry && go test -race ./...
+
+      - name: Test linode provider module
+        run: cd extensions/providers/linode && GOWORK=off go test -race ./...
+
   build-cli-packages:
     runs-on: ubuntu-latest
     permissions:

@@ -21,6 +21,7 @@ func init() {
 			Description:            "Deploy and run functions on AWS Lambda",
 			IncludeBuiltinManifest: true,
 			Credentials:            toCredentialVars(awsprovider.CredentialVars),
+			Scaffold:               toScaffold(awsprovider.Scaffold),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream:      adaptPrepareDevStream(awsprovider.PrepareDevStreamPolicy),

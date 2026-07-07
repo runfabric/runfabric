@@ -29,6 +29,21 @@ func init() {
 	catalog.RegisterStateBackendFactory("azblob", azblobStateComponents)
 }
 
+// builtinStateScaffoldRaw returns each built-in state backend's Scaffold, keyed by
+// kind — declared in the backend's own package (like providers), aggregated here
+// where every backend is already imported. Values are converted via reflection
+// (toStateConfigLines) so this package needs no plugin-sdk import (Rule 2i).
+func builtinStateScaffoldRaw() map[string]any {
+	return map[string]any{
+		"s3":       s3backend.Scaffold,
+		"gcs":      gcsbackend.Scaffold,
+		"azblob":   azblobbackend.Scaffold,
+		"postgres": pgbackend.Scaffold,
+		"dynamodb": dynbackend.Scaffold,
+		"sqlite":   sqlitebackend.Scaffold,
+	}
+}
+
 func localStateComponents(_ context.Context, opts catalog.StateBackendOptions) (*catalog.StateBundleComponents, error) {
 	lockBackend := localbackend.NewLockBackend(opts.Root)
 	journalBackend := localbackend.NewJournalBackend(opts.Root)

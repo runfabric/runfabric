@@ -16,6 +16,7 @@ func loadBuiltinStates(reg *manifests.PluginRegistry) {
 			Name:        item.Name,
 			Description: item.Description,
 			Credentials: manifests.CredentialSpecs(providerpolicy.StateBackendCredentials(item.ID)),
+			Scaffold:    manifests.StateScaffoldSpec(providerpolicy.StateBackendScaffold(item.ID)),
 		})
 	}
 }

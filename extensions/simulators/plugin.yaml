@@ -8,6 +8,9 @@ pluginVersion: 1
 executable: ./bin/local-simulator
 capabilities:
   - simulate
+# scaffold: uniform init-scaffold surface across plugin kinds (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Simulator: local — local function simulation for tests"
 permissions:
   fs: true
   env: true

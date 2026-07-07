@@ -17,6 +17,7 @@ import (
 	"github.com/runfabric/runfabric/platform/extensions/providerpolicy"
 	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
+	scaffold "github.com/runfabric/runfabric/platform/generator/application"
 	planner "github.com/runfabric/runfabric/platform/planner/engine"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -68,6 +69,11 @@ func newInitCmd(opts *common.GlobalOptions) *cobra.Command {
 		Long:  "Creates a new project with runfabric.yml and handler scaffolding. Use interactive mode (default) to select provider, trigger, language, and state backend, or pass flags for non-interactive.",
 		RunE: func(c *cobra.Command, args []string) error {
 			initOpts.NoInteractive = initOpts.NoInteractive || opts.NonInteractive
+			if opts.JSONOutput {
+				// Headless mode for API callers (the PaaS): generate the project files
+				// as JSON instead of writing to disk or prompting.
+				return runInitJSON(initOpts)
+			}
 			return runInit(initOpts)
 		},
 	}
@@ -151,145 +157,38 @@ func runInit(o *initOpts) error {
 		}
 	}
 
-	// Defaults when non-interactive
-	if o.Service == "" {
-		if dir != "" {
-			o.Service = filepath.Base(dir)
-		} else {
-			o.Service = "my-service"
-		}
+	// Service defaults to the target directory name when not given; the remaining
+	// defaults/validation and all file generation are shared with the Scaffold API
+	// (also used by `init --json` and the daemon POST /scaffold route).
+	if o.Service == "" && dir != "" {
+		o.Service = filepath.Base(dir)
 	}
-	if o.Service == "" || o.Service == "." || o.Service == "engine" {
-		o.Service = "my-service"
-	}
-	if o.Lang == "" {
-		o.Lang = "ts"
-	}
-	if o.StateBackend == "" {
-		o.StateBackend = "local"
-	}
-	if o.Template == "" {
-		o.Template = "http"
-	}
-	if o.Template == "api" || o.Template == "worker" {
-		return fmt.Errorf("template %q is no longer supported; use http, cron, queue, storage, eventbridge, or pubsub", o.Template)
-	}
-	if o.Provider == "" {
-		o.Provider = "aws-lambda"
-	}
-	normalizedSecretManager, err := normalizeSecretManagerPlugin(o.SecretManager)
+	res, err := scaffoldProject(o)
 	if err != nil {
 		return err
 	}
-	o.SecretManager = normalizedSecretManager
-	if isNodeLang(o.Lang) {
-		o.PM = strings.ToLower(strings.TrimSpace(o.PM))
-		if o.PM == "" {
-			o.PM = "npm"
-		}
-		if !isValidPackageManager(o.PM) {
-			return fmt.Errorf("unsupported --pm %q; use npm, pnpm, yarn, or bun", o.PM)
-		}
-	}
 
-	// Validate trigger for provider
-	if !initProviderSupportsTrigger(o.Provider, o.Template) {
-		return fmt.Errorf("provider %q does not support trigger %q (see Trigger Capability Matrix)", o.Provider, o.Template)
-	}
-	switch o.Lang {
-	case "node", "ts", "js", "python", "go":
-	default:
-		return fmt.Errorf("unsupported --lang %q; use node, ts, js, python, or go", o.Lang)
-	}
-
-	// If --dir was not passed, create a folder named after the service
+	// If --dir was not passed, create a folder named after the (now-defaulted) service.
 	if o.Dir == "" {
 		dir = filepath.Join(cwd, o.Service)
 	}
-
-	// Create directory
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create dir %s: %w", dir, err)
 	}
-	srcDir := filepath.Join(dir, "src")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
 		return fmt.Errorf("create src dir: %w", err)
 	}
 
-	// Generate runfabric.yml
-	yml := generateRunfabricYAML(o)
-	ymlPath := filepath.Join(dir, "runfabric.yml")
-	if err := os.WriteFile(ymlPath, []byte(yml), 0o644); err != nil {
-		return fmt.Errorf("write runfabric.yml: %w", err)
-	}
-	common.InitWrote("runfabric.yml")
-
-	// Generate sample handler
-	handlerPath, handlerContent := generateSampleHandler(o)
-	fullPath := filepath.Join(dir, handlerPath)
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-		return fmt.Errorf("create handler dir: %w", err)
-	}
-	if err := os.WriteFile(fullPath, []byte(handlerContent), 0o644); err != nil {
-		return fmt.Errorf("write handler: %w", err)
-	}
-	common.InitWrote(filepath.ToSlash(handlerPath))
-
-	// .gitignore (based on lang)
-	gitignorePath := filepath.Join(dir, ".gitignore")
-	gitignoreContent := generateGitignore(o.Lang)
-	if err := os.WriteFile(gitignorePath, []byte(gitignoreContent), 0o644); err != nil {
-		return fmt.Errorf("write .gitignore: %w", err)
-	}
-	common.InitWrote(".gitignore")
-
-	// .env.example (based on provider and state backend)
-	envExamplePath := filepath.Join(dir, ".env.example")
-	envExampleContent := generateEnvExample(o.Provider, o.StateBackend)
-	if err := os.WriteFile(envExamplePath, []byte(envExampleContent), 0o644); err != nil {
-		return fmt.Errorf("write .env.example: %w", err)
-	}
-	common.InitWrote(".env.example")
-
-	// package.json for Node/JS/TS
-	if o.Lang == "js" || o.Lang == "ts" || o.Lang == "node" {
-		pkgPath := filepath.Join(dir, "package.json")
-		pkgContent := generatePackageJSON(o)
-		if err := os.WriteFile(pkgPath, []byte(pkgContent), 0o644); err != nil {
-			return fmt.Errorf("write package.json: %w", err)
+	// Write the generated files (order + names match the Scaffold result).
+	for _, f := range res.Files {
+		full := filepath.Join(dir, filepath.FromSlash(f.Path))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			return fmt.Errorf("create dir for %s: %w", f.Path, err)
 		}
-		common.InitWrote("package.json")
-	}
-	// tsconfig.json for TypeScript (and when with-build so build script works)
-	if o.Lang == "ts" {
-		tsPath := filepath.Join(dir, "tsconfig.json")
-		tsContent := generateTsconfig(o)
-		if err := os.WriteFile(tsPath, []byte(tsContent), 0o644); err != nil {
-			return fmt.Errorf("write tsconfig.json: %w", err)
+		if err := os.WriteFile(full, []byte(f.Content), 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", f.Path, err)
 		}
-		common.InitWrote("tsconfig.json")
-	}
-
-	// README.md
-	readmePath := filepath.Join(dir, "README.md")
-	readmeContent := generateREADME(o)
-	if err := os.WriteFile(readmePath, []byte(readmeContent), 0o644); err != nil {
-		return fmt.Errorf("write README.md: %w", err)
-	}
-	common.InitWrote("README.md")
-
-	// Optional: GitHub Actions workflow (doctor → plan → deploy on push)
-	if o.WithCI == "github-actions" {
-		workflowDir := filepath.Join(dir, ".github", "workflows")
-		if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-			return fmt.Errorf("create .github/workflows: %w", err)
-		}
-		workflowPath := filepath.Join(workflowDir, "deploy.yml")
-		workflowContent := generateGitHubActionsWorkflow(o)
-		if err := os.WriteFile(workflowPath, []byte(workflowContent), 0o644); err != nil {
-			return fmt.Errorf("write .github/workflows/deploy.yml: %w", err)
-		}
-		common.InitWrote(".github/workflows/deploy.yml")
+		common.InitWrote(f.Path)
 	}
 
 	installErr := error(nil)
@@ -708,56 +607,77 @@ func yamlQuoted(s string) string {
 	return b.String()
 }
 
-func generateRunfabricYAML(o *initOpts) string {
-	runtime := "nodejs20.x"
+// resolveRuntimeEntryExt computes the deploy runtime id, the functions[].entry
+// reference, and the handler file extension for the target language/provider.
+// Shared by generateRunfabricYAML and the Scaffold API so all three agree.
+func resolveRuntimeEntryExt(o *initOpts) (runtime, entry, ext string) {
+	// Provider-declared scaffolding deltas (entry override, runtime).
+	sc := providerpolicy.ProviderScaffold(o.Provider)
+	runtime = "nodejs20.x"
 	if o.Lang == "python" {
 		runtime = "python3.11"
 	}
 	if o.Lang == "go" {
 		runtime = "go1.x"
 	}
-	handler := "src/handler.handler"
-	ext := ".js"
+	if r, ok := sc.RuntimeByLang[o.Lang]; ok && r != "" {
+		runtime = r
+	}
+	entry = "src/handler.handler"
+	ext = ".js"
 	if o.Lang == "ts" {
 		// TypeScript build outputs to dist/handler.js; deploy uses compiled output
-		handler = "dist/handler.handler"
+		entry = "dist/handler.handler"
 		ext = ".ts"
 	}
 	if o.Lang == "python" {
-		handler = "handler.handler"
+		entry = "handler.handler"
 		ext = ".py"
 	}
 	if o.Lang == "go" {
-		handler = "handler"
+		entry = "handler"
 		ext = ".go"
 	}
+	// Provider entry override (e.g. Cloudflare Workers deploy a worker.js script,
+	// not a Lambda-style handler) — applies to plain-JS scaffolds only.
+	if jsScaffold(o) && sc.Entry != "" {
+		entry = sc.Entry
+	}
+	return runtime, entry, ext
+}
+
+func generateRunfabricYAML(o *initOpts) string {
+	// Provider-declared scaffolding deltas (comment, entry override, runtime).
+	sc := providerpolicy.ProviderScaffold(o.Provider)
+	runtime, handler, ext := resolveRuntimeEntryExt(o)
 
 	var b strings.Builder
 	b.WriteString("# RunFabric config — generated by runfabric init\n")
-	// Provider-specific comment (template set per trigger × provider × language)
-	b.WriteString(providerComment(o.Provider) + "\n")
+	// Provider-specific comment, declared by the provider (init.go stays generic).
+	comment := ""
+	if sc.Comment != "" {
+		comment = "# " + sc.Comment
+	}
+	b.WriteString(comment + "\n")
 	b.WriteString("service: " + yamlQuoted(o.Service) + "\n\n")
 	b.WriteString("provider:\n")
 	b.WriteString("  name: " + o.Provider + "\n")
 	b.WriteString("  runtime: " + runtime + "\n")
-	if o.Provider != "kubernetes" {
-		b.WriteString("  region: ${env:AWS_REGION,us-east-1}\n")
+	// Region line derived from the provider's own credential surface (the *_REGION
+	// var) rather than defaulting every provider to AWS_REGION; providers without a
+	// region credential (azure/cloudflare/vercel/kubernetes/…) omit it.
+	if line := providerRegionLine(o.Provider); line != "" {
+		b.WriteString("  region: " + line + "\n")
 	}
 	b.WriteString("\n")
 
 	if o.StateBackend != "local" {
 		b.WriteString("backend:\n")
 		b.WriteString("  kind: " + o.StateBackend + "\n")
-		if o.StateBackend == "s3" {
-			b.WriteString("  s3Bucket: ${env:RUNFABRIC_S3_BUCKET}\n")
-			b.WriteString("  s3Prefix: runfabric/dev\n")
-			b.WriteString("  lockTable: ${env:RUNFABRIC_DYNAMODB_TABLE}\n")
-		} else if o.StateBackend == "gcs" {
-			b.WriteString("  gcsBucket: ${env:RUNFABRIC_GCS_BUCKET}\n")
-			b.WriteString("  gcsPrefix: runfabric/dev\n")
-		} else if o.StateBackend == "azblob" {
-			b.WriteString("  azblobContainer: ${env:RUNFABRIC_AZBLOB_CONTAINER}\n")
-			b.WriteString("  azblobPrefix: runfabric/dev\n")
+		// Config keys are declared by each state backend (providerpolicy →
+		// extensions/states), not hardcoded here.
+		for _, line := range providerpolicy.StateBackendScaffold(o.StateBackend) {
+			b.WriteString("  " + line.Key + ": " + line.Value + "\n")
 		}
 		b.WriteString("\n")
 	}
@@ -777,28 +697,26 @@ func generateRunfabricYAML(o *initOpts) string {
 	return b.String()
 }
 
-// providerComment returns a short provider-specific comment for the generated runfabric.yml (template set per provider).
-func providerComment(provider string) string {
-	switch provider {
-	case "aws-lambda":
-		return "# Provider: aws-lambda — set AWS_REGION; optional backend: s3 + DynamoDB for state"
-	case "gcp-functions":
-		return "# Provider: gcp-functions — set GCP_PROJECT_ID; supports http, cron, queue, storage, pubsub"
-	case "azure-functions":
-		return "# Provider: azure-functions — set AZURE_*; supports http, cron, queue, storage"
-	case "cloudflare-workers":
-		return "# Provider: cloudflare-workers — set CLOUDFLARE_*; supports http, cron"
-	case "vercel", "netlify":
-		return "# Provider: " + provider + " — set provider token; supports http, cron"
-	case "fly-machines":
-		return "# Provider: fly-machines — set FLY_*; http only"
-	case "kubernetes":
-		return "# Provider: kubernetes — set KUBECONFIG; supports http, cron"
-	case "alibaba-fc", "digitalocean-functions", "ibm-openwhisk":
-		return "# Provider: " + provider + " — see docs for credentials and trigger support"
-	default:
-		return ""
+// jsScaffold reports whether the target language is plain JavaScript, the only
+// case where a provider's handler-body/entry-file overrides (e.g. Cloudflare's
+// worker.js) apply; TypeScript/Python/Go fall back to the generic scaffold.
+func jsScaffold(o *initOpts) bool {
+	return o.Lang == "js" || o.Lang == "node"
+}
+
+// providerRegionLine returns the `${env:...}` expression for the provider.region
+// line, derived from the provider's own credential surface (the *_REGION var and
+// its placeholder default). Providers without a region credential omit the line.
+func providerRegionLine(provider string) string {
+	for _, c := range providerpolicy.ProviderCredentials(provider) {
+		if strings.HasSuffix(c.EnvKey, "_REGION") {
+			if c.Placeholder != "" {
+				return "${env:" + c.EnvKey + "," + c.Placeholder + "}"
+			}
+			return "${env:" + c.EnvKey + "}"
+		}
 	}
+	return ""
 }
 
 func generateEventYAML(trigger, ext string) string {
@@ -820,68 +738,31 @@ func generateEventYAML(trigger, ext string) string {
 	}
 }
 
+// generateSampleHandler returns the handler file path and body for the project.
+// Generic language×trigger bodies come from the shared scaffold generator
+// (platform/generator/application, also used by `runfabric generate function`);
+// a provider may override the file name and body for plain-JS scaffolds (e.g.
+// Cloudflare Workers' worker.js), declared via its ProviderScaffold.
 func generateSampleHandler(o *initOpts) (path, content string) {
-	trigger := o.Template
-	lang := o.Lang
-	if lang == "js" {
-		lang = "node"
+	res, _ := scaffold.HandlerContent(o.Lang, o.Template)
+	content = res.Content
+	switch o.Lang {
+	case "python", "go":
+		path = "handler" + res.Ext
+	default:
+		path = "src/handler" + res.Ext
 	}
 
-	switch lang {
-	case "node", "ts":
-		return "src/handler" + map[bool]string{true: ".ts", false: ".js"}[lang == "ts"], sampleHandlerNodeTS(trigger, lang == "ts")
-	case "python":
-		return "handler.py", sampleHandlerPython(trigger)
-	case "go":
-		return "handler.go", sampleHandlerGo(trigger)
-	default:
-		return "src/handler.js", sampleHandlerNodeTS(trigger, false)
+	sc := providerpolicy.ProviderScaffold(o.Provider)
+	if jsScaffold(o) {
+		if sc.EntryFile != "" {
+			path = sc.EntryFile
+		}
+		if sc.Sample != "" {
+			content = sc.Sample
+		}
 	}
-}
-
-func sampleHandlerNodeTS(trigger string, isTS bool) string {
-	sig := "(event, context)"
-	if isTS {
-		sig = "(event: any, context: any)"
-	}
-	switch trigger {
-	case planner.TriggerHTTP:
-		return "exports.handler = async" + sig + " => {\n  return {\n    statusCode: 200,\n    body: JSON.stringify({ message: \"Hello from RunFabric\", trigger: \"http\" }),\n  };\n};\n"
-	case planner.TriggerCron:
-		return "exports.handler = async" + sig + " => {\n  console.log('Cron triggered at', new Date().toISOString());\n  return { ok: true };\n};\n"
-	case planner.TriggerQueue:
-		return "exports.handler = async" + sig + " => {\n  const records = event.Records || event.records || [];\n  for (const r of records) {\n    console.log('Queue message:', r.body || r);\n  }\n  return { ok: true };\n};\n"
-	case planner.TriggerStorage:
-		return "exports.handler = async" + sig + " => {\n  const records = event.Records || [];\n  for (const r of records) {\n    console.log('Object:', r.s3?.object?.key || r);\n  }\n  return { ok: true };\n};\n"
-	case planner.TriggerEventBridge, planner.TriggerPubSub:
-		return "exports.handler = async" + sig + " => {\n  console.log('Event:', JSON.stringify(event, null, 2));\n  return { ok: true };\n};\n"
-	default:
-		return "exports.handler = async" + sig + " => {\n  return { statusCode: 200, body: JSON.stringify({ message: \"Hello\" }) };\n};\n"
-	}
-}
-
-func sampleHandlerPython(trigger string) string {
-	switch trigger {
-	case planner.TriggerHTTP:
-		return "def handler(event, context):\n    return {\"statusCode\": 200, \"body\": '{\"message\": \"Hello from RunFabric\"}'}\n"
-	case planner.TriggerCron:
-		return "def handler(event, context):\n    print(\"Cron triggered\")\n    return {\"ok\": True}\n"
-	case planner.TriggerQueue, planner.TriggerStorage, planner.TriggerEventBridge, planner.TriggerPubSub:
-		return "def handler(event, context):\n    print(\"Event:\", event)\n    return {\"ok\": True}\n"
-	default:
-		return "def handler(event, context):\n    return {\"statusCode\": 200, \"body\": '{\"message\": \"Hello\"}'}\n"
-	}
-}
-
-func sampleHandlerGo(trigger string) string {
-	switch trigger {
-	case planner.TriggerHTTP:
-		return "package main\n\nimport \"encoding/json\"\n\nfunc Handler(event map[string]interface{}, context interface{}) (map[string]interface{}, error) {\n\treturn map[string]interface{}{\n\t\t\"statusCode\": 200,\n\t\t\"body\":     `{\"message\":\"Hello from RunFabric\"}`,\n\t}, nil\n}\n"
-	case planner.TriggerCron:
-		return "package main\n\nfunc Handler(event map[string]interface{}, context interface{}) (map[string]interface{}, error) {\n\treturn map[string]interface{}{\"ok\": true}, nil\n}\n"
-	default:
-		return "package main\n\nfunc Handler(event map[string]interface{}, context interface{}) (map[string]interface{}, error) {\n\treturn map[string]interface{}{\"statusCode\": 200, \"body\": `{\"message\":\"Hello\"}`}, nil\n}\n"
-	}
+	return path, content
 }
 
 // generateGitignore returns .gitignore content for the given language.

@@ -16,7 +16,7 @@ func (Remover) Remove(ctx context.Context, cfg sdkprovider.Config, stage, root s
 	if projectName == "" {
 		projectName = sdkprovider.Service(cfg)
 	}
-	url := vercelAPI + "/v9/projects/" + projectName
+	url := vercelAPIBase() + "/v9/projects/" + projectName
 	if err := sdkprovider.DoDelete(ctx, url, "VERCEL_TOKEN"); err != nil {
 		return nil, fmt.Errorf("vercel delete project: %w", err)
 	}

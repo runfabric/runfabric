@@ -20,6 +20,7 @@ func init() {
 			Description:            "Deploy and run functions on Vercel Serverless",
 			IncludeBuiltinManifest: true,
 			Credentials:            toCredentialVars(vercelprovider.CredentialVars),
+			Scaffold:               toScaffold(vercelprovider.Scaffold),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream: adaptPrepareDevStream(vercelprovider.PrepareDevStreamPolicy),

@@ -53,6 +53,25 @@ func DecodeReceipt(receipt any) ReceiptView {
 				out.Metadata[k] = fmt.Sprint(v)
 			}
 		}
+		return out
+	}
+	// Fallback: any other concrete receipt (e.g. the engine's *state.Receipt, which
+	// callers pass through the provider contract as `any`). It serializes with
+	// "outputs"/"metadata" maps, so round-trip it through JSON to read them —
+	// without this, url-based invokers see empty Outputs and can't find their URL.
+	if b, err := json.Marshal(receipt); err == nil {
+		var probe struct {
+			Outputs  map[string]any `json:"outputs"`
+			Metadata map[string]any `json:"metadata"`
+		}
+		if json.Unmarshal(b, &probe) == nil {
+			for k, v := range probe.Outputs {
+				out.Outputs[k] = fmt.Sprint(v)
+			}
+			for k, v := range probe.Metadata {
+				out.Metadata[k] = fmt.Sprint(v)
+			}
+		}
 	}
 	return out
 }

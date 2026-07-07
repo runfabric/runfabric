@@ -16,6 +16,9 @@ credentials:
     required: true
   - envKey: VERCEL_TEAM_ID
     header: X-Provider-Vercel-Team-Id
+# scaffold shapes `runfabric init` output for this provider (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Provider: vercel — set provider token; supports http, cron"
 permissions:
   fs: true
   env: true

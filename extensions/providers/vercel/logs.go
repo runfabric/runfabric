@@ -23,7 +23,7 @@ func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function 
 			Lines:    []string{"No deployment_id in receipt; redeploy to capture logs."},
 		}, nil
 	}
-	url := vercelAPI + "/v3/deployments/" + deployID + "/events?limit=50"
+	url := vercelAPIBase() + "/v3/deployments/" + deployID + "/events?limit=50"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("Authorization", "Bearer "+sdkprovider.Env("VERCEL_TOKEN"))
 	resp, err := sdkprovider.DefaultClient.Do(req)

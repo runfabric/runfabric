@@ -20,6 +20,7 @@ func init() {
 			Description:            "Deploy and run functions on Kubernetes",
 			IncludeBuiltinManifest: true,
 			Credentials:            toCredentialVars(kubernetesprovider.CredentialVars),
+			Scaffold:               toScaffold(kubernetesprovider.Scaffold),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream: adaptPrepareDevStream(kubernetesprovider.PrepareDevStreamPolicy),

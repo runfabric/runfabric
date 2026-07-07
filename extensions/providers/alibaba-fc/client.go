@@ -38,7 +38,7 @@ func newFCClient(accountID, region, accessKey, secretKey string) *fcClient {
 }
 
 func (c *fcClient) baseURL() string {
-	return fmt.Sprintf(fcHostFmt, c.accountID, c.region)
+	return alibabaAPIBase(c.accountID, c.region)
 }
 
 // doSigned executes a signed request. path is the normalized resource (e.g. /2021-04-06/services).
@@ -192,5 +192,5 @@ func (c *fcClient) GetFunctionURL(ctx context.Context, serviceName, functionName
 		return "", nil
 	}
 	// FC HTTP trigger URL format: https://{account}.{region}.fc.aliyuncs.com/2021-04-06/proxy/{service}/{function}/
-	return fmt.Sprintf("%s/%s/proxy/%s/%s/", c.baseURL(), fcAPIVersion, serviceName, functionName), nil
+	return alibabaFunctionURL(c.baseURL(), serviceName, functionName), nil
 }

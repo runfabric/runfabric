@@ -9,7 +9,17 @@ import (
 func loadBuiltinProviders(reg *manifests.PluginRegistry) (*providers.Registry, map[string]struct{}) {
 	providerSet := providerpolicy.NewBuiltinProviderSet()
 	for _, provider := range providerSet.ManifestProviders {
-		registerManifest(reg, manifests.KindProvider, provider.ID, provider.Name, provider.Description)
+		// Register the full built-in manifest (not just id/name/description) so the
+		// catalog carries the provider's declared credential surface and init
+		// scaffold — the PaaS reads these from GET /extensions.
+		reg.Register(&manifests.PluginManifest{
+			ID:          provider.ID,
+			Kind:        manifests.KindProvider,
+			Name:        provider.Name,
+			Description: provider.Description,
+			Credentials: manifests.CredentialSpecs(provider.Credentials),
+			Scaffold:    manifests.ScaffoldSpecFrom(provider.Scaffold),
+		})
 	}
 	providersRegistry := providerSet.Registry
 	RegisterAPIProviders(providersRegistry)

@@ -193,7 +193,10 @@ func TestInit_RejectsLegacyTemplateAliases(t *testing.T) {
 	}
 }
 
-func TestProviderComment(t *testing.T) {
+// TestProviderScaffoldComment verifies the runfabric.yml comment is now sourced
+// from each provider's declared ProviderScaffold (rendered by generateRunfabricYAML)
+// rather than a hardcoded switch, and that an unknown provider yields no comment.
+func TestProviderScaffoldComment(t *testing.T) {
 	tests := []struct {
 		provider string
 		wantSub  string
@@ -206,9 +209,13 @@ func TestProviderComment(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.provider, func(t *testing.T) {
-			got := providerComment(tt.provider)
-			if tt.wantSub != "" && !strings.Contains(got, tt.wantSub) {
-				t.Errorf("providerComment(%q) = %q, want substring %q", tt.provider, got, tt.wantSub)
+			o := &initOpts{Service: "svc", Provider: tt.provider, Lang: "js", Template: "http", StateBackend: "local"}
+			got := generateRunfabricYAML(o)
+			if tt.wantSub != "" && !strings.Contains(got, "# Provider: "+tt.wantSub) {
+				t.Errorf("generateRunfabricYAML(%q) = %q, want comment for %q", tt.provider, got, tt.wantSub)
+			}
+			if tt.wantSub == "" && strings.Contains(got, "# Provider:") {
+				t.Errorf("generateRunfabricYAML(%q) = %q, want no provider comment", tt.provider, got)
 			}
 		})
 	}

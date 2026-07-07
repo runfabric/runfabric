@@ -79,7 +79,7 @@ func (r Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root 
 		funcName := fmt.Sprintf("%s-%s-%s", service, stage, fnName)
 		parent := fmt.Sprintf("projects/%s/locations/%s", project, region)
 		resourceName := parent + "/functions/" + funcName
-		url := gcpAPI + "/" + parent + "/functions?functionId=" + funcName
+		url := gcpHost(gcpAPI) + "/" + parent + "/functions?functionId=" + funcName
 		body := map[string]any{
 			"name":        resourceName,
 			"environment": "GEN_2",
@@ -179,7 +179,7 @@ func uploadZipToGCS(ctx context.Context, root, bucket, objectName string) error 
 	if err := w.Close(); err != nil {
 		return err
 	}
-	uploadURL := fmt.Sprintf("%s/%s/o?uploadType=media&name=%s", gcsUploadAPI, bucket, url.QueryEscape(objectName))
+	uploadURL := fmt.Sprintf("%s/%s/o?uploadType=media&name=%s", gcpHost(gcsUploadAPI), bucket, url.QueryEscape(objectName))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploadURL, &buf)
 	if err != nil {
 		return err

@@ -82,7 +82,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 			LiveURL string `json:"live_url"`
 		} `json:"app"`
 	}
-	if err := sdkprovider.APIPost(ctx, doAPI, "DIGITALOCEAN_ACCESS_TOKEN", map[string]any{"spec": spec}, &out); err != nil {
+	if err := sdkprovider.APIPost(ctx, digitaloceanAPIBase(), "DIGITALOCEAN_ACCESS_TOKEN", map[string]any{"spec": spec}, &out); err != nil {
 		return nil, fmt.Errorf("digitalocean apps: %w", err)
 	}
 	if out.App.ID != "" {
@@ -92,7 +92,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	}
 	result := sdkprovider.BuildDeployResult("digitalocean-functions", cfg, stage)
 	result.Outputs["app_id"] = out.App.ID
-	result.Outputs["url"] = out.App.LiveURL
+	result.Outputs["url"] = digitaloceanAppURL(appName, out.App.LiveURL)
 	result.Metadata["app_id"] = out.App.ID
 	if len(jobs) > 0 {
 		result.Metadata["cron_jobs"] = fmt.Sprintf("%d", len(jobs))

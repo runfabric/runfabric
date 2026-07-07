@@ -20,6 +20,9 @@ credentials:
 # fallback = same-cloud provider key: one set of cloudflare-workers provider
 # credentials serves deploy AND DNS sync unless router-specific values are
 # set. Per-request headers ride the shared router group (X-Router-*).
+# scaffold: uniform init-scaffold surface across plugin kinds (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Router: cloudflare — Cloudflare DNS for fabric active-active routing"
 permissions:
   fs: true
   env: true

@@ -11,15 +11,28 @@ function startStub(routes) {
   const seen = [];
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    seen.push({
-      method: req.method,
-      path: url.pathname,
-      query: Object.fromEntries(url.searchParams),
-      headers: req.headers,
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      let json;
+      try {
+        json = raw ? JSON.parse(raw) : undefined;
+      } catch {
+        json = undefined;
+      }
+      seen.push({
+        method: req.method,
+        path: url.pathname,
+        query: Object.fromEntries(url.searchParams),
+        headers: req.headers,
+        body: json,
+        rawBody: raw,
+      });
+      const route = routes[url.pathname] || { status: 404, body: { ok: false, error: 'not found' } };
+      res.writeHead(route.status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(route.body));
     });
-    const route = routes[url.pathname] || { status: 404, body: { ok: false, error: 'not found' } };
-    res.writeHead(route.status, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(route.body));
   });
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
@@ -369,6 +382,142 @@ test('workflow ops: run body + params, status/cancel/replay/runs paths', async (
     assert.equal(stub.seen[4].query.decision, 'approve');
     assert.equal(stub.seen[4].query.reviewer, 'alice');
     assert.equal(stub.seen[5].query.limit, '5');
+  } finally {
+    await stub.close();
+  }
+});
+
+test('extensions() GETs /extensions and returns the catalog', async () => {
+  const catalog = {
+    kinds: [
+      {
+        kind: 'provider',
+        configKey: 'provider.name',
+        plugins: [
+          {
+            id: 'cloudflare-workers',
+            source: 'builtin',
+            supportsRuntime: ['nodejs', 'python'],
+            supportsTriggers: ['cron', 'http'],
+            credentials: [{ envKey: 'CLOUDFLARE_API_TOKEN', required: true }],
+            scaffold: { comment: 'x', entry: 'worker.fetch', entryFile: 'worker.js' },
+          },
+        ],
+      },
+    ],
+  };
+  const stub = await startStub({ '/extensions': { status: 200, body: catalog } });
+  try {
+    const client = new DaemonClient({ baseUrl: stub.baseUrl, apiKey: 'secret' });
+    const result = await client.extensions();
+    assert.equal(result.ok, true);
+    assert.equal(result.data.kinds[0].plugins[0].scaffold.entryFile, 'worker.js');
+    const req = stub.seen[0];
+    assert.equal(req.method, 'GET');
+    assert.equal(req.path, '/extensions');
+    assert.equal(req.headers['x-api-key'], 'secret');
+  } finally {
+    await stub.close();
+  }
+});
+
+test('scaffold() POSTs /scaffold with option query params; returns files/entry/runtime', async () => {
+  const stub = await startStub({
+    '/scaffold': {
+      status: 200,
+      body: { ok: true, files: { 'runfabric.yml': 'service: demo\n' }, entry: 'worker.fetch', runtime: 'nodejs20.x' },
+    },
+  });
+  try {
+    const client = new DaemonClient({ baseUrl: stub.baseUrl });
+    const result = await client.scaffold({
+      provider: 'cloudflare-workers',
+      template: 'http',
+      lang: 'js',
+      stateBackend: 's3',
+      service: 'demo',
+      withBuild: false,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.data.entry, 'worker.fetch');
+    assert.ok('runfabric.yml' in result.data.files);
+    const req = stub.seen[0];
+    assert.equal(req.method, 'POST');
+    assert.equal(req.path, '/scaffold');
+    assert.equal(req.query.provider, 'cloudflare-workers');
+    assert.equal(req.query.stateBackend, 's3');
+    assert.equal(req.query.withBuild, 'false');
+  } finally {
+    await stub.close();
+  }
+});
+
+test('scaffold() maps 422 to ok:false with the daemon error', async () => {
+  const stub = await startStub({
+    '/scaffold': { status: 422, body: { ok: false, error: 'provider "fly-machines" does not support trigger "pubsub"' } },
+  });
+  try {
+    const client = new DaemonClient({ baseUrl: stub.baseUrl });
+    const result = await client.scaffold({ provider: 'fly-machines', template: 'pubsub', lang: 'js', service: 'x' });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 422);
+    assert.match(result.error, /does not support trigger/);
+  } finally {
+    await stub.close();
+  }
+});
+
+test('invokeLocal() POSTs /invoke-local with the inline project + request in the body', async () => {
+  const stub = await startStub({
+    '/invoke-local': {
+      status: 200,
+      body: {
+        ok: true,
+        function: 'api',
+        runtime: 'nodejs20.x',
+        simulated: true,
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: { message: 'Hello from RunFabric' },
+      },
+    },
+  });
+  try {
+    const client = new DaemonClient({ baseUrl: stub.baseUrl });
+    const result = await client.invokeLocal({
+      runfabricYaml: 'service: demo\n',
+      handlerCode: 'exports.handler = async () => ({ statusCode: 200 });',
+      function: 'api',
+      stage: 'dev',
+      request: { method: 'POST', path: '/api', body: '{"x":1}' },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.data.simulated, true);
+    assert.equal(result.data.statusCode, 200);
+    assert.equal(result.data.body.message, 'Hello from RunFabric');
+    const req = stub.seen[0];
+    assert.equal(req.method, 'POST');
+    assert.equal(req.path, '/invoke-local');
+    // The whole project rides the JSON body, not query params.
+    assert.equal(req.body.runfabricYaml, 'service: demo\n');
+    assert.equal(req.body.function, 'api');
+    assert.equal(req.body.request.method, 'POST');
+    assert.equal(req.body.request.body, '{"x":1}');
+  } finally {
+    await stub.close();
+  }
+});
+
+test('invokeLocal() maps 422 to ok:false with the daemon error', async () => {
+  const stub = await startStub({
+    '/invoke-local': { status: 422, body: { ok: false, error: 'bootstrap: invalid config' } },
+  });
+  try {
+    const client = new DaemonClient({ baseUrl: stub.baseUrl });
+    const result = await client.invokeLocal({ runfabricYaml: 'nope' });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 422);
+    assert.match(result.error, /bootstrap/);
   } finally {
     await stub.close();
   }

@@ -221,7 +221,7 @@ func azureHostDefaultKey(ctx context.Context, cfg sdkprovider.Config, resourceGr
 	if strings.TrimSpace(resourceGroup) == "" || strings.TrimSpace(appName) == "" {
 		resourceGroup, appName = azureDeploymentContext(cfg, "", "")
 	}
-	mgmtURL := fmt.Sprintf("%s/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Web/sites/%s/host/default/listKeys?api-version=2022-03-01", strings.TrimRight(azureManagementAPI, "/"), subID, url.PathEscape(resourceGroup), url.PathEscape(appName))
+	mgmtURL := fmt.Sprintf("%s/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Web/sites/%s/host/default/listKeys?api-version=2022-03-01", azureManagementBase(), subID, url.PathEscape(resourceGroup), url.PathEscape(appName))
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, mgmtURL, bytes.NewReader([]byte("{}")))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -335,7 +335,7 @@ func azureGetAppSettings(ctx context.Context, cfg sdkprovider.Config, resourceGr
 	if strings.TrimSpace(resourceGroup) == "" || strings.TrimSpace(appName) == "" {
 		resourceGroup, appName = azureDeploymentContext(cfg, "", "")
 	}
-	mgmtURL := fmt.Sprintf("%s/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Web/sites/%s/config/appsettings/list?api-version=2022-03-01", strings.TrimRight(azureManagementAPI, "/"), subID, url.PathEscape(resourceGroup), url.PathEscape(appName))
+	mgmtURL := fmt.Sprintf("%s/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Web/sites/%s/config/appsettings/list?api-version=2022-03-01", azureManagementBase(), subID, url.PathEscape(resourceGroup), url.PathEscape(appName))
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, mgmtURL, bytes.NewReader([]byte("{}")))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -369,7 +369,7 @@ func azurePutAppSettings(ctx context.Context, cfg sdkprovider.Config, resourceGr
 	}
 	body := map[string]any{"properties": settings}
 	bodyBytes, _ := json.Marshal(body)
-	mgmtURL := fmt.Sprintf("%s/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Web/sites/%s/config/appsettings?api-version=2022-03-01", strings.TrimRight(azureManagementAPI, "/"), subID, url.PathEscape(resourceGroup), url.PathEscape(appName))
+	mgmtURL := fmt.Sprintf("%s/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Web/sites/%s/config/appsettings?api-version=2022-03-01", azureManagementBase(), subID, url.PathEscape(resourceGroup), url.PathEscape(appName))
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, mgmtURL, bytes.NewReader(bodyBytes))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")

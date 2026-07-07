@@ -40,12 +40,29 @@ enforcement. On the CLI side: `--version`, `doctor`, `init` scaffolding, and the
 
 ## Provider cloud tests
 
-The `aws-lambda` provider is tested against a [Floci](https://floci.io) emulator
-directly through its `Provider{}` contract (no CLI/daemon binaries), in
-`extensions/providers/aws-lambda/floci_test.go`:
+Providers are tested against [Floci](https://floci.io) emulators directly through
+their contract methods (no CLI/daemon binaries), each in a `floci_test.go` behind
+the `floci` build tag so they travel with the provider if it is extracted. What
+each covers is bounded by what its emulator supports:
+
+| Provider | Emulator | Lifecycle covered |
+| --- | --- | --- |
+| `aws-lambda` | `floci/floci` (4566) | Deploy → Invoke → Logs → FetchMetrics → Step Functions → rollback → Remove (real Lambda runtime) |
+| `gcp-functions` | `floci/floci-gcp` (4588) | GCS source upload → Deploy → Remove (Cloud Functions **control plane only** — floci-gcp has no runtime, so no invoke/logs/metrics) |
+| `azure-functions` | `floci/floci-az` (4577) | Deploy → Remove (ARM `Microsoft.Web/sites` **control plane**) |
+
+The Azure provider's real code-push (Kudu zip deploy) + invoke is validated
+separately by `TestDeployPushesCodeAndInvokeReturnsPayload` (a normal unit test
+against an ARM+Kudu+function httptest double) because floci-az does not implement
+Kudu and its runtime image has no arm64 manifest.
 
 ```bash
-make test-floci        # RUNFABRIC_FLOCI_DOCKER=1 starts a Floci container per test
-# or point at a running emulator:
-AWS_ENDPOINT_URL=http://localhost:4566 go test -tags floci ./extensions/providers/aws-lambda/... -run Floci -v
+make test-floci             # all providers, RUNFABRIC_FLOCI_DOCKER=1 starts a container per test
+make test-floci-aws         # or one cloud at a time
+make test-floci-gcp
+make test-floci-az
+# or point the matching endpoint at a running emulator:
+AWS_ENDPOINT_URL=http://localhost:4566   go test -tags floci ./extensions/providers/aws-lambda/...   -run Floci -v
+GCP_ENDPOINT_URL=http://localhost:4588   go test -tags floci ./extensions/providers/gcp-functions/... -run Floci -v
+AZURE_ENDPOINT_URL=http://localhost:4577 go test -tags floci ./extensions/providers/azure-functions/... -run Floci -v
 ```

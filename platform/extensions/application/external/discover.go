@@ -58,6 +58,17 @@ type pluginYAML struct {
 		Placeholder string `yaml:"placeholder"`
 		Fallback    string `yaml:"fallback"`
 	} `yaml:"credentials"`
+	Scaffold struct {
+		Comment       string            `yaml:"comment"`
+		Entry         string            `yaml:"entry"`
+		EntryFile     string            `yaml:"entryFile"`
+		Sample        string            `yaml:"sample"`
+		RuntimeByLang map[string]string `yaml:"runtimeByLang"`
+		Config        []struct {
+			Key   string `yaml:"key"`
+			Value string `yaml:"value"`
+		} `yaml:"config"`
+	} `yaml:"scaffold"`
 }
 
 type InvalidPlugin struct {
@@ -365,6 +376,21 @@ func discoverKindDir(kindRoot string, kind manifests.PluginKind, opts DiscoverOp
 				Fallback:    c.Fallback,
 			})
 		}
+		var scaffold *manifests.ScaffoldSpec
+		if s := m.Scaffold; s.Comment != "" || s.Entry != "" || s.EntryFile != "" || s.Sample != "" || len(s.RuntimeByLang) > 0 || len(s.Config) > 0 {
+			var cfg []manifests.ScaffoldConfigLine
+			for _, c := range s.Config {
+				cfg = append(cfg, manifests.ScaffoldConfigLine{Key: c.Key, Value: c.Value})
+			}
+			scaffold = &manifests.ScaffoldSpec{
+				Comment:       s.Comment,
+				Entry:         s.Entry,
+				EntryFile:     s.EntryFile,
+				Sample:        s.Sample,
+				RuntimeByLang: s.RuntimeByLang,
+				Config:        cfg,
+			}
+		}
 		out = append(out, &manifests.PluginManifest{
 			ID:                m.ID,
 			Kind:              kind,
@@ -376,6 +402,7 @@ func discoverKindDir(kindRoot string, kind manifests.PluginKind, opts DiscoverOp
 			SupportsTriggers:  append([]string(nil), m.SupportsTriggers...),
 			SupportsResources: append([]string(nil), m.SupportsResources...),
 			Credentials:       credentials,
+			Scaffold:          scaffold,
 			Source:            "external",
 			Version:           m.Version,
 			Path:              bestPath,

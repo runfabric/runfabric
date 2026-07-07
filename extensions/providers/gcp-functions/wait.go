@@ -17,7 +17,7 @@ import (
 func waitUntilFunctionReady(ctx context.Context, operationName string) error {
 	// Up to 60 attempts × 5s = 5 minutes.
 	return retryWithBackoff(ctx, 60, 5*time.Second, func() error {
-		url := gcpAPI + "/" + operationName
+		url := gcpHost(gcpAPI) + "/" + operationName
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
 			return err

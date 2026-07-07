@@ -17,13 +17,7 @@ type Logger struct{}
 
 func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function string, receipt any) (*sdkprovider.LogsResult, error) {
 	auth := sdkprovider.Env("IBM_OPENWHISK_AUTH")
-	apihost := sdkprovider.Env("IBM_OPENWHISK_API_HOST")
-	if apihost == "" {
-		apihost = "https://us-south.functions.cloud.ibm.com"
-	}
-	if !strings.HasPrefix(apihost, "http") {
-		apihost = "https://" + apihost
-	}
+	apihost := openwhiskAPIBase()
 	namespace := sdkprovider.Env("IBM_OPENWHISK_NAMESPACE")
 	if namespace == "" {
 		namespace = "_"

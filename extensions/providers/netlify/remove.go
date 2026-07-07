@@ -19,7 +19,7 @@ func (Remover) Remove(ctx context.Context, cfg sdkprovider.Config, stage, root s
 	if siteID == "" {
 		return nil, fmt.Errorf("receipt missing site_id; cannot remove Netlify site")
 	}
-	url := netlifyAPI + "/sites/" + siteID
+	url := netlifyAPIBase() + "/sites/" + siteID
 	if err := sdkprovider.DoDelete(ctx, url, "NETLIFY_AUTH_TOKEN"); err != nil {
 		return nil, fmt.Errorf("netlify delete site: %w", err)
 	}

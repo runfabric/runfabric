@@ -158,6 +158,112 @@ export interface DeployPayload {
   [key: string]: unknown;
 }
 
+/** One plugin's init scaffold declaration (provider or state backend). */
+export interface ExtensionScaffold {
+  comment?: string;
+  entry?: string;
+  entryFile?: string;
+  sample?: string;
+  runtimeByLang?: Record<string, string>;
+  config?: Array<{ key: string; value: string }>;
+}
+
+/** One credential env var a plugin declares. */
+export interface ExtensionCredential {
+  envKey: string;
+  header?: string;
+  required?: boolean;
+  mirror?: string;
+  placeholder?: string;
+  fallback?: string;
+}
+
+/** One plugin in the GET /extensions catalog. */
+export interface ExtensionPlugin {
+  id: string;
+  name?: string;
+  description?: string;
+  source: string;
+  version?: string;
+  capabilities?: string[];
+  supportsRuntime?: string[];
+  supportsTriggers?: string[];
+  credentials?: ExtensionCredential[];
+  scaffold?: ExtensionScaffold;
+}
+
+/** One plugin kind (provider, state, router, …) and its selectable plugins. */
+export interface ExtensionKind {
+  kind: string;
+  configKey: string;
+  default?: string;
+  note?: string;
+  plugins: ExtensionPlugin[];
+}
+
+/** GET /extensions response: the whole plugin catalog. */
+export interface ExtensionsCatalog {
+  kinds: ExtensionKind[];
+}
+
+/** Inputs to POST /scaffold (empty fields take `runfabric init` defaults). */
+export interface ScaffoldOptions {
+  provider?: string;
+  template?: string;
+  lang?: string;
+  stateBackend?: string;
+  service?: string;
+  secretManager?: string;
+  pm?: string;
+  withCI?: string;
+  withBuild?: boolean;
+}
+
+/** POST /scaffold response: the generated project files + resolved entry/runtime. */
+export interface ScaffoldPayload {
+  ok: boolean;
+  files: Record<string, string>;
+  entry: string;
+  runtime: string;
+}
+
+/** One HTTP-shaped invocation for POST /invoke-local (empty method/path → GET "/"). */
+export interface LocalInvokeHttpRequest {
+  method?: string;
+  path?: string;
+  query?: Record<string, string>;
+  headers?: Record<string, string>;
+  /** Raw request body (sent as-is to the handler). */
+  body?: string;
+}
+
+/**
+ * Inputs to POST /invoke-local: an inline project (its runfabric.yml + single
+ * handler file) plus one invocation. No workspace/deploy required.
+ */
+export interface LocalInvokeOptions {
+  runfabricYaml: string;
+  handlerCode?: string;
+  /** Function to run; omit when the config defines exactly one. */
+  function?: string;
+  stage?: string;
+  request?: LocalInvokeHttpRequest;
+}
+
+/** POST /invoke-local response: the simulator's single-invocation result. */
+export interface LocalInvokePayload {
+  ok: boolean;
+  function: string;
+  runtime: string;
+  /** True when the handler was really executed (Node); false = echo fallback. */
+  simulated: boolean;
+  statusCode: number;
+  headers?: Record<string, string>;
+  /** Handler response body (parsed JSON when the handler returned JSON, else a string). */
+  body?: unknown;
+  error?: string;
+}
+
 export declare class DaemonClient {
   constructor(options?: DaemonClientOptions);
   readonly baseUrl: string;
@@ -186,6 +292,20 @@ export declare class DaemonClient {
   /** Retained past receipts for one stage, newest first. */
   releaseHistory(request?: EngineRequest): Promise<DaemonResult<unknown>>;
 
+  /**
+   * The engine's plugin catalog (GET /extensions): every plugin kind with the
+   * runfabric.yml key that selects it and the available plugins' runtimes,
+   * triggers, credential surface, and `runfabric init` scaffold — enough to drive
+   * a metadata-driven New Project flow without hardcoding provider knowledge.
+   */
+  extensions(): Promise<DaemonResult<ExtensionsCatalog>>;
+
+  /**
+   * Generate a starter project (runfabric.yml + handler + .env.example + …) from
+   * provider/state metadata, no workspace required (POST /scaffold).
+   */
+  scaffold(opts?: ScaffoldOptions): Promise<DaemonResult<ScaffoldPayload>>;
+
   /** Multi-cloud deploy across fabric.targets; data is the fabric state. */
   fabricDeploy(request?: EngineRequest): Promise<DaemonResult<{
     service?: string;
@@ -205,6 +325,14 @@ export declare class DaemonClient {
 
   /** Invoke one deployed function (or workflow target) with a JSON payload. */
   invoke(request: InvokeRequest): Promise<DaemonResult<unknown>>;
+
+  /**
+   * Run one function locally through the built-in simulator WITHOUT deploying
+   * (POST /invoke-local). Ships the project inline; the daemon materializes a
+   * throwaway workspace, executes once, and cleans up. Real execution is
+   * Node-only (single-file handlers, no third-party deps); other runtimes echo.
+   */
+  invokeLocal(opts: LocalInvokeOptions): Promise<DaemonResult<LocalInvokePayload>>;
 
   /** Provider + local logs for one function ("" = all functions). */
   logs(request?: LogsRequest): Promise<DaemonResult<unknown>>;

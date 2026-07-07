@@ -14,7 +14,7 @@ import (
 // waitUntilDeploymentReady polls GET /v13/deployments/{id} until readyState == "READY".
 // Budget: 60 attempts × 5s = 5 minutes.
 func waitUntilDeploymentReady(ctx context.Context, deploymentID, teamID string) error {
-	url := vercelAPI + "/v13/deployments/" + deploymentID
+	url := vercelAPIBase() + "/v13/deployments/" + deploymentID
 	if teamID != "" {
 		url += "?teamId=" + teamID
 	}

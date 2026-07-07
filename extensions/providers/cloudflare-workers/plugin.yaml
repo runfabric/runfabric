@@ -17,6 +17,22 @@ credentials:
   - envKey: CLOUDFLARE_API_TOKEN
     header: X-Provider-Cloudflare-Api-Token
     required: true
+# scaffold shapes `runfabric init` output for this provider. Cloudflare Workers
+# deploy a single worker.js script rather than a Lambda-style handler.
+scaffold:
+  comment: "Provider: cloudflare-workers — set CLOUDFLARE_*; supports http, cron"
+  entry: worker.fetch
+  entryFile: worker.js
+  sample: |
+    export default {
+      async fetch(request) {
+        const body = await request.text();
+        return new Response(
+          JSON.stringify({ message: "Hello from RunFabric", echo: body }),
+          { headers: { "content-type": "application/json" } },
+        );
+      },
+    };
 permissions:
   fs: true
   env: true

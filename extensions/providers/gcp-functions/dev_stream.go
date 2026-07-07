@@ -93,7 +93,7 @@ func RedirectToTunnel(ctx context.Context, cfg sdkprovider.Config, stage, tunnel
 		return state, nil
 	}
 
-	getURL := gcpFunctionsAPI + "/" + resource
+	getURL := gcpHost(gcpFunctionsAPI) + "/" + resource
 	getReq, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 	if err != nil {
 		state.EffectiveMode = "lifecycle-only"
@@ -146,7 +146,7 @@ func RedirectToTunnel(ctx context.Context, cfg sdkprovider.Config, stage, tunnel
 		state.StatusMessage = fmt.Sprintf("provider-side mutation skipped: could not encode patch request: %v", err)
 		return state, nil
 	}
-	patchURL := gcpFunctionsAPI + "/" + resource + "?updateMask=serviceConfig.environmentVariables"
+	patchURL := gcpHost(gcpFunctionsAPI) + "/" + resource + "?updateMask=serviceConfig.environmentVariables"
 	patchReq, err := http.NewRequestWithContext(ctx, http.MethodPatch, patchURL, strings.NewReader(string(patchBytes)))
 	if err != nil {
 		state.EffectiveMode = "lifecycle-only"
@@ -211,7 +211,7 @@ func (s *DevStreamState) Restore(ctx context.Context, region string) error {
 	if err != nil {
 		return err
 	}
-	patchURL := gcpFunctionsAPI + "/" + s.FunctionResource + "?updateMask=serviceConfig.environmentVariables"
+	patchURL := gcpHost(gcpFunctionsAPI) + "/" + s.FunctionResource + "?updateMask=serviceConfig.environmentVariables"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, patchURL, strings.NewReader(string(b)))
 	if err != nil {
 		return err

@@ -1,0 +1,57 @@
+name: floci
+
+# Provider integration tests against Floci cloud emulators. These start Docker
+# containers and pull large emulator images, so they are NOT run on every PR —
+# trigger manually (workflow_dispatch) or on the nightly schedule. GitHub's
+# ubuntu runners are amd64 with Docker available, so all three lanes work here
+# (each test self-starts its emulator via RUNFABRIC_FLOCI_DOCKER=1, set by the
+# Makefile target).
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "0 3 * * *" # nightly at 03:00 UTC
+
+jobs:
+  floci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cloud: aws
+            target: test-floci-aws
+          - cloud: gcp
+            target: test-floci-gcp
+          - cloud: azure
+            target: test-floci-az
+    name: floci-${{ matrix.cloud }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Cache Go modules and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install dependencies
+        run: go mod download
+
+      # Creates the Floci container (RUNFABRIC_FLOCI_DOCKER=1) and runs the
+      # provider's floci_test.go lifecycle against it. See Makefile + the per-lane
+      # coverage notes in platform/test/e2e/README.md.
+      - name: Run Floci lane (${{ matrix.cloud }})
+        run: make ${{ matrix.target }}

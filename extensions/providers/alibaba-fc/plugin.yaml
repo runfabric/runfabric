@@ -23,4 +23,7 @@ credentials:
   - envKey: ALIBABA_FC_REGION
     header: X-Provider-Alibaba-Region
     placeholder: "cn-hangzhou"
+# scaffold shapes `runfabric init` output for this provider (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Provider: alibaba-fc — see docs for credentials and trigger support"
 permissions: { fs: true, env: true, network: true, cloud: true }

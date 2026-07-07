@@ -11,6 +11,9 @@ capabilities:
   - invoke
 supportsRuntime:
   - python
+# scaffold: uniform init-scaffold surface across plugin kinds (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Runtime: python — Python build and invoke"
 permissions:
   fs: true
   env: true

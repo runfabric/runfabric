@@ -15,6 +15,9 @@ credentials:
     placeholder: "https://api.nsone.net"
 # fallback = native NS1 key, so existing NS1 setups work without the
 # router-specific var. Per-request headers ride the shared router group.
+# scaffold: uniform init-scaffold surface across plugin kinds (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Router: ns1 — NS1 DNS for fabric active-active routing"
 permissions:
   fs: false
   env: true

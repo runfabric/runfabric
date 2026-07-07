@@ -165,12 +165,35 @@ func ProviderCredentials(providerID string) []catalog.CredentialVar {
 	return nil
 }
 
+// ProviderScaffold returns the `runfabric init` scaffolding hint a built-in
+// provider declares (zero value for unknown providers, meaning generic language
+// defaults). This is the single source of truth for the provider-specific parts of
+// project scaffolding — entry file/shape, runtime id, region env, and comment —
+// consumed by the CLI init command.
+func ProviderScaffold(providerID string) catalog.ProviderScaffold {
+	id := strings.TrimSpace(providerID)
+	for _, e := range orderedProviderEntries() {
+		if e.Descriptor.ID == id {
+			return e.Descriptor.Scaffold
+		}
+	}
+	return catalog.ProviderScaffold{}
+}
+
 // StateBackendCredentials returns the credential env vars a built-in state
 // backend declares (nil for unknown kinds or backends needing none, like
 // local/sqlite). Vars with a Header (X-State-*) may also arrive per daemon
 // request, like provider credentials.
 func StateBackendCredentials(kind string) []catalog.CredentialVar {
 	return toCredentialVars(builtinstates.BuiltinStateCredentials()[strings.TrimSpace(kind)])
+}
+
+// StateBackendScaffold returns the backend: config-block lines a built-in state
+// backend contributes to `runfabric init` (nil for local/unknown). Single source
+// of truth for the state part of scaffolding, so init.go carries no per-backend
+// switch — the state-side counterpart of ProviderScaffold.
+func StateBackendScaffold(kind string) []catalog.StateConfigLine {
+	return toStateConfigLines(builtinStateScaffoldRaw()[strings.TrimSpace(kind)])
 }
 
 // AllStateBackendCredentials returns every built-in state backend's credential

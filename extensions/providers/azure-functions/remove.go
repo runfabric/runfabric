@@ -32,7 +32,7 @@ func (Remover) Remove(ctx context.Context, cfg sdkprovider.Config, stage, root s
 	if subID == "" || sdkprovider.Env("AZURE_ACCESS_TOKEN") == "" {
 		return &sdkprovider.RemoveResult{Provider: "azure-functions", Removed: true}, nil
 	}
-	url := fmt.Sprintf("https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Web/sites/%s?api-version=2022-03-01", subID, rg, appName)
+	url := fmt.Sprintf("%s/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Web/sites/%s?api-version=2022-03-01", azureManagementBase(), subID, rg, appName)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+sdkprovider.Env("AZURE_ACCESS_TOKEN"))
 	resp, err := sdkprovider.DefaultClient.Do(req)

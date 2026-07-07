@@ -18,7 +18,7 @@ func (Remover) Remove(ctx context.Context, cfg sdkprovider.Config, stage, root s
 	if appName == "" {
 		appName = fmt.Sprintf("%s-%s", service, stage)
 	}
-	url := flyAPI + "/apps/" + appName + "?force=true"
+	url := flyAPIBase() + "/apps/" + appName + "?force=true"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	req.Header.Set("Authorization", "Bearer "+sdkprovider.Env("FLY_API_TOKEN"))
 	resp, err := sdkprovider.DefaultClient.Do(req)

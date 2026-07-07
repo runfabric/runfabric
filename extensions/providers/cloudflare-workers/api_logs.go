@@ -33,7 +33,7 @@ func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function 
 			return &sdkprovider.LogsResult{Provider: "cloudflare-workers", Function: function, Lines: lines}, nil
 		}
 	}
-	url := cfAPI + "/accounts/" + accountID + "/workers/scripts/" + workerName + "/tail"
+	url := cloudflareAPIBase() + "/accounts/" + accountID + "/workers/scripts/" + workerName + "/tail"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("Authorization", "Bearer "+sdkprovider.Env("CLOUDFLARE_API_TOKEN"))
 	resp, err := sdkprovider.DefaultClient.Do(req)

@@ -20,7 +20,7 @@ func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function 
 	if appName == "" {
 		appName = fmt.Sprintf("%s-%s", service, stage)
 	}
-	url := flyAPI + "/apps/" + appName + "/logs"
+	url := flyAPIBase() + "/apps/" + appName + "/logs"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("Authorization", "Bearer "+sdkprovider.Env("FLY_API_TOKEN"))
 	resp, err := sdkprovider.DefaultClient.Do(req)

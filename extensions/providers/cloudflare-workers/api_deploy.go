@@ -59,7 +59,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	_ = w.WriteField("main", "worker.js")
 	_ = w.Close()
 
-	url := cfAPI + "/accounts/" + accountID + "/workers/scripts/" + name
+	url := cloudflareAPIBase() + "/accounts/" + accountID + "/workers/scripts/" + name
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPut, url, &buf)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", w.FormDataContentType())
@@ -74,7 +74,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	}
 	result := sdkprovider.BuildDeployResult("cloudflare-workers", cfg, stage)
 	resourceID := fmt.Sprintf("accounts/%s/workers/scripts/%s", accountID, name)
-	result.Outputs["url"] = fmt.Sprintf("https://%s.workers.dev", name)
+	result.Outputs["url"] = cloudflareWorkerURL(name)
 	result.Metadata["worker"] = name
 	for fnName := range functions {
 		deployed := result.Functions[fnName]

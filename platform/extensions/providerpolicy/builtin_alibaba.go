@@ -20,6 +20,7 @@ func init() {
 			Description:            "Deploy and run functions on Alibaba Cloud Function Compute",
 			IncludeBuiltinManifest: true,
 			Credentials:            toCredentialVars(alibabaprovider.CredentialVars),
+			Scaffold:               toScaffold(alibabaprovider.Scaffold),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream: adaptPrepareDevStream(alibabaprovider.PrepareDevStreamPolicy),

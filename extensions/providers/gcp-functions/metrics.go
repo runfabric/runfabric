@@ -117,7 +117,7 @@ func gcpListEntriesOnce(ctx context.Context, project, filter string, pageSize in
 		"orderBy":       "timestamp desc",
 	}
 	bodyBytes, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, gcpLoggingEntriesAPI, strings.NewReader(string(bodyBytes)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, gcpHost(gcpLoggingEntriesAPI), strings.NewReader(string(bodyBytes)))
 	if err != nil {
 		return nil, err
 	}

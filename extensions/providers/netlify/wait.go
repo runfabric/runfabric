@@ -14,7 +14,7 @@ import (
 // waitUntilDeployReady polls GET /api/v1/deploys/{id} until state == "ready".
 // Budget: 60 attempts × 5s = 5 minutes.
 func waitUntilDeployReady(ctx context.Context, deployID string) error {
-	url := netlifyAPI + "/deploys/" + deployID
+	url := netlifyAPIBase() + "/deploys/" + deployID
 	for attempt := 0; attempt < 60; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/runfabric/runfabric/internal/cli/common"
+	"github.com/runfabric/runfabric/internal/cli/project"
 	daemonserver "github.com/runfabric/runfabric/platform/daemon/server"
 	"github.com/runfabric/runfabric/platform/workflow/app"
 	"github.com/spf13/cobra"
@@ -78,6 +79,15 @@ func NewDaemonCmd(opts *common.GlobalOptions, use string) *cobra.Command {
 			})
 
 			handler := srv.Handler(func(mux *http.ServeMux, authorize func(http.HandlerFunc) http.HandlerFunc) {
+				// POST /scaffold generates a starter project (runfabric.yml + handler +
+				// .env.example + …) from provider/state metadata — the engine surface
+				// behind the PaaS New Project flow. Read-only generation, no config/
+				// workspace; authorized like other routes to respect --api-key.
+				mux.HandleFunc("POST /scaffold", authorize(handleScaffold))
+				// POST /invoke-local runs one function through the local simulator
+				// from an inline config + handler — no cloud deploy, no workspace on
+				// disk. Powers the PaaS "Run locally (test before deploy)" action.
+				mux.HandleFunc("POST /invoke-local", authorize(handleInvokeLocal))
 				if withDashboard {
 					// Mutating action routes must go through the same auth as the
 					// config API; without authorize() they would bypass --api-key.
@@ -450,4 +460,212 @@ func writeDaemonActionJSON(w http.ResponseWriter, result any, err error) {
 	}
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "result": result})
+}
+
+// handleScaffold serves POST /scaffold: generate a starter project's files from
+// provider/state metadata (no filesystem, no workspace config). Options come from
+// query params; withBuild defaults to true (matching `runfabric init`).
+func handleScaffold(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	res, err := project.Scaffold(project.ScaffoldOptions{
+		Provider:      q.Get("provider"),
+		Template:      q.Get("template"),
+		Lang:          q.Get("lang"),
+		StateBackend:  q.Get("stateBackend"),
+		Service:       q.Get("service"),
+		SecretManager: q.Get("secretManager"),
+		PM:            q.Get("pm"),
+		WithBuild:     q.Get("withBuild") != "false",
+		WithCI:        q.Get("withCI"),
+	})
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	files := make(map[string]string, len(res.Files))
+	for _, f := range res.Files {
+		files[f.Path] = f.Content
+	}
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok": true, "files": files, "entry": res.Entry, "runtime": res.Runtime,
+	})
+}
+
+// invokeLocalBody is the POST /invoke-local request: an inline project (its
+// runfabric.yml + single handler file) plus one HTTP-shaped invocation. There is
+// no workspace on disk — the daemon materializes a throwaway one, runs the local
+// simulator once, and removes it.
+type invokeLocalBody struct {
+	RunfabricYaml string `json:"runfabricYaml"`
+	HandlerCode   string `json:"handlerCode"`
+	Function      string `json:"function"`
+	Stage         string `json:"stage"`
+	Request       struct {
+		Method  string            `json:"method"`
+		Path    string            `json:"path"`
+		Query   map[string]string `json:"query"`
+		Headers map[string]string `json:"headers"`
+		Body    string            `json:"body"`
+	} `json:"request"`
+}
+
+func writeInvokeLocalErr(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": msg})
+}
+
+// handleInvokeLocal serves POST /invoke-local: execute one function locally from
+// an inline config + handler, WITHOUT deploying. It writes a temp workspace,
+// bootstraps the config, materializes the handler at its declared path so the
+// simulator can require/run it, invokes once, and cleans up. Real execution is
+// Node-only (the built-in simulator's constraint); other runtimes echo request
+// metadata (simulated=false). Third-party deps are not installed — single-file
+// handlers only.
+func handleInvokeLocal(w http.ResponseWriter, r *http.Request) {
+	var body invokeLocalBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeInvokeLocalErr(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(body.RunfabricYaml) == "" {
+		writeInvokeLocalErr(w, http.StatusUnprocessableEntity, "runfabricYaml is required")
+		return
+	}
+	stage := strings.TrimSpace(body.Stage)
+	if stage == "" {
+		stage = "dev"
+	}
+
+	dir, err := os.MkdirTemp("", "rf-invoke-local-*")
+	if err != nil {
+		writeInvokeLocalErr(w, http.StatusInternalServerError, "temp workspace: "+err.Error())
+		return
+	}
+	defer os.RemoveAll(dir)
+	cfgPath := filepath.Join(dir, "runfabric.yml")
+	if err := os.WriteFile(cfgPath, []byte(body.RunfabricYaml), 0o600); err != nil {
+		writeInvokeLocalErr(w, http.StatusInternalServerError, "write config: "+err.Error())
+		return
+	}
+
+	ctx, err := app.Bootstrap(cfgPath, stage, "")
+	if err != nil {
+		writeInvokeLocalErr(w, http.StatusUnprocessableEntity, "bootstrap: "+err.Error())
+		return
+	}
+
+	fnName := strings.TrimSpace(body.Function)
+	if fnName == "" {
+		if len(ctx.Config.Functions) == 1 {
+			for n := range ctx.Config.Functions {
+				fnName = n
+			}
+		} else {
+			writeInvokeLocalErr(w, http.StatusUnprocessableEntity, "function is required (config defines multiple functions)")
+			return
+		}
+	}
+	fnCfg, ok := ctx.Config.Functions[fnName]
+	if !ok {
+		writeInvokeLocalErr(w, http.StatusUnprocessableEntity, fmt.Sprintf("function %q not found in config", fnName))
+		return
+	}
+
+	runtime := fnCfg.Runtime
+	if runtime == "" {
+		runtime = ctx.Config.Provider.Runtime
+	}
+
+	// Materialize the handler at the path the config declares, so the simulator's
+	// require()/import resolves it against the temp WorkDir.
+	if strings.TrimSpace(body.HandlerCode) != "" {
+		if hp := handlerFilePath(dir, fnCfg.Handler, runtime); hp != "" {
+			if err := os.MkdirAll(filepath.Dir(hp), 0o755); err != nil {
+				writeInvokeLocalErr(w, http.StatusInternalServerError, "handler dir: "+err.Error())
+				return
+			}
+			if err := os.WriteFile(hp, []byte(body.HandlerCode), 0o600); err != nil {
+				writeInvokeLocalErr(w, http.StatusInternalServerError, "write handler: "+err.Error())
+				return
+			}
+		}
+	}
+
+	simID, err := app.EnsureLocalSimulator(ctx)
+	if err != nil {
+		writeInvokeLocalErr(w, http.StatusInternalServerError, "simulator: "+err.Error())
+		return
+	}
+
+	res, err := app.SimulateOne(ctx, simID, fnName, app.LocalInvokeRequest{
+		Method:  body.Request.Method,
+		Path:    body.Request.Path,
+		Query:   body.Request.Query,
+		Headers: body.Request.Headers,
+		Body:    []byte(body.Request.Body),
+	})
+	if err != nil {
+		writeInvokeLocalErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+
+	payload := map[string]any{
+		"ok":         true,
+		"function":   fnName,
+		"runtime":    runtime,
+		"simulated":  isNodeRuntimeName(runtime) && strings.TrimSpace(body.HandlerCode) != "",
+		"statusCode": res.StatusCode,
+		"headers":    res.Headers,
+	}
+	if len(res.Body) > 0 {
+		payload["body"] = json.RawMessage(res.Body)
+	} else {
+		payload["body"] = nil
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+// handlerFilePath derives the on-disk file for a handler ref (e.g. "handler.handler"
+// or "src/index.handler") under workDir, using the runtime to pick the extension.
+// Returns "" for an empty ref or an unknown runtime (nothing to materialize).
+func handlerFilePath(workDir, handlerRef, runtime string) string {
+	handlerRef = strings.TrimSpace(handlerRef)
+	if handlerRef == "" {
+		return ""
+	}
+	// The simulator strips the last dotted segment (the exported symbol) to get
+	// the module path; the rest is the file, sans extension.
+	modulePath := handlerRef
+	if i := strings.LastIndex(handlerRef, "."); i > 0 {
+		modulePath = handlerRef[:i]
+	}
+	ext := handlerRuntimeExt(runtime)
+	if ext == "" {
+		return ""
+	}
+	return filepath.Join(workDir, filepath.FromSlash(modulePath)+ext)
+}
+
+func handlerRuntimeExt(runtime string) string {
+	r := strings.ToLower(runtime)
+	switch {
+	case strings.HasPrefix(r, "node"):
+		return ".js"
+	case strings.HasPrefix(r, "python"):
+		return ".py"
+	case strings.HasPrefix(r, "go"):
+		return ".go"
+	default:
+		return ""
+	}
+}
+
+func isNodeRuntimeName(runtime string) bool {
+	return strings.HasPrefix(strings.ToLower(runtime), "node")
 }

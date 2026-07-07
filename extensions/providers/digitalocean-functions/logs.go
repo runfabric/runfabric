@@ -23,7 +23,7 @@ func (Logger) Logs(ctx context.Context, cfg sdkprovider.Config, stage, function 
 			Lines:    []string{"No app_id in rv. Redeploy then run logs again."},
 		}, nil
 	}
-	url := doAPI + "/" + appID + "/logs?type=run"
+	url := digitaloceanAPIBase() + "/" + appID + "/logs?type=run"
 	lines, err := getLines(ctx, url, "DIGITALOCEAN_ACCESS_TOKEN")
 	if err != nil {
 		return &sdkprovider.LogsResult{

@@ -20,6 +20,7 @@ func init() {
 			Description:            "Deploy and run functions on Netlify Functions",
 			IncludeBuiltinManifest: true,
 			Credentials:            toCredentialVars(netlifyprovider.CredentialVars),
+			Scaffold:               toScaffold(netlifyprovider.Scaffold),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream: adaptPrepareDevStream(netlifyprovider.PrepareDevStreamPolicy),

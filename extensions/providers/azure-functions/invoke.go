@@ -16,9 +16,11 @@ type Invoker struct{}
 
 func (Invoker) Invoke(ctx context.Context, cfg sdkprovider.Config, stage, function string, payload []byte, receipt any) (*sdkprovider.InvokeResult, error) {
 	rv := sdkprovider.DecodeReceipt(receipt)
-	url := rv.Outputs["url"]
+	// Prefer the per-function URL (<app>/api/<fn>); the bare "url" output is the
+	// app root and is not directly invokable.
+	url := rv.Outputs["url_"+function]
 	if url == "" {
-		url = rv.Outputs["url_"+function]
+		url = rv.Outputs["url"]
 	}
 	if url == "" {
 		return nil, fmt.Errorf("no URL in receipt; redeploy first")

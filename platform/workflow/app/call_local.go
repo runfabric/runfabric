@@ -20,11 +20,7 @@ func CallLocal(configPath, stage, host, port string, serve bool) (any, error) {
 	}
 
 	addr := host + ":" + port
-	simID := resolveSimulatorIDForLocal(ctx)
-	if simID == "" {
-		simID = "local"
-	}
-	err = ctx.Extensions.EnsureSimulator(simID)
+	simID, err := EnsureLocalSimulator(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -60,11 +56,7 @@ func CallLocalServe(configPath, stage, host, port string) (shutdownChan <-chan s
 	}
 
 	addr := host + ":" + port
-	simID := resolveSimulatorIDForLocal(ctx)
-	if simID == "" {
-		simID = "local"
-	}
-	err = ctx.Extensions.EnsureSimulator(simID)
+	simID, err := EnsureLocalSimulator(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -105,12 +97,84 @@ func resolveSimulatorIDForLocal(ctx *AppContext) string {
 	return simID
 }
 
-func newLocalInvokeHandler(ctx *AppContext, simulatorID, fnName string) http.HandlerFunc {
+// EnsureLocalSimulator resolves the configured (or default "local") simulator
+// plugin and ensures it is loaded on the context, returning its id. Shared by
+// the dev server (call-local) and one-shot invocation (invoke-local).
+func EnsureLocalSimulator(ctx *AppContext) (string, error) {
+	simID := resolveSimulatorIDForLocal(ctx)
+	if simID == "" {
+		simID = "local"
+	}
+	if err := ctx.Extensions.EnsureSimulator(simID); err != nil {
+		return "", err
+	}
+	return simID, nil
+}
+
+// LocalInvokeRequest is one HTTP-shaped invocation of a function against a local
+// simulator (no cloud deploy). Empty Method/Path default to GET "/".
+type LocalInvokeRequest struct {
+	Method  string
+	Path    string
+	Query   map[string]string
+	Headers map[string]string
+	Body    []byte
+}
+
+// LocalInvokeResponse is the simulator's response for a single local invocation.
+// Body is the raw response payload (often JSON) as returned by the handler.
+type LocalInvokeResponse struct {
+	StatusCode int
+	Headers    map[string]string
+	Body       []byte
+}
+
+// SimulateOne invokes a single function once through the given simulator and
+// returns its response. It is the shared primitive behind both the dev server's
+// per-request handler and the daemon's one-shot POST /invoke-local: it reads the
+// function's handler ref + runtime from the resolved config and hands the
+// simulator the on-disk WorkDir so it can actually execute the handler.
+func SimulateOne(ctx *AppContext, simulatorID, fnName string, in LocalInvokeRequest) (*LocalInvokeResponse, error) {
+	// A zero-value fnCfg (function absent from the config) yields the simulator's
+	// echo fallback rather than an error; callers that require the function to
+	// exist (e.g. the daemon route) validate its presence before calling.
 	fnCfg := ctx.Config.Functions[fnName]
 	runtime := fnCfg.Runtime
 	if runtime == "" {
 		runtime = ctx.Config.Provider.Runtime
 	}
+	method := in.Method
+	if method == "" {
+		method = http.MethodGet
+	}
+	path := in.Path
+	if path == "" {
+		path = "/"
+	}
+	res, err := ctx.Extensions.Simulate(context.Background(), simulatorID, SimulatorInvokeRequest{
+		Service:    ctx.Config.Service,
+		Stage:      ctx.Stage,
+		Function:   fnName,
+		Method:     method,
+		Path:       path,
+		Query:      in.Query,
+		Headers:    in.Headers,
+		Body:       in.Body,
+		WorkDir:    ctx.RootDir,
+		HandlerRef: fnCfg.Handler,
+		Runtime:    runtime,
+	})
+	if err != nil {
+		return nil, err
+	}
+	status := res.StatusCode
+	if status == 0 {
+		status = http.StatusOK
+	}
+	return &LocalInvokeResponse{StatusCode: status, Headers: res.Headers, Body: res.Body}, nil
+}
+
+func newLocalInvokeHandler(ctx *AppContext, simulatorID, fnName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body := make([]byte, 0)
 		if r.Body != nil {
@@ -124,18 +188,12 @@ func newLocalInvokeHandler(ctx *AppContext, simulatorID, fnName string) http.Han
 		for k := range r.Header {
 			headers[k] = r.Header.Get(k)
 		}
-		res, err := ctx.Extensions.Simulate(r.Context(), simulatorID, SimulatorInvokeRequest{
-			Service:    ctx.Config.Service,
-			Stage:      ctx.Stage,
-			Function:   fnName,
-			Method:     r.Method,
-			Path:       r.URL.Path,
-			Query:      query,
-			Headers:    headers,
-			Body:       body,
-			WorkDir:    ctx.RootDir,
-			HandlerRef: fnCfg.Handler,
-			Runtime:    runtime,
+		res, err := SimulateOne(ctx, simulatorID, fnName, LocalInvokeRequest{
+			Method:  r.Method,
+			Path:    r.URL.Path,
+			Query:   query,
+			Headers: headers,
+			Body:    body,
 		})
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
@@ -143,17 +201,13 @@ func newLocalInvokeHandler(ctx *AppContext, simulatorID, fnName string) http.Han
 			_, _ = fmt.Fprintf(w, `{"error":%q,"function":%q}`, err.Error(), fnName)
 			return
 		}
-		status := res.StatusCode
-		if status == 0 {
-			status = http.StatusOK
-		}
 		for k, v := range res.Headers {
 			w.Header().Set(k, v)
 		}
 		if w.Header().Get("Content-Type") == "" {
 			w.Header().Set("Content-Type", "application/json")
 		}
-		w.WriteHeader(status)
+		w.WriteHeader(res.StatusCode)
 		if len(res.Body) == 0 {
 			payload, _ := json.Marshal(map[string]any{"message": "invoke local", "function": fnName})
 			_, _ = w.Write(payload)

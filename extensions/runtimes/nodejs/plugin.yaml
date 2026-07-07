@@ -11,6 +11,9 @@ capabilities:
   - invoke
 supportsRuntime:
   - nodejs
+# scaffold: uniform init-scaffold surface across plugin kinds (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Runtime: nodejs — Node.js build and invoke"
 permissions:
   fs: true
   env: true

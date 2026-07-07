@@ -246,7 +246,8 @@ func TestExecuteOperationExportsArtifactContext(t *testing.T) {
 	_, err := p.Remove(context.Background(), sdkprovider.RemoveRequest{
 		Root: "/workspace/service",
 		Config: sdkprovider.Config{
-			"service": "svc",
+			"service":  "svc",
+			"commands": map[string]any{"remove": "run-remove"},
 			"functions": []any{
 				map[string]any{"name": "api", "runtime": "nodejs20.x", "artifact": "dist/api.zip"},
 			},

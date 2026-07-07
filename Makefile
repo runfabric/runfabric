@@ -504,6 +504,33 @@ test-integration:
 conformance:
 	go test ./platform/test/conformance/... -v
 
+# Framework black-box E2E: exercises the real runfabric / runfabricd binaries
+# (CLI subprocess + daemon HTTP API) — control plane, durable workflows, and
+# trace/auth/path invariants. Provider-agnostic and fully offline. See
+# platform/test/e2e/README.md.
+e2e:
+	go test -tags e2e ./platform/test/e2e/... -v
+
+# Provider integration tests against Floci cloud emulators, driven through each
+# provider's contract directly (no CLI/daemon binaries). Coverage per cloud:
+#   aws-lambda   (floci)     — Deploy/Invoke/Logs/FetchMetrics/Recover/Remove + Step Functions
+#   gcp-functions(floci-gcp) — Deploy -> Remove (Cloud Functions control plane + GCS; floci-gcp has no runtime)
+#   azure-functions(floci-az)— Deploy -> Remove (ARM Microsoft.Web/sites control plane)
+# Set RUNFABRIC_FLOCI_DOCKER=1 to start a container per test, or point the
+# matching *_ENDPOINT_URL (AWS_ENDPOINT_URL / GCP_ENDPOINT_URL / AZURE_ENDPOINT_URL)
+# at a running emulator. Needs Docker for the container path.
+test-floci:
+	RUNFABRIC_FLOCI_DOCKER=1 go test -tags floci ./extensions/providers/... -run Floci -v -timeout 20m
+
+test-floci-aws:
+	RUNFABRIC_FLOCI_DOCKER=1 go test -tags floci ./extensions/providers/aws-lambda/... -run Floci -v -timeout 20m
+
+test-floci-gcp:
+	RUNFABRIC_FLOCI_DOCKER=1 go test -tags floci ./extensions/providers/gcp-functions/... -run Floci -v -timeout 20m
+
+test-floci-az:
+	RUNFABRIC_FLOCI_DOCKER=1 go test -tags floci ./extensions/providers/azure-functions/... -run Floci -v -timeout 20m
+
 # CLI command shortcuts (root layout).
 # Override with: make <target> EXAMPLE_CONFIG=path/to/runfabric.yml EXAMPLE_STAGE=dev
 CLI_RUN := go run ./cmd/runfabric

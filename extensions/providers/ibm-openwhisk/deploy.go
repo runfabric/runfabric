@@ -28,13 +28,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	if sdkprovider.Env("IBM_OPENWHISK_AUTH") == "" {
 		return nil, fmt.Errorf("IBM_OPENWHISK_AUTH is required (e.g. user:password or API key)")
 	}
-	apihost := sdkprovider.Env("IBM_OPENWHISK_API_HOST")
-	if apihost == "" {
-		apihost = "https://us-south.functions.cloud.ibm.com"
-	}
-	if !strings.HasPrefix(apihost, "http") {
-		apihost = "https://" + apihost
-	}
+	apihost := openwhiskAPIBase()
 	namespace := sdkprovider.Env("IBM_OPENWHISK_NAMESPACE")
 	if namespace == "" {
 		namespace = "_"

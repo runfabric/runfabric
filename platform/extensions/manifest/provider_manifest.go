@@ -87,6 +87,61 @@ func CredentialSpecs(creds []catalog.CredentialVar) []CredentialSpec {
 	return out
 }
 
+// ScaffoldConfigLine is one backend.<Key>: <Value> line a state backend
+// contributes to `runfabric init` (the state-side scaffold shape).
+type ScaffoldConfigLine struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+// ScaffoldSpec declares the parts of `runfabric init` scaffolding an extension
+// contributes. Providers use Comment/Entry/EntryFile/Sample/RuntimeByLang; state
+// backends use Config (the backend: block). External plugins declare it in
+// plugin.yaml's scaffold: block; built-ins declare it in code. Mirrors CredentialSpec.
+type ScaffoldSpec struct {
+	Comment       string               `json:"comment,omitempty"`
+	Entry         string               `json:"entry,omitempty"`
+	EntryFile     string               `json:"entryFile,omitempty"`
+	Sample        string               `json:"sample,omitempty"`
+	RuntimeByLang map[string]string    `json:"runtimeByLang,omitempty"`
+	Config        []ScaffoldConfigLine `json:"config,omitempty"`
+}
+
+// isZero reports whether the spec carries no scaffolding data.
+func (s ScaffoldSpec) isZero() bool {
+	return s.Comment == "" && s.Entry == "" && s.EntryFile == "" && s.Sample == "" &&
+		len(s.RuntimeByLang) == 0 && len(s.Config) == 0
+}
+
+// ScaffoldSpecFrom converts a providerpolicy catalog scaffold into a manifest spec,
+// returning nil when there is nothing to declare.
+func ScaffoldSpecFrom(s catalog.ProviderScaffold) *ScaffoldSpec {
+	spec := ScaffoldSpec{
+		Comment:       s.Comment,
+		Entry:         s.Entry,
+		EntryFile:     s.EntryFile,
+		Sample:        s.Sample,
+		RuntimeByLang: s.RuntimeByLang,
+	}
+	if spec.isZero() {
+		return nil
+	}
+	return &spec
+}
+
+// StateScaffoldSpec builds a manifest scaffold from state backend config lines,
+// returning nil when there are none (local).
+func StateScaffoldSpec(lines []catalog.StateConfigLine) *ScaffoldSpec {
+	if len(lines) == 0 {
+		return nil
+	}
+	cfg := make([]ScaffoldConfigLine, 0, len(lines))
+	for _, l := range lines {
+		cfg = append(cfg, ScaffoldConfigLine{Key: l.Key, Value: l.Value})
+	}
+	return &ScaffoldSpec{Config: cfg}
+}
+
 // Permissions describes what a plugin or addon is allowed to access (for validation and UX).
 type Permissions struct {
 	FS      bool `json:"fs,omitempty"`
@@ -107,6 +162,7 @@ type PluginManifest struct {
 	SupportsTriggers  []string         `json:"supportsTriggers,omitempty"`
 	SupportsResources []string         `json:"supportsResources,omitempty"`
 	Credentials       []CredentialSpec `json:"credentials,omitempty"`
+	Scaffold          *ScaffoldSpec    `json:"scaffold,omitempty"`
 
 	// Optional metadata for external plugins (Phase 15b). Built-ins omit these fields.
 	Source     string `json:"source,omitempty"`     // builtin | external
@@ -154,6 +210,7 @@ func builtinPluginManifests() []*PluginManifest {
 			Name:        p.Name,
 			Description: p.Description,
 			Credentials: CredentialSpecs(p.Credentials),
+			Scaffold:    ScaffoldSpecFrom(p.Scaffold),
 		})
 	}
 	return list

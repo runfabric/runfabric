@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
@@ -18,6 +21,15 @@ const (
 	defaultCapability = "ResolveSecret"
 	envGCPProjectID   = "GCP_PROJECT_ID"
 	envGoogleProject  = "GOOGLE_CLOUD_PROJECT"
+	// envGCPEndpointURL, when set, points secret access at a local
+	// emulator/proxy instead of the real Secret Manager REST API.
+	envGCPEndpointURL = "GCP_ENDPOINT_URL"
+
+	// secretManagerBaseURL is the real Secret Manager REST host. It is only
+	// contacted directly when envGCPEndpointURL rewrites its scheme+host;
+	// otherwise credentials are handled by the gcloud CLI (Application Default
+	// Credentials).
+	secretManagerBaseURL = "https://secretmanager.googleapis.com"
 )
 
 type commandRunner func(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -91,18 +103,16 @@ func (p *plugin) ResolveSecret(ctx context.Context, ref string) (string, error) 
 		parsed.Version = "latest"
 	}
 
-	out, err := p.run(
-		ctx,
-		"gcloud",
-		"secrets", "versions", "access", parsed.Version,
-		"--secret", parsed.Secret,
-		"--project", parsed.Project,
-		"--quiet",
-	)
-	if err != nil {
-		return "", fmt.Errorf("gcloud secret access failed for %q (project=%q, version=%q): %w", parsed.Secret, parsed.Project, parsed.Version, err)
+	var value string
+	if override := strings.TrimSpace(p.getenv(envGCPEndpointURL)); override != "" {
+		value, err = p.accessViaEndpoint(ctx, override, parsed)
+	} else {
+		value, err = p.accessViaGcloud(ctx, parsed)
 	}
-	value := strings.TrimSpace(string(out))
+	if err != nil {
+		return "", err
+	}
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return "", fmt.Errorf("gcp secret reference %q resolved to empty value", ref)
 	}
@@ -110,6 +120,66 @@ func (p *plugin) ResolveSecret(ctx context.Context, ref string) (string, error) 
 		return selectJSONKey(value, parsed.JSONKey)
 	}
 	return value, nil
+}
+
+// accessViaGcloud resolves a secret through the gcloud CLI, relying on
+// Application Default Credentials for authentication.
+func (p *plugin) accessViaGcloud(ctx context.Context, ref *gcpSecretRef) (string, error) {
+	out, err := p.run(
+		ctx,
+		"gcloud",
+		"secrets", "versions", "access", ref.Version,
+		"--secret", ref.Secret,
+		"--project", ref.Project,
+		"--quiet",
+	)
+	if err != nil {
+		return "", fmt.Errorf("gcloud secret access failed for %q (project=%q, version=%q): %w", ref.Secret, ref.Project, ref.Version, err)
+	}
+	return string(out), nil
+}
+
+// accessViaEndpoint resolves a secret over the Secret Manager REST API with its
+// scheme+host rewritten to the override endpoint (a local emulator/proxy). The
+// REST path is preserved so the same request shape reaches the override.
+func (p *plugin) accessViaEndpoint(ctx context.Context, override string, ref *gcpSecretRef) (string, error) {
+	defaultURL := fmt.Sprintf(
+		"%s/v1/projects/%s/secrets/%s/versions/%s:access",
+		secretManagerBaseURL, ref.Project, ref.Secret, ref.Version,
+	)
+	target := secretManagerHost(defaultURL, override)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return "", fmt.Errorf("build secret access request for %q: %w", ref.Secret, err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("secret access request to %q failed: %w", target, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read secret access response for %q: %w", ref.Secret, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("secret access for %q returned status %d: %s", ref.Secret, resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var payload struct {
+		Payload struct {
+			Data string `json:"data"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "", fmt.Errorf("decode secret access response for %q: %w", ref.Secret, err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(payload.Payload.Data)
+	if err != nil {
+		return "", fmt.Errorf("decode secret payload for %q: %w", ref.Secret, err)
+	}
+	return string(decoded), nil
 }
 
 func parseGCPSecretRef(ref string) (*gcpSecretRef, error) {

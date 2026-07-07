@@ -137,8 +137,56 @@ func isNodeRuntime(runtime string) bool {
 	return strings.HasPrefix(strings.ToLower(runtime), "node")
 }
 
+// invokeSandboxMode returns the isolation mode for the local simulator's handler
+// execution. "docker" runs the handler inside a locked-down container instead of
+// the host/daemon process — enabled by RUNFABRIC_INVOKE_SANDBOX=docker on hosted
+// daemons (requires a docker runtime). Empty (default) runs in-process, which is
+// what the CLI dev/call-local tooling wants on a developer's own machine.
+func invokeSandboxMode() string {
+	return strings.ToLower(strings.TrimSpace(os.Getenv("RUNFABRIC_INVOKE_SANDBOX")))
+}
+
+func invokeSandboxImage() string {
+	if v := strings.TrimSpace(os.Getenv("RUNFABRIC_INVOKE_SANDBOX_IMAGE")); v != "" {
+		return v
+	}
+	// Same default image family as the build sandbox; must have node on PATH.
+	return "public.ecr.aws/docker/library/node:20-bullseye"
+}
+
+// dockerInvokeArgs builds the `docker run` argv that runs the node runner in a
+// hardened container: no network, read-only root fs, all capabilities dropped,
+// no-new-privileges, cpu/memory/pids caps, a small exec-capable tmpfs, and ONLY
+// the one job's workDir bind-mounted (read-only) at /work. containerEnv carries
+// RF_EVENT/RF_HANDLER/RF_WORKDIR into the container via -e (RF_WORKDIR must be
+// the in-container path, /work). This is the same isolation posture as the build
+// sandbox, applied to invoke-local so tenant handler code never runs unconfined
+// in the daemon process.
+func dockerInvokeArgs(workDir, image string, containerEnv []string) []string {
+	args := []string{
+		"run", "--rm",
+		"--network", "none",
+		"--read-only",
+		"--cap-drop", "ALL",
+		"--security-opt", "no-new-privileges",
+		"--pids-limit", "256",
+		"--memory", "512m",
+		"--cpus", "1",
+		"--tmpfs", "/tmp:rw,exec,nosuid,size=64m",
+		"-v", workDir + ":/work:ro",
+		"-w", "/work",
+	}
+	for _, e := range containerEnv {
+		args = append(args, "-e", e)
+	}
+	args = append(args, image, "node", "-e", nodeRunner)
+	return args
+}
+
 // invokeNodeHandler spawns a Node.js process, calls the exported handler
-// function with a Lambda-compatible HTTP event, and returns the response.
+// function with a Lambda-compatible HTTP event, and returns the response. When
+// RUNFABRIC_INVOKE_SANDBOX=docker, the node process runs inside a hardened
+// container (see dockerInvokeArgs) instead of directly on the host.
 func invokeNodeHandler(ctx context.Context, req sdksimulator.Request) (*sdksimulator.Response, error) {
 	event := map[string]any{
 		"httpMethod":            req.Method,
@@ -156,13 +204,26 @@ func invokeNodeHandler(ctx context.Context, req sdksimulator.Request) (*sdksimul
 		return nil, fmt.Errorf("failed to marshal event: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, "node", "-e", nodeRunner)
-	cmd.Dir = req.WorkDir
-	cmd.Env = append(os.Environ(),
-		"RF_EVENT="+string(eventJSON),
-		"RF_HANDLER="+req.HandlerRef,
-		"RF_WORKDIR="+req.WorkDir,
-	)
+	var cmd *exec.Cmd
+	if invokeSandboxMode() == "docker" {
+		// RF_WORKDIR is the in-container mount point; RF_* ride -e, and the
+		// docker CLI itself inherits PATH/DOCKER_HOST from the process env.
+		containerEnv := []string{
+			"RF_EVENT=" + string(eventJSON),
+			"RF_HANDLER=" + req.HandlerRef,
+			"RF_WORKDIR=/work",
+		}
+		cmd = exec.CommandContext(ctx, "docker", dockerInvokeArgs(req.WorkDir, invokeSandboxImage(), containerEnv)...)
+		cmd.Env = os.Environ()
+	} else {
+		cmd = exec.CommandContext(ctx, "node", "-e", nodeRunner)
+		cmd.Dir = req.WorkDir
+		cmd.Env = append(os.Environ(),
+			"RF_EVENT="+string(eventJSON),
+			"RF_HANDLER="+req.HandlerRef,
+			"RF_WORKDIR="+req.WorkDir,
+		)
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

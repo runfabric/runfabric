@@ -21,7 +21,7 @@ func (Remover) Remove(ctx context.Context, cfg sdkprovider.Config, stage, root s
 	if name == "" {
 		name = fmt.Sprintf("%s-%s", service, stage)
 	}
-	url := cfAPI + "/accounts/" + accountID + "/workers/scripts/" + name
+	url := cloudflareAPIBase() + "/accounts/" + accountID + "/workers/scripts/" + name
 	if err := sdkprovider.DoDelete(ctx, url, "CLOUDFLARE_API_TOKEN"); err != nil {
 		return nil, fmt.Errorf("cloudflare delete worker: %w", err)
 	}

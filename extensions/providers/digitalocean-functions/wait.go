@@ -14,7 +14,7 @@ import (
 // waitUntilAppActive polls GET /v2/apps/{id} until phase == "ACTIVE".
 // Budget: 30 attempts × 10s = 5 minutes.
 func waitUntilAppActive(ctx context.Context, appID string) error {
-	url := doAPI + "/" + appID
+	url := digitaloceanAPIBase() + "/" + appID
 	for attempt := 0; attempt < 30; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {

@@ -20,6 +20,13 @@ credentials:
     header: X-State-Azblob-Account
   - envKey: AZURE_STORAGE_KEY
     header: X-State-Azblob-Key
+# scaffold shapes the `runfabric init` backend: block for this state backend.
+scaffold:
+  config:
+    - key: azblobContainer
+      value: "${env:RUNFABRIC_AZBLOB_CONTAINER}"
+    - key: azblobPrefix
+      value: "runfabric/dev"
 permissions:
   fs: true
   env: true

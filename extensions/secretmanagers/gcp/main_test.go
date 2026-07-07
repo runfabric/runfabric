@@ -2,9 +2,70 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestResolveSecret_EndpointOverride(t *testing.T) {
+	const want = "value-from-emulator"
+
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		encoded := base64.StdEncoding.EncodeToString([]byte(want))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"payload":{"data":"` + encoded + `"}}`))
+	}))
+	defer srv.Close()
+
+	p := &plugin{
+		run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			t.Fatalf("gcloud should not run when %s is set (name=%q)", envGCPEndpointURL, name)
+			return nil, nil
+		},
+		getenv: func(key string) string {
+			if key == envGCPEndpointURL {
+				return srv.URL
+			}
+			return ""
+		},
+	}
+
+	got, err := p.ResolveSecret(context.Background(), "gcp-sm://my-project/db-password/latest")
+	if err != nil {
+		t.Fatalf("ResolveSecret: %v", err)
+	}
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if wantPath := "/v1/projects/my-project/secrets/db-password/versions/latest:access"; gotPath != wantPath {
+		t.Fatalf("override host received path %q, want %q", gotPath, wantPath)
+	}
+}
+
+func TestResolveSecret_EndpointOverrideJSONKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		encoded := base64.StdEncoding.EncodeToString([]byte(`{"password":"top-secret"}`))
+		_, _ = w.Write([]byte(`{"payload":{"data":"` + encoded + `"}}`))
+	}))
+	defer srv.Close()
+
+	p := &plugin{
+		run:    func(ctx context.Context, name string, args ...string) ([]byte, error) { return nil, nil },
+		getenv: func(key string) string { return srv.URL },
+	}
+
+	got, err := p.ResolveSecret(context.Background(), "gcp-sm://my-project/creds/latest?jsonKey=password")
+	if err != nil {
+		t.Fatalf("ResolveSecret: %v", err)
+	}
+	if got != "top-secret" {
+		t.Fatalf("got %q", got)
+	}
+}
 
 func TestParseGCPSecretRef(t *testing.T) {
 	parsed, err := parseGCPSecretRef("gcp-sm://my-project/db-password/latest?jsonKey=value")

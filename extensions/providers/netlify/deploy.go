@@ -35,7 +35,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 		var createResp struct {
 			ID string `json:"id"`
 		}
-		if err := sdkprovider.APIPost(ctx, netlifyAPI+"/sites", "NETLIFY_AUTH_TOKEN", map[string]string{"name": service + "-" + stage}, &createResp); err != nil {
+		if err := sdkprovider.APIPost(ctx, netlifyAPIBase()+"/sites", "NETLIFY_AUTH_TOKEN", map[string]string{"name": service + "-" + stage}, &createResp); err != nil {
 			return nil, fmt.Errorf("create netlify site: %w", err)
 		}
 		siteID = createResp.ID
@@ -64,7 +64,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	part, _ := mw.CreateFormFile("file", "deploy.zip")
 	_, _ = io.Copy(part, &buf)
 	_ = mw.Close()
-	url := netlifyAPI + "/sites/" + siteID + "/deploys"
+	url := netlifyAPIBase() + "/sites/" + siteID + "/deploys"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
 	req.Header.Set("Authorization", "Bearer "+sdkprovider.Env("NETLIFY_AUTH_TOKEN"))
 	req.Header.Set("Content-Type", mw.FormDataContentType())
@@ -89,7 +89,15 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 		}
 	}
 	result := sdkprovider.BuildDeployResult("netlify", cfg, stage)
-	result.Outputs["url"] = out.DeployURL
+	// Use the exact deploy URL the API returns (unchanged in production); only
+	// when NETLIFY_ENDPOINT_URL is set is the site fronted at <base>/app/<name>
+	// so a mock can serve invokes.
+	name := service + "-" + stage
+	deployURL := out.DeployURL
+	if strings.TrimSpace(sdkprovider.Env("NETLIFY_ENDPOINT_URL")) != "" {
+		deployURL = netlifySiteURL(name)
+	}
+	result.Outputs["url"] = deployURL
 	result.Outputs["deploy_id"] = out.ID
 	result.Outputs["site_id"] = siteID
 	result.Metadata["site_id"] = siteID

@@ -15,6 +15,11 @@ credentials:
 # AWS identity: the default chain, or the shared scoped identity
 # RUNFABRIC_STATE_AWS_* (X-State-Aws-* per daemon request) declared at the
 # subsystem level (providerpolicy.StateAWSCredentialVars), not per plugin.
+# scaffold shapes the `runfabric init` backend: block for this state backend.
+scaffold:
+  config:
+    - key: lockTable
+      value: "${env:RUNFABRIC_DYNAMODB_TABLE}"
 permissions:
   fs: true
   env: true

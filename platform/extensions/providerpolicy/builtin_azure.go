@@ -20,6 +20,7 @@ func init() {
 			Description:            "Deploy and run functions on Azure Functions",
 			IncludeBuiltinManifest: true,
 			Credentials:            toCredentialVars(azureprovider.CredentialVars),
+			Scaffold:               toScaffold(azureprovider.Scaffold),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream:      adaptPrepareDevStream(azureprovider.PrepareDevStreamPolicy),

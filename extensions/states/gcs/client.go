@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/runfabric/runfabric/plugin-sdk/go/gcpauth"
+	sdkprovider "github.com/runfabric/runfabric/plugin-sdk/go/provider"
 )
 
 const (
@@ -47,6 +48,37 @@ func New(bucket, prefix string) (*Client, error) {
 		HTTP:          &http.Client{Timeout: 30 * time.Second},
 	}, nil
 }
+
+// storageHost rewrites the scheme+host of a storage.googleapis.com URL to a
+// local emulator base when GCP_ENDPOINT_URL is set (e.g. floci-gcp serving the
+// GCS JSON API at http://localhost:4588/storage/v1), preserving the path so the
+// same REST calls hit the emulator instead of the real cloud. Without the
+// override it returns the input URL unchanged, so production behaviour — and
+// test-set BaseURL/UploadBaseURL — is untouched.
+//
+// This mirrors gcpHost in the gcp-functions provider: the override points at
+// one endpoint that fronts every googleapis.com host, so both the download and
+// upload storage URLs get rewritten consistently.
+func storageHost(u string) string {
+	base := strings.TrimSpace(sdkprovider.Env("GCP_ENDPOINT_URL"))
+	if base == "" {
+		return u
+	}
+	base = strings.TrimRight(base, "/")
+	rest := u
+	if i := strings.Index(rest, "://"); i >= 0 {
+		rest = rest[i+3:]
+	}
+	if slash := strings.Index(rest, "/"); slash >= 0 {
+		return base + rest[slash:]
+	}
+	return base
+}
+
+// baseURL/uploadURL apply the GCP_ENDPOINT_URL override at call time, so a
+// long-running daemon picks up the emulator host without reconstruction.
+func (c *Client) baseURL() string   { return storageHost(c.BaseURL) }
+func (c *Client) uploadURL() string { return storageHost(c.UploadBaseURL) }
 
 func (c *Client) do(req *http.Request) (*http.Response, error) {
 	// Re-ensure per request so SDK-minted tokens refresh before expiry in

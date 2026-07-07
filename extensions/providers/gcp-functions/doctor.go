@@ -60,7 +60,7 @@ func (Checker) Doctor(ctx context.Context, cfg sdkprovider.Config, stage string)
 		"Runtime: " + sdkprovider.ProviderRuntime(cfg),
 	}
 
-	url := fmt.Sprintf(listLocationsURL, project)
+	url := fmt.Sprintf(gcpHost(listLocationsURL), project)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)

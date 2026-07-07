@@ -87,7 +87,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 			"authType": "anonymous",
 			"methods":  []string{"GET", "POST", "PUT", "DELETE"},
 		})
-		url := fmt.Sprintf("%s/%s/proxy/%s/%s/", client.baseURL(), fcAPIVersion, serviceName, funcName)
+		url := alibabaFunctionURL(client.baseURL(), serviceName, funcName)
 		result.Outputs["url_"+fnName] = url
 		if fnName == "" || len(functions) == 1 {
 			result.Outputs["url"] = url

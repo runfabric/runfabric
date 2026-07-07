@@ -9,6 +9,11 @@ executable: ./bin/sqlite-state
 capabilities:
   - state:sqlite
   - backend:sqlite
+# scaffold shapes the `runfabric init` backend: block for this state backend.
+scaffold:
+  config:
+    - key: sqlitePath
+      value: ".runfabric/state.db"
 permissions:
   fs: true
   env: true

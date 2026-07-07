@@ -6,6 +6,7 @@ import (
 
 	"github.com/runfabric/runfabric/platform/extensions/application/external"
 	manifests "github.com/runfabric/runfabric/platform/extensions/manifest"
+	providerloader "github.com/runfabric/runfabric/platform/extensions/registry/loader/providers"
 	"github.com/runfabric/runfabric/platform/extensions/registry/resolution"
 )
 
@@ -57,13 +58,19 @@ var extensionKindMappings = []extensionKindMapping{
 }
 
 type extensionPluginPayload struct {
-	ID           string                     `json:"id"`
-	Name         string                     `json:"name,omitempty"`
-	Description  string                     `json:"description,omitempty"`
-	Source       string                     `json:"source"`
-	Version      string                     `json:"version,omitempty"`
-	Capabilities []string                   `json:"capabilities,omitempty"`
-	Credentials  []manifests.CredentialSpec `json:"credentials,omitempty"`
+	ID               string                     `json:"id"`
+	Name             string                     `json:"name,omitempty"`
+	Description      string                     `json:"description,omitempty"`
+	Source           string                     `json:"source"`
+	Version          string                     `json:"version,omitempty"`
+	Capabilities     []string                   `json:"capabilities,omitempty"`
+	SupportsRuntime  []string                   `json:"supportsRuntime,omitempty"`
+	SupportsTriggers []string                   `json:"supportsTriggers,omitempty"`
+	Credentials      []manifests.CredentialSpec `json:"credentials,omitempty"`
+	// Scaffold lets the PaaS drive a metadata-driven New Project flow (entry file,
+	// runtime, comment, sample body, and state backend config lines) without
+	// hardcoding framework knowledge.
+	Scaffold *manifests.ScaffoldSpec `json:"scaffold,omitempty"`
 }
 
 type extensionKindPayload struct {
@@ -86,6 +93,20 @@ func handleExtensions(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
+	// Provider capability/runtime/trigger data is authoritative in the capability
+	// catalog (manifest → live meta → planner matrix), not in the sparse built-in
+	// PluginManifest — enrich the provider payload from it so the PaaS gets real
+	// runtimes/triggers for the New Project wizard. Best-effort: fall back to
+	// manifest values if the catalog is unavailable.
+	providerCaps := map[string]providerloader.ProviderDescriptor{}
+	if pc, perr := providerloader.NewDefaultProviderCapabilityCatalog(); perr == nil {
+		if descs, lerr := pc.ListProviders(); lerr == nil {
+			for _, d := range descs {
+				providerCaps[d.ID] = d
+			}
+		}
+	}
+
 	kinds := make([]extensionKindPayload, 0, len(extensionKindMappings))
 	for _, mapping := range extensionKindMappings {
 		entry := extensionKindPayload{
@@ -100,16 +121,33 @@ func handleExtensions(w http.ResponseWriter, _ *http.Request) {
 			if source == "" {
 				source = "builtin"
 			}
+			capabilities, runtimes, triggers := m.Capabilities, m.SupportsRuntime, m.SupportsTriggers
+			if mapping.Kind == manifests.KindProvider {
+				if d, ok := providerCaps[m.ID]; ok {
+					if len(d.Capabilities) > 0 {
+						capabilities = d.Capabilities
+					}
+					if len(d.SupportsRuntime) > 0 {
+						runtimes = d.SupportsRuntime
+					}
+					if len(d.SupportsTriggers) > 0 {
+						triggers = d.SupportsTriggers
+					}
+				}
+			}
 			entry.Plugins = append(entry.Plugins, extensionPluginPayload{
-				ID:           m.ID,
-				Name:         m.Name,
-				Description:  m.Description,
-				Source:       source,
-				Version:      m.Version,
-				Capabilities: m.Capabilities,
+				ID:               m.ID,
+				Name:             m.Name,
+				Description:      m.Description,
+				Source:           source,
+				Version:          m.Version,
+				Capabilities:     capabilities,
+				SupportsRuntime:  runtimes,
+				SupportsTriggers: triggers,
 				// Credential surface incl. declarative same-cloud fallbacks —
 				// lets the PaaS compute which env keys/headers a plugin needs.
 				Credentials: m.Credentials,
+				Scaffold:    m.Scaffold,
 			})
 		}
 		kinds = append(kinds, entry)

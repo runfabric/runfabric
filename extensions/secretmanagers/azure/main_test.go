@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -79,6 +81,52 @@ func TestResolveSecret_VaultFromEnv(t *testing.T) {
 	}
 	if got != "value-from-env" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestResolveSecret_UsesEndpointOverride(t *testing.T) {
+	var gotPath, gotQuery, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"value":"floci-secret","id":"http://x/secrets/db-password/7"}`))
+	}))
+	defer srv.Close()
+
+	p := &plugin{
+		run: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			t.Fatalf("az CLI must not run when %s is set", envAzureEndpointURL)
+			return nil, nil
+		},
+		httpClient: srv.Client(),
+		getenv: func(key string) string {
+			switch key {
+			case envAzureEndpointURL:
+				return srv.URL
+			case envAzureKeyVaultToken:
+				return "test-token"
+			}
+			return ""
+		},
+	}
+
+	got, err := p.ResolveSecret(context.Background(), "azure-kv://my-vault/db-password/7")
+	if err != nil {
+		t.Fatalf("ResolveSecret: %v", err)
+	}
+	if got != "floci-secret" {
+		t.Fatalf("got %q", got)
+	}
+	if gotPath != "/my-vault/secrets/db-password/7" {
+		t.Fatalf("override path = %q", gotPath)
+	}
+	if !strings.Contains(gotQuery, "api-version="+keyVaultAPIVersion) {
+		t.Fatalf("query = %q", gotQuery)
+	}
+	if gotAuth != "Bearer test-token" {
+		t.Fatalf("auth header = %q", gotAuth)
 	}
 }
 

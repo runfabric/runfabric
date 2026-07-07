@@ -24,6 +24,9 @@ credentials:
     required: true
     mirror: AWS_DEFAULT_REGION
     placeholder: "us-east-1"
+# scaffold shapes `runfabric init` output for this provider (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Provider: aws-lambda — set AWS_REGION; optional backend: s3 + DynamoDB for state"
 permissions:
   fs: true
   env: true

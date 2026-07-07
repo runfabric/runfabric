@@ -16,6 +16,9 @@ credentials:
     placeholder: "https://management.azure.com"
 # fallback = the azure provider key: one Azure credential serves deploy and
 # traffic-manager sync. Per-request headers ride the shared router group.
+# scaffold: uniform init-scaffold surface across plugin kinds (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Router: azure-traffic-manager — Azure Traffic Manager for fabric active-active routing"
 permissions:
   fs: false
   env: true

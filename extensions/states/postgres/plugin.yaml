@@ -14,6 +14,13 @@ credentials:
     header: X-State-Postgres-Url
     required: true
     placeholder: "postgres://user:pass@localhost:5432/runfabric"
+# scaffold shapes the `runfabric init` backend: block for this state backend.
+scaffold:
+  config:
+    - key: postgresConnectionStringEnv
+      value: "RUNFABRIC_STATE_POSTGRES_URL"
+    - key: postgresTable
+      value: "runfabric_receipts"
 permissions:
   fs: true
   env: true

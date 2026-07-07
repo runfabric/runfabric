@@ -19,4 +19,7 @@ credentials:
     placeholder: "https://us-south.functions.cloud.ibm.com"
   - envKey: IBM_OPENWHISK_NAMESPACE
     header: X-Provider-Ibm-Namespace
+# scaffold shapes `runfabric init` output for this provider (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Provider: ibm-openwhisk — see docs for credentials and trigger support"
 permissions: { fs: true, env: true, network: true, cloud: true }

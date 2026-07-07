@@ -14,7 +14,7 @@ import (
 // waitUntilMachineStarted polls GET /v1/apps/{app}/machines/{id} until state == "started".
 // Budget: 30 attempts × 5s = 2.5 minutes.
 func waitUntilMachineStarted(ctx context.Context, appName, machineID string) error {
-	url := flyAPI + "/apps/" + appName + "/machines/" + machineID
+	url := flyAPIBase() + "/apps/" + appName + "/machines/" + machineID
 	for attempt := 0; attempt < 30; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {

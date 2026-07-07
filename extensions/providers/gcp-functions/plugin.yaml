@@ -24,6 +24,9 @@ credentials:
   - envKey: GCP_REGION
     header: X-Provider-Gcp-Region
     placeholder: "us-central1"
+# scaffold shapes `runfabric init` output for this provider (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Provider: gcp-functions — set GCP_PROJECT_ID; supports http, cron, queue, storage, pubsub"
 permissions:
   fs: true
   env: true

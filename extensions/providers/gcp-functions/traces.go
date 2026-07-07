@@ -53,7 +53,7 @@ func FetchTraces(ctx context.Context, cfg sdkprovider.Config, stage string) ([]T
 	query.Set("pageSize", "50")
 	query.Set("startTime", since)
 
-	endpoint := fmt.Sprintf("%s/%s/traces?%s", gcpTraceAPIBase, project, query.Encode())
+	endpoint := fmt.Sprintf("%s/%s/traces?%s", gcpHost(gcpTraceAPIBase), project, query.Encode())
 	var payload struct {
 		Traces []gcpTrace `json:"traces"`
 	}

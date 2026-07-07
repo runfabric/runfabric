@@ -226,7 +226,7 @@ func deployLambdaFunction(ctx context.Context, clients *AWSClients, in lambdaDep
 		if err := waitUntilFunctionReady(ctx, clients, in.functionName); err != nil {
 			return fmt.Errorf("wait for created function %s: %w", in.functionName, err)
 		}
-		return nil
+		return publishAndAlias(ctx, clients, in.functionName)
 	}
 
 	if err := waitUntilFunctionReady(ctx, clients, in.functionName); err != nil {
@@ -248,7 +248,7 @@ func deployLambdaFunction(ctx context.Context, clients *AWSClients, in lambdaDep
 	if err := waitUntilFunctionReady(ctx, clients, in.functionName); err != nil {
 		return fmt.Errorf("wait for config update %s: %w", in.functionName, err)
 	}
-	return nil
+	return publishAndAlias(ctx, clients, in.functionName)
 }
 
 func lambdaEnvironment(values map[string]string) *lambdatypes.Environment {

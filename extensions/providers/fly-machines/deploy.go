@@ -52,7 +52,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 	}
 
 	result := sdkprovider.BuildDeployResult("fly-machines", cfg, stage)
-	result.Outputs["url"] = fmt.Sprintf("https://%s.fly.dev", appName)
+	result.Outputs["url"] = flyAppURL(appName)
 	result.Metadata["app"] = appName
 	result.Metadata["machine_id"] = machineID
 	return result, nil
@@ -64,7 +64,7 @@ func createApp(ctx context.Context, appName, org string) error {
 		OrgSlug string `json:"org_slug"`
 	}{AppName: appName, OrgSlug: org}
 	bodyBytes, _ := json.Marshal(body)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, flyAPI+"/apps", bytes.NewReader(bodyBytes))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, flyAPIBase()+"/apps", bytes.NewReader(bodyBytes))
 	req.Header.Set("Authorization", "Bearer "+sdkprovider.Env("FLY_API_TOKEN"))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := sdkprovider.DefaultClient.Do(req)
@@ -91,7 +91,7 @@ func createMachine(ctx context.Context, appName, image string) (string, error) {
 		},
 	}
 	bodyBytes, _ := json.Marshal(body)
-	url := flyAPI + "/apps/" + appName + "/machines"
+	url := flyAPIBase() + "/apps/" + appName + "/machines"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
 	req.Header.Set("Authorization", "Bearer "+sdkprovider.Env("FLY_API_TOKEN"))
 	req.Header.Set("Content-Type", "application/json")

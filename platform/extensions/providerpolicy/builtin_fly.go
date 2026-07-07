@@ -20,6 +20,7 @@ func init() {
 			Description:            "Deploy and run functions on Fly.io Machines",
 			IncludeBuiltinManifest: true,
 			Credentials:            toCredentialVars(flyprovider.CredentialVars),
+			Scaffold:               toScaffold(flyprovider.Scaffold),
 		},
 		Hooks: &inprocess.APIDispatchHooks{
 			PrepareDevStream: adaptPrepareDevStream(flyprovider.PrepareDevStreamPolicy),

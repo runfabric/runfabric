@@ -63,7 +63,7 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 		payload["teamId"] = teamID
 	}
 	bodyBytes, _ := json.Marshal(payload)
-	url := vercelAPI + "/v13/deployments"
+	url := vercelAPIBase() + "/v13/deployments"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
 	req.Header.Set("Authorization", "Bearer "+sdkprovider.Env("VERCEL_TOKEN"))
 	req.Header.Set("Content-Type", "application/json")
@@ -88,13 +88,16 @@ func (Runner) Deploy(ctx context.Context, cfg sdkprovider.Config, stage, root st
 		}
 	}
 	result := sdkprovider.BuildDeployResult("vercel", cfg, stage)
-	if out.URL != "" {
+	if sdkprovider.Env("VERCEL_ENDPOINT_URL") != "" {
+		// Under the endpoint override, serve invocations from the mock/emulator.
+		result.Outputs["url"] = vercelDeploymentURL(projectName)
+	} else if out.URL != "" {
 		if !strings.HasPrefix(out.URL, "http") {
 			out.URL = "https://" + out.URL
 		}
 		result.Outputs["url"] = out.URL
 	} else {
-		result.Outputs["url"] = "https://" + projectName + ".vercel.app"
+		result.Outputs["url"] = vercelDeploymentURL(projectName)
 	}
 	result.Outputs["deployment_id"] = out.ID
 	result.Metadata["project"] = projectName

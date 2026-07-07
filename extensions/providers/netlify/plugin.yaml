@@ -16,6 +16,9 @@ credentials:
     required: true
   - envKey: NETLIFY_SITE_ID
     header: X-Provider-Netlify-Site-Id
+# scaffold shapes `runfabric init` output for this provider (see manifest ScaffoldSpec).
+scaffold:
+  comment: "Provider: netlify — set provider token; supports http, cron"
 permissions:
   fs: true
   env: true
